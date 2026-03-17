@@ -84,28 +84,30 @@ export const KPISummary: React.FC = () => {
               >
                 {kpi.label}
               </Typography>
-              <Typography
-                sx={{
-                  fontSize: '28px',
-                  fontWeight: 700,
-                  color: kpi.color,
-                  lineHeight: 1,
-                  mb: 0.2,
-                }}
-              >
-                {kpi.value}
-              </Typography>
-              {kpi.unit && (
+              <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: '2px', mb: 0.2 }}>
                 <Typography
                   sx={{
-                    fontSize: '12px',
-                    fontWeight: 500,
+                    fontSize: '28px',
+                    fontWeight: 700,
                     color: kpi.color,
+                    lineHeight: 1,
                   }}
                 >
-                  {kpi.unit}
+                  {kpi.value}
                 </Typography>
-              )}
+                {kpi.unit && (
+                  <Typography
+                    sx={{
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      color: kpi.color,
+                      lineHeight: 1,
+                    }}
+                  >
+                    {kpi.unit}
+                  </Typography>
+                )}
+              </Box>
             </Box>
           ))}
         </Box>
