@@ -1,0 +1,834 @@
+import React, { useState, useRef, useEffect } from 'react'
+import {
+  Box,
+  Paper,
+  TextField,
+  Button,
+  Typography,
+  Divider,
+  CircularProgress,
+  IconButton,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+} from '@mui/material'
+import SendIcon from '@mui/icons-material/Send'
+import CloseIcon from '@mui/icons-material/Close'
+import SmartToyIcon from '@mui/icons-material/SmartToy'
+
+interface Message {
+  role: 'user' | 'agent'
+  content: string
+  type?: 'status' | 'error' | 'success' | 'info' | 'table'
+  data?: any
+  suggestedActions?: Array<{
+    label: string
+    action: string
+    icon?: string
+  }>
+}
+
+interface ChatPanelProps {
+  isOpen: boolean
+  onClose: () => void
+  fullScreen?: boolean
+}
+
+export function ChatPanel({ isOpen, onClose, fullScreen = false }: ChatPanelProps) {
+  const [input, setInput] = useState('')
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      role: 'agent',
+      content: '� Executive DataOps Health Assistant! I can help you analyze KPIs, monitor pipeline health, review SLA compliance, and assess business impact.',
+      type: 'info'
+    }
+  ])
+  const [loading, setLoading] = useState(false)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  const quickActions = [
+    { label: 'Show KPI Summary', query: 'Show current KPI metrics including success rate, SLA breaches, and MTTR' },
+    { label: 'Pipeline Health Status', query: 'Display pipeline health heatmap and status overview' },
+    { label: 'At-Risk Pipelines', query: 'What pipelines are currently at risk and why?' },
+    { label: 'Cost Analysis', query: 'Show cost vs budget and spending analysis' },
+    { label: 'Auto-Recovery Trends', query: 'Display failures vs auto-recovery trend' },
+    { label: 'Business Impact Report', query: 'What data products are affected and what is the business impact?' },
+  ]
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
+
+  const sendMessage = async (messageText?: string) => {
+    const textToSend = messageText || input
+    if (!textToSend.trim()) return
+
+    const userMessage: Message = { role: 'user', content: textToSend }
+    setMessages(prev => [...prev, userMessage])
+    setInput('')
+    setLoading(true)
+
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: textToSend })
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: Failed to get response`)
+      }
+
+      const data = await response.json()
+      
+      const agentResponse: Message = {
+        role: 'agent',
+        content: data.text,
+        type: data.type,
+        data: data.data,
+        suggestedActions: data.suggestedActions
+      }
+      setMessages(prev => [...prev, agentResponse])
+    } catch (error) {
+      console.error('API Error:', error)
+      
+      // Fallback to local mock data if API fails
+      let mockResponse: Message | null = null
+      const lower = textToSend.toLowerCase()
+
+      if (lower.includes('kpi') || lower.includes('metrics')) {
+        mockResponse = {
+          role: 'agent',
+          content: '📊 Current KPI Summary - Last 7 Days',
+          type: 'table',
+          data: [
+            { Metric: 'Success Rate', Value: '98%', Trend: '↑ +2%', Status: '✓ Excellent', Target: '≥95%' },
+            { Metric: 'SLA Breaches', Value: '5', Trend: '↑ +3', Status: '⚠ Monitor', Target: '<3' },
+            { Metric: 'MTTR (Mean Time to Recovery)', Value: '1.4 hrs', Trend: '↓ -0.3', Status: '✓ Good', Target: '<2 hrs' },
+            { Metric: 'Auto-Resolved %', Value: '75%', Trend: '↑ +8%', Status: '✓ Strong', Target: '≥70%' },
+            { Metric: 'Cost vs Budget', Value: '110%', Trend: '↑ +5%', Status: '🔴 Over', Target: '≤100%' },
+          ],
+          suggestedActions: [
+            { label: 'Investigate SLA Breaches', action: 'Detail analysis of the 5 SLA breaches' },
+            { label: 'Review Cost Overruns', action: 'Analyze why we are at 110% of budget' },
+            { label: 'Optimize Auto-Recovery', action: 'Improve auto-recovery rate from 75% to 85%' },
+            { label: 'View Historical Trends', action: 'Show KPI trends over the last 30 days' },
+          ]
+        }
+      } else if (lower.includes('pipeline') && lower.includes('health')) {
+        mockResponse = {
+          role: 'agent',
+          content: '🏥 Pipeline Health Overview',
+          type: 'table',
+          data: [
+            { Pipeline: 'Finance ETL', Status: '✓ Healthy', Health: '95%', LastRun: '2 hrs ago', Records: '2.5M', AvgTime: '45 min' },
+            { Pipeline: 'Customer 360', Status: '✓ Healthy', Health: '92%', LastRun: '1 hr ago', Records: '1.8M', AvgTime: '38 min' },
+            { Pipeline: 'Inventory Sync', Status: '⚠ At-Risk', Health: '68%', LastRun: '4 hrs ago', Records: '523K', AvgTime: '72 min' },
+            { Pipeline: 'Sales Feed', Status: '✓ Healthy', Health: '89%', LastRun: '30 min ago', Records: '3.2M', AvgTime: '52 min' },
+            { Pipeline: 'HR Data', Status: '✓ Healthy', Health: '91%', LastRun: '3 hrs ago', Records: '456K', AvgTime: '28 min' },
+          ],
+          suggestedActions: [
+            { label: 'Address Inventory Sync Issues', action: 'Detailed diagnostics for Inventory Sync pipeline' },
+            { label: 'Optimize Slow Pipelines', action: 'Show optimization recommendations' },
+            { label: 'Schedule Maintenance', action: 'Plan maintenance windows' },
+          ]
+        }
+      } else if (lower.includes('at-risk') || (lower.includes('risk') && lower.includes('pipeline'))) {
+        mockResponse = {
+          role: 'agent',
+          content: '⚠️ Pipelines at Risk - Immediate Action Required',
+          type: 'table',
+          data: [
+            { Pipeline: 'Inventory Sync', RiskLevel: 'HIGH', Issue: 'Upstream Talend retry storm', Impact: 'Delayed inventory updates', Resolution: 'Escalate to Talend team' },
+            { Pipeline: 'Finance D+1 Feed', RiskLevel: 'CRITICAL', Issue: 'Data quality checks failing', Impact: 'Critical finance reporting delay', Resolution: 'Investigate data source' },
+            { Pipeline: 'Customer 360', RiskLevel: 'MEDIUM', Issue: 'Occasional timeouts', Impact: 'Slow customer 360 enrichment', Resolution: 'Increase timeout limits' },
+          ],
+          suggestedActions: [
+            { label: 'Escalate Finance D+1', action: 'Create critical incident for Finance D+1' },
+            { label: 'Contact Talend Support', action: 'Open support ticket for retry storm' },
+            { label: 'View Detailed Logs', action: 'Show detailed error logs and traces' },
+            { label: 'Auto-remediate', action: 'Trigger auto-remediation for at-risk pipelines' },
+          ]
+        }
+      } else if (lower.includes('cost') || lower.includes('budget') || lower.includes('spending')) {
+        mockResponse = {
+          role: 'agent',
+          content: '💰 Cost Analysis & Budget Report',
+          type: 'table',
+          data: [
+            { Category: 'Compute Costs', Current: '$28,500', Budget: '$25,000', Variance: '+14%', Trend: 'Increasing' },
+            { Category: 'Storage Costs', Current: '$12,300', Budget: '$12,000', Variance: '+2.5%', Trend: 'Stable' },
+            { Category: 'Data Transfer', Current: '$8,700', Budget: '$8,000', Variance: '+8.75%', Trend: 'Increasing' },
+            { Category: 'Licensing', Current: '$15,000', Budget: '$15,000', Variance: '0%', Trend: 'Stable' },
+            { Category: 'TOTAL', Current: '$64,500', Budget: '$60,000', Variance: '+7.5%', Trend: 'Increasing' },
+          ],
+          suggestedActions: [
+            { label: 'Optimize Compute Usage', action: 'Identify idle resources and cost optimization opportunities' },
+            { label: 'Review Data Transfer', action: 'Analyze data transfer patterns and CDN usage' },
+            { label: 'Set Budget Alerts', action: 'Configure automated alerts for budget thresholds' },
+            { label: 'Cost Forecast', action: 'Predict end-of-month costs based on current trends' },
+          ]
+        }
+      } else if (lower.includes('recovery') || lower.includes('trend')) {
+        mockResponse = {
+          role: 'agent',
+          content: '📈 Failures vs Auto-Recovery Trend (Last 6 Months)',
+          type: 'table',
+          data: [
+            { Month: 'January', Failures: '80', AutoRecovered: '40', FailureRate: '50%', MTTR: '3.2 hrs' },
+            { Month: 'February', Failures: '120', AutoRecovered: '70', FailureRate: '58%', MTTR: '2.8 hrs' },
+            { Month: 'March', Failures: '150', AutoRecovered: '95', FailureRate: '63%', MTTR: '2.4 hrs' },
+            { Month: 'April', Failures: '180', AutoRecovered: '125', FailureRate: '69%', MTTR: '2.1 hrs' },
+            { Month: 'May', Failures: '210', AutoRecovered: '155', FailureRate: '74%', MTTR: '1.8 hrs' },
+            { Month: 'June (Current)', Failures: '240', AutoRecovered: '190', FailureRate: '79%', MTTR: '1.4 hrs' },
+          ],
+          suggestedActions: [
+            { label: 'Boost Auto-Recovery to 85%', action: 'Analyze remaining 50 failures for automation patterns' },
+            { label: 'Additional Recovery Strategies', action: 'Implement intelligent retry mechanisms' },
+            { label: 'View Recovery Metrics', action: 'Detailed breakdown by pipeline type' },
+          ]
+        }
+      } else if (lower.includes('business impact') || lower.includes('affected')) {
+        mockResponse = {
+          role: 'agent',
+          content: '📊 Business Impact Analysis - Affected Data Products',
+          type: 'table',
+          data: [
+            { DataProduct: 'Affected Data Products', Count: '85', Impact: 'HIGH', Status: 'At-Risk' },
+            { DataProduct: 'Retail Sales & Failure', Count: '45', Impact: 'CRITICAL', Status: 'Delayed' },
+            { DataProduct: 'Frontier Wireless Drops', Count: '25', Impact: 'MEDIUM', Status: 'Degraded' },
+            { DataProduct: 'Customer Churn Prediction', Count: '12', Impact: 'LOW', Status: 'Delayed' },
+            { DataProduct: 'Finance Reporting', Count: '8', Impact: 'CRITICAL', Status: 'Blocked' },
+          ],
+          suggestedActions: [
+            { label: 'Prioritize Critical Products', action: 'Focus on Retail Sales and Finance Reporting issues' },
+            { label: 'Notify Stakeholders', action: 'Send updates to affected business unit leads' },
+            { label: 'Recovery Timeline', action: 'Show estimated recovery timeline for each product' },
+            { label: 'Workaround Options', action: 'Provide interim data sources until full recovery' },
+          ]
+        }
+      } else if (lower.includes('sla')) {
+        mockResponse = {
+          role: 'agent',
+          content: '⚖️ SLA Compliance & Breaches',
+          type: 'table',
+          data: [
+            { Pipeline: 'Finance ETL', SLA: '4 hrs', ActualTime: '3.5 hrs', Status: '✓ Met', Breaches: '0' },
+            { Pipeline: 'Inventory Sync', SLA: '6 hrs', ActualTime: '7.2 hrs', Status: '✗ Breach', Breaches: '2' },
+            { Pipeline: 'Sales Feed', SLA: '2 hrs', ActualTime: '1.8 hrs', Status: '✓ Met', Breaches: '0' },
+            { Pipeline: 'Customer 360', SLA: '3 hrs', ActualTime: '3.8 hrs', Status: '✗ Breach', Breaches: '2' },
+            { Pipeline: 'HR Data', SLA: '8 hrs', ActualTime: '6.5 hrs', Status: '✓ Met', Breaches: '1' },
+          ],
+          suggestedActions: [
+            { label: 'Urgent: Fix Inventory Sync', action: 'Address root cause of Inventory Sync breaches' },
+            { label: 'Optimize Customer 360', action: 'Improve performance to meet 3-hour SLA' },
+            { label: 'Review SLA Terms', action: 'Evaluate if SLAs are realistic' },
+            { label: 'Alert Configuration', action: 'Set up proactive alerts for SLA violations' },
+          ]
+        }
+      }
+
+      if (mockResponse) {
+        // API failed but using cached mock data
+        const fallbackMsg: Message = {
+          role: 'agent',
+          content: '⚠️ Using cached data (server not available)',
+          type: 'info'
+        }
+        setMessages(prev => [...prev, fallbackMsg, mockResponse!])
+      } else {
+        // No mock data available
+        const errorMessage: Message = {
+          role: 'agent',
+          content: `❌ Error: ${error instanceof Error ? error.message : 'Failed to connect to DataOps service'}\n\n(Make sure to run: npm run dev:server)`,
+          type: 'error',
+          suggestedActions: [
+            { label: '🔄 Retry', action: textToSend },
+          ]
+        }
+        setMessages(prev => [...prev, errorMessage])
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      sendMessage()
+    }
+  }
+
+  const resetToMainMenu = () => {
+    setMessages([
+      {
+        role: 'agent',
+        content: '🤖 Executive DataOps Health Assistant! I can help you analyze KPIs, monitor pipeline health, review SLA compliance, and assess business impact.',
+        type: 'info'
+      }
+    ])
+    setInput('')
+  }
+
+  // Get the last message with data
+  const lastMessageWithData = [...messages].reverse().find(msg => msg.data)
+
+  if (!isOpen && !fullScreen) return null
+
+  if (fullScreen) {
+    // Full-screen split layout
+    return (
+      <Box sx={{ display: 'flex', height: '100vh', backgroundColor: '#fff' }}>
+        {/* Left Side - Chat */}
+        <Box
+          sx={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            borderRight: '1px solid #e0e0e0',
+          }}
+        >
+          {/* Header */}
+          <Box
+            sx={{
+              backgroundColor: '#1976d2',
+              color: '#fff',
+              p: 2.5,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              <SmartToyIcon />
+              <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                DataOps Assistant
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              {messages.length > 1 && (
+                <Button
+                  size="small"
+                  onClick={resetToMainMenu}
+                  sx={{
+                    color: '#fff',
+                    textTransform: 'none',
+                    fontSize: '13px',
+                    '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' },
+                  }}
+                >
+                  ↺ Main Menu
+                </Button>
+              )}
+              <IconButton size="small" onClick={onClose} sx={{ color: '#fff' }}>
+                <CloseIcon />
+              </IconButton>
+            </Box>
+          </Box>
+
+          {/* Messages Area */}
+          <Box
+            sx={{
+              flex: 1,
+              overflowY: 'auto',
+              p: 2.5,
+              backgroundColor: '#fafafa',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 2,
+            }}
+          >
+            {messages.length <= 1 && (
+              <Box>
+                <Typography variant="caption" sx={{ color: '#999', fontSize: '12px', display: 'block', mb: 1.5 }}>
+                  Quick actions:
+                </Typography>
+                {quickActions.map((action, idx) => (
+                  <Button
+                    key={idx}
+                    fullWidth
+                    variant="outlined"
+                    size="small"
+                    onClick={() => sendMessage(action.query)}
+                    sx={{
+                      mb: 1,
+                      justifyContent: 'flex-start',
+                      textTransform: 'none',
+                      color: '#1976d2',
+                      borderColor: '#e0e0e0',
+                      fontSize: '13px',
+                      '&:hover': { backgroundColor: '#f0f0f0' },
+                    }}
+                  >
+                    → {action.label}
+                  </Button>
+                ))}
+              </Box>
+            )}
+
+            {messages.map((msg, idx) => (
+              <Box key={idx} sx={{ display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start', flexDirection: 'column', alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start', gap: 1 }}>
+                <Paper
+                  sx={{
+                    maxWidth: '85%',
+                    p: 1.5,
+                    backgroundColor:
+                      msg.role === 'user'
+                        ? '#1976d2'
+                        : msg.type === 'error'
+                          ? '#ffebee'
+                          : msg.type === 'success'
+                            ? '#e8f5e9'
+                            : '#f5f5f5',
+                    color: msg.role === 'user' ? '#fff' : msg.type === 'error' ? '#c62828' : '#333',
+                    boxShadow: 'none',
+                    border: msg.type === 'error' ? '1px solid #ef5350' : 'none',
+                  }}
+                >
+                  {msg.type === 'table' && msg.data ? (
+                    <Typography variant="body2" sx={{ fontSize: '13px' }}>
+                      📊 {msg.content}
+                    </Typography>
+                  ) : (
+                    <Typography variant="body2" sx={{ fontSize: '13px', lineHeight: 1.4 }}>
+                      {msg.content}
+                    </Typography>
+                  )}
+                </Paper>
+                {msg.suggestedActions && msg.suggestedActions.length > 0 && (
+                  <Box sx={{ display: 'flex', gap: 0.8, flexWrap: 'wrap', mt: 1.2, width: '100%' }}>
+                    {msg.suggestedActions.map((action, aIdx) => (
+                      <Button
+                        key={aIdx}
+                        size="small"
+                        variant="contained"
+                        onClick={() => {
+                          if (action.action === 'restart_service') {
+                            sendMessage('Restart the DataOps service')
+                          } else if (action.action === 'terminate_service') {
+                            const termMsg: Message = {
+                              role: 'agent',
+                              content: 'Service terminated. You can restart it when you are ready.',
+                              type: 'success',
+                              suggestedActions: [
+                                { label: '▶️ Restart Service', action: 'restart_service' }
+                              ]
+                            }
+                            setMessages(prev => [...prev, termMsg])
+                          } else {
+                            sendMessage(action.action)
+                          }
+                        }}
+                        disabled={loading}
+                        sx={{
+                          fontSize: '12px',
+                          fontWeight: 500,
+                          textTransform: 'none',
+                          padding: '6px 12px',
+                          backgroundColor: 
+                            action.action === 'restart_service' ? '#4caf50' :
+                            action.action === 'terminate_service' ? '#ef5350' :
+                            msg.type === 'error' ? '#ef5350' : 
+                            msg.type === 'success' ? '#4caf50' : '#1976d2',
+                          color: '#fff',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          '&:hover': { 
+                            backgroundColor: 
+                              action.action === 'restart_service' ? '#388e3c' :
+                              action.action === 'terminate_service' ? '#d32f2f' :
+                              msg.type === 'error' ? '#d32f2f' : 
+                              msg.type === 'success' ? '#388e3c' : '#1565c0',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.2)'
+                          },
+                          '&:disabled': { opacity: 0.6, cursor: 'not-allowed' },
+                          transition: 'all 0.2s ease',
+                        }}
+                      >
+                        {action.label}
+                      </Button>
+                    ))}
+                  </Box>
+                )}
+              </Box>
+            ))}
+
+            {loading && (
+              <Box sx={{ display: 'flex', justifyContent: 'flex-start' }}>
+                <CircularProgress size={24} />
+              </Box>
+            )}
+
+            <div ref={messagesEndRef} />
+          </Box>
+
+          {/* Divider */}
+          <Divider />
+
+          {/* Input Area */}
+          <Box sx={{ p: 2.5, backgroundColor: '#fff', display: 'flex', gap: 1 }}>
+            <TextField
+              fullWidth
+              multiline
+              maxRows={3}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyPress={handleKeyPress}
+              placeholder="Ask about KPIs, pipeline health, SLAs, costs..."
+              disabled={loading}
+              size="small"
+              variant="outlined"
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  fontSize: '13px',
+                  borderRadius: 1,
+                },
+              }}
+            />
+            <Button
+              variant="contained"
+              onClick={() => sendMessage()}
+              disabled={loading || !input.trim()}
+              sx={{
+                backgroundColor: '#1976d2',
+                minWidth: '44px',
+                height: '44px',
+                p: 1,
+              }}
+            >
+              <SendIcon sx={{ fontSize: '18px' }} />
+            </Button>
+          </Box>
+        </Box>
+
+        {/* Right Side - Results */}
+        <Box
+          sx={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            backgroundColor: '#f5f5f5',
+            overflow: 'hidden',
+          }}
+        >
+          {lastMessageWithData ? (
+            <>
+              <Box sx={{ p: 2.5, borderBottom: '1px solid #e0e0e0', backgroundColor: '#fff' }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#1976d2' }}>
+                  Results
+                </Typography>
+              </Box>
+              <Box sx={{ flex: 1, overflowY: 'auto', p: 2.5 }}>
+                <Paper sx={{ p: 2, backgroundColor: '#fff' }}>
+                  <Typography variant="body2" sx={{ mb: 2, color: '#666', fontSize: '13px' }}>
+                    {lastMessageWithData.content}
+                  </Typography>
+                  {lastMessageWithData.data && lastMessageWithData.data.length > 0 && (
+                    <Box sx={{ overflowX: 'auto' }}>
+                      <Table size="small">
+                        <TableHead>
+                          <TableRow sx={{ backgroundColor: '#f5f5f5' }}>
+                            {Object.keys(lastMessageWithData.data[0] || {}).map(key => (
+                              <TableCell key={key} sx={{ fontSize: '12px', fontWeight: 600, py: 1 }}>
+                                {key}
+                              </TableCell>
+                            ))}
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {lastMessageWithData.data.map((row: any, rowIdx: number) => (
+                            <TableRow key={rowIdx} sx={{ '&:hover': { backgroundColor: '#f9f9f9' } }}>
+                              {Object.values(row).map((val: any, colIdx) => (
+                                <TableCell key={colIdx} sx={{ fontSize: '12px', py: 1 }}>
+                                  {String(val).substring(0, 30)}
+                                </TableCell>
+                              ))}
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </Box>
+                  )}
+                </Paper>
+              </Box>
+            </>
+          ) : (
+            <Box
+              sx={{
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#999',
+              }}
+            >
+              <Typography variant="body2" sx={{ textAlign: 'center' }}>
+                Results will appear here
+              </Typography>
+            </Box>
+          )}
+        </Box>
+      </Box>
+    )
+  }
+
+  return (
+    <Paper
+      sx={{
+        position: 'fixed',
+        right: 0,
+        top: 0,
+        height: '100vh',
+        width: 400,
+        display: 'flex',
+        flexDirection: 'column',
+        boxShadow: '-2px 0 8px rgba(0,0,0,0.15)',
+        backgroundColor: '#fff',
+        zIndex: 3000,
+        '@media (max-width: 600px)': {
+          width: '100%',
+        },
+      }}
+    >
+      {/* Header */}
+      <Box
+        sx={{
+          backgroundColor: '#1976d2',
+          color: '#fff',
+          p: 2,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <SmartToyIcon />
+          <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+            DataOps Assistant
+          </Typography>
+        </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0 }}>
+          {messages.length > 1 && (
+            <Button
+              size="small"
+              onClick={resetToMainMenu}
+              sx={{
+                color: '#fff',
+                textTransform: 'none',
+                fontSize: '12px',
+                minWidth: 'auto',
+                padding: '4px 8px',
+                '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' },
+              }}
+            >
+              ↺ Menu
+            </Button>
+          )}
+          <IconButton size="small" onClick={onClose} sx={{ color: '#fff' }}>
+            <CloseIcon />
+          </IconButton>
+        </Box>
+      </Box>
+
+      {/* Messages Area */}
+      <Box
+        sx={{
+          flex: 1,
+          overflowY: 'auto',
+          p: 2,
+          backgroundColor: '#fafafa',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 2,
+        }}
+      >
+        {messages.length <= 1 && (
+          <Box>
+            <Typography variant="caption" sx={{ color: '#999', fontSize: '12px', display: 'block', mb: 1.5 }}>
+              Quick actions:
+            </Typography>
+            {quickActions.map((action, idx) => (
+              <Button
+                key={idx}
+                fullWidth
+                variant="outlined"
+                size="small"
+                onClick={() => sendMessage(action.query)}
+                sx={{
+                  mb: 1,
+                  justifyContent: 'flex-start',
+                  textTransform: 'none',
+                  color: '#1976d2',
+                  borderColor: '#e0e0e0',
+                  fontSize: '13px',
+                  '&:hover': { backgroundColor: '#f0f0f0' },
+                }}
+              >
+                → {action.label}
+              </Button>
+            ))}
+          </Box>
+        )}
+
+        {messages.map((msg, idx) => (
+          <Box key={idx} sx={{ display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start', flexDirection: 'column', alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start', gap: 1 }}>
+            <Paper
+              sx={{
+                maxWidth: '85%',
+                p: 1.5,
+                backgroundColor:
+                  msg.role === 'user'
+                    ? '#1976d2'
+                    : msg.type === 'error'
+                      ? '#ffebee'
+                      : msg.type === 'success'
+                        ? '#e8f5e9'
+                        : '#f5f5f5',
+                color: msg.role === 'user' ? '#fff' : msg.type === 'error' ? '#c62828' : '#333',
+                boxShadow: 'none',
+                border: msg.type === 'error' ? '1px solid #ef5350' : 'none',
+              }}
+            >
+              {msg.type === 'table' && msg.data ? (
+                <Box sx={{ overflowX: 'auto', maxHeight: '300px', overflowY: 'auto' }}>
+                  <Table size="small" sx={{ fontSize: '11px' }}>
+                    <TableHead sx={{ position: 'sticky', top: 0, zIndex: 10 }}>
+                      <TableRow sx={{ backgroundColor: 'rgba(25, 118, 210, 0.1)' }}>
+                        {Object.keys(msg.data[0] || {}).map(key => (
+                          <TableCell key={key} sx={{ p: 0.75, fontSize: '11px', fontWeight: 600, backgroundColor: 'rgba(25, 118, 210, 0.15)' }}>
+                            {key}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {msg.data.map((row: any, rowIdx: number) => (
+                        <TableRow key={rowIdx} sx={{ '&:hover': { backgroundColor: 'rgba(25, 118, 210, 0.05)' } }}>
+                          {Object.values(row).map((val: any, colIdx) => (
+                            <TableCell key={colIdx} sx={{ p: 0.75, fontSize: '11px' }}>
+                              {String(val).substring(0, 25)}
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </Box>
+              ) : (
+                <Typography variant="body2" sx={{ fontSize: '13px', lineHeight: 1.4 }}>
+                  {msg.content}
+                </Typography>
+              )}
+            </Paper>
+            {msg.suggestedActions && msg.suggestedActions.length > 0 && (
+              <Box sx={{ display: 'flex', gap: 0.6, flexWrap: 'wrap', mt: 0.8, width: '100%' }}>
+                {msg.suggestedActions.map((action, aIdx) => (
+                  <Button
+                    key={aIdx}
+                    size="small"
+                    variant="contained"
+                    onClick={() => {
+                      if (action.action === 'restart_service') {
+                        sendMessage('Restart the DataOps service')
+                      } else if (action.action === 'terminate_service') {
+                        const termMsg: Message = {
+                          role: 'agent',
+                          content: 'Service terminated. You can restart it when you are ready.',
+                          type: 'success',
+                          suggestedActions: [
+                            { label: '▶️ Restart Service', action: 'restart_service' }
+                          ]
+                        }
+                        setMessages(prev => [...prev, termMsg])
+                      } else {
+                        sendMessage(action.action)
+                      }
+                    }}
+                    disabled={loading}
+                    sx={{
+                      fontSize: '11px',
+                      fontWeight: 500,
+                      textTransform: 'none',
+                      padding: '5px 10px',
+                      backgroundColor: 
+                        action.action === 'restart_service' ? '#4caf50' :
+                        action.action === 'terminate_service' ? '#ef5350' :
+                        msg.type === 'error' ? '#ef5350' : 
+                        msg.type === 'success' ? '#4caf50' : '#1976d2',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: '3px',
+                      cursor: 'pointer',
+                      '&:hover': { 
+                        backgroundColor: 
+                          action.action === 'restart_service' ? '#388e3c' :
+                          action.action === 'terminate_service' ? '#d32f2f' :
+                          msg.type === 'error' ? '#d32f2f' : 
+                          msg.type === 'success' ? '#388e3c' : '#1565c0',
+                        boxShadow: '0 2px 6px rgba(0,0,0,0.2)'
+                      },
+                      '&:disabled': { opacity: 0.6, cursor: 'not-allowed' },
+                      transition: 'all 0.2s ease',
+                    }}
+                  >
+                    {action.label}
+                  </Button>
+                ))}
+              </Box>
+            )}
+          </Box>
+        ))}
+
+        {loading && (
+          <Box sx={{ display: 'flex', justifyContent: 'flex-start' }}>
+            <CircularProgress size={24} />
+          </Box>
+        )}
+
+        <div ref={messagesEndRef} />
+      </Box>
+
+      {/* Divider */}
+      <Divider />
+
+      {/* Input Area */}
+      <Box sx={{ p: 2, backgroundColor: '#fff', display: 'flex', gap: 1 }}>
+        <TextField
+          fullWidth
+          multiline
+          maxRows={3}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyPress={handleKeyPress}
+          placeholder="Ask about KPIs, pipeline health, SLAs, costs..."
+          disabled={loading}
+          size="small"
+          variant="outlined"
+          sx={{
+            '& .MuiOutlinedInput-root': {
+              fontSize: '13px',
+              borderRadius: 1,
+            },
+          }}
+        />
+        <Button
+          variant="contained"
+          onClick={() => sendMessage()}
+          disabled={loading || !input.trim()}
+          sx={{
+            backgroundColor: '#1976d2',
+            minWidth: '44px',
+            height: '44px',
+            p: 1,
+          }}
+        >
+          <SendIcon sx={{ fontSize: '18px' }} />
+        </Button>
+      </Box>
+    </Paper>
+  )
+}

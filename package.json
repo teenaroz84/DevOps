@@ -1,0 +1,19 @@
+{
+  "name": "devops",
+  "version": "1.0.0",
+  "description": "Full-stack DevOps platform with React frontend and Node.js backend",
+  "license": "MIT",
+  "scripts": {
+    "install-all": "npm install && npm --prefix client install && npm --prefix server install",
+    "dev": "concurrently \"npm --prefix server run dev\" \"npm --prefix client run dev\"",
+    "dev:server": "npm --prefix server run dev",
+    "dev:client": "npm --prefix client run dev",
+    "build": "npm --prefix client run build && npm --prefix server run build",
+    "start": "npm --prefix server run start",
+    "type-check": "npm --prefix client run type-check && npm --prefix server run type-check"
+  },
+  "devDependencies": {
+    "concurrently": "^7.6.0"
+  },
+  "workspaces": ["client", "server"]
+}

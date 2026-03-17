@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <!-- Background -->
+  <rect width="200" height="200" fill="#1976d2"/>
+  
+  <!-- Outer gear teeth -->
+  <g fill="#ffffff">
+    <!-- Top tooth -->
+    <rect x="85" y="5" width="30" height="25"/>
+    <!-- Top-right tooth -->
+    <rect x="135" y="30" width="25" height="30" transform="rotate(45 160 45)"/>
+    <!-- Right tooth -->
+    <rect x="170" y="85" width="25" height="30"/>
+    <!-- Bottom-right tooth -->
+    <rect x="135" y="145" width="25" height="30" transform="rotate(-45 160 160)"/>
+    <!-- Bottom tooth -->
+    <rect x="85" y="170" width="30" height="25"/>
+    <!-- Bottom-left tooth -->
+    <rect x="40" y="145" width="25" height="30" transform="rotate(45 52.5 160)"/>
+    <!-- Left tooth -->
+    <rect x="5" y="85" width="25" height="30"/>
+    <!-- Top-left tooth -->
+    <rect x="40" y="30" width="25" height="30" transform="rotate(-45 52.5 45)"/>
+  </g>
+  
+  <!-- Main gear circle -->
+  <circle cx="100" cy="100" r="70" fill="#1976d2" stroke="#ffffff" stroke-width="3"/>
+  
+  <!-- Inner circle with dashboard pattern -->
+  <circle cx="100" cy="100" r="50" fill="#ffffff"/>
+  
+  <!-- Dashboard grid inside -->
+  <g stroke="#1976d2" stroke-width="2" fill="none">
+    <!-- Horizontal lines -->
+    <line x1="70" y1="75" x2="130" y2="75"/>
+    <line x1="70" y1="100" x2="130" y2="100"/>
+    <line x1="70" y1="125" x2="130" y2="125"/>
+    
+    <!-- Vertical lines -->
+    <line x1="85" y1="60" x2="85" y2="140"/>
+    <line x1="100" y1="60" x2="100" y2="140"/>
+    <line x1="115" y1="60" x2="115" y2="140"/>
+  </g>
+  
+  <!-- Accent dots representing data points -->
+  <circle cx="80" cy="70" r="3" fill="#1976d2"/>
+  <circle cx="100" cy="65" r="3" fill="#1976d2"/>
+  <circle cx="120" cy="75" r="3" fill="#1976d2"/>
+  
+  <!-- Center dot -->
+  <circle cx="100" cy="100" r="4" fill="#1976d2"/>
+</svg>
