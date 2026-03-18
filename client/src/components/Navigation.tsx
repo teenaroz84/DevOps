@@ -108,7 +108,6 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuChange
                 color: '#1976d2',
               },
             }}
-            title="Executive Dashboard"
           >
           <AnalyticsIcon sx={{ fontSize: '20px', flexShrink: 0 }} />
           {isExpanded && (
@@ -153,7 +152,6 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuChange
               color: '#1976d2',
             },
           }}
-          title="Dashboard"
         >
           <DashboardIcon sx={{ fontSize: '20px', flexShrink: 0 }} />
           {isExpanded && (
@@ -198,7 +196,6 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuChange
               color: '#1976d2',
             },
           }}
-          title="DataOps Assistant"
         >
           <SmartToyIcon sx={{ fontSize: '20px', flexShrink: 0 }} />
           {isExpanded && (
@@ -220,7 +217,7 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuChange
         </Tooltip>
 
         {/* QuickSight Demo */}
-        <Tooltip title={!isExpanded ? 'QuickSight Demo' : ''} placement="right">
+        <Tooltip title={!isExpanded ? 'QuickSight' : ''} placement="right">
           <Box
             component="button"
             onClick={() => onMenuChange('quicksight-demo')}
@@ -243,7 +240,6 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuChange
               color: '#1976d2',
             },
           }}
-          title="QuickSight Demo"
         >
           <AnalyticsIcon sx={{ fontSize: '20px', flexShrink: 0 }} />
           {isExpanded && (
@@ -258,7 +254,7 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuChange
                 textOverflow: 'ellipsis',
               }}
             >
-              QuickSight Demo
+              QuickSight
             </Typography>
           )}
           </Box>
@@ -288,7 +284,6 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuChange
               color: '#1976d2',
             },
           }}
-          title="User Preference"
         >
           <TuneIcon sx={{ fontSize: '20px', flexShrink: 0 }} />
           {isExpanded && (

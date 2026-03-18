@@ -1,0 +1,413 @@
+import React, { useState, useEffect } from 'react'
+import { Box, Typography, Chip } from '@mui/material'
+import BugReportIcon from '@mui/icons-material/BugReport'
+import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber'
+import StreamIcon from '@mui/icons-material/Stream'
+import AttachMoneyIcon from '@mui/icons-material/AttachMoney'
+import TrendingUpIcon from '@mui/icons-material/TrendingUp'
+import PipelineIcon from '@mui/icons-material/AccountTree'
+import { DrillDownModal, DrillDownData } from './DrillDownModal'
+import { WidgetShell, StatCardGrid, MetricBarList, DataTable, ColumnDef } from './widgets'
+
+const SEV_CONFIG: Record<string, { color: string; bg: string; dot: string }> = {
+  critical: { color: '#c62828', bg: '#fce4ec', dot: '#e53935' },
+  high:     { color: '#e65100', bg: '#fff3e0', dot: '#fb8c00' },
+  medium:   { color: '#f57c00', bg: '#fff8e1', dot: '#fdd835' },
+  low:      { color: '#2e7d32', bg: '#e8f5e9', dot: '#66bb6a' },
+}
+
+const fmt = (iso: string) =>
+  new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+
+// ─── Errors Widget ─────────────────────────────────────────
+
+export const ErrorsWidget: React.FC = () => {
+  const [errors, setErrors] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [drillDown, setDrillDown] = useState<DrillDownData | null>(null)
+
+  useEffect(() => {
+    fetch('http://localhost:3001/api/cloudwatch/errors')
+      .then(r => r.json())
+      .then(d => { setErrors(d); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [])
+
+  const summary = {
+    critical: errors.filter(e => e.severity === 'critical').length,
+    high:     errors.filter(e => e.severity === 'high').length,
+    medium:   errors.filter(e => e.severity === 'medium').length,
+    low:      errors.filter(e => e.severity === 'low').length,
+  }
+
+  const columns: ColumnDef[] = [
+    {
+      key: 'id', header: 'ID / Count', width: 100,
+      render: row => (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#555' }}>{row.id}</Typography>
+          <Chip label={`×${row.count}`} size="small" sx={{ height: 14, fontSize: '10px', backgroundColor: '#f5f5f5' }} />
+        </Box>
+      ),
+    },
+    {
+      key: 'message', header: 'Message', flex: 1,
+      render: row => (
+        <Box>
+          <Typography sx={{ fontSize: '12px', color: '#222', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.message}</Typography>
+          <Typography sx={{ fontSize: '10px', color: '#aaa' }}>{row.service} · {fmt(row.lastSeen)}</Typography>
+        </Box>
+      ),
+    },
+    {
+      key: 'severity', header: 'Sev', width: 72, align: 'right',
+      render: row => (
+        <Chip label={row.severity} size="small"
+          sx={{ fontSize: '10px', height: 20, ...SEV_CONFIG[row.severity] }} />
+      ),
+    },
+  ]
+
+  return (
+    <>
+      <WidgetShell
+        title="Error Monitor"
+        titleIcon={<BugReportIcon sx={{ color: '#e53935', fontSize: 18 }} />}
+        source="CloudWatch"
+        loading={loading}
+        subheader={
+          !loading ? (
+            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 0.5, px: 1.5, py: 1 }}>
+              {Object.entries(summary).map(([sev, count]) => (
+                <Box key={sev} sx={{ textAlign: 'center', backgroundColor: SEV_CONFIG[sev].bg, borderRadius: 1, py: 0.6 }}>
+                  <Typography sx={{ fontSize: '18px', fontWeight: 700, color: SEV_CONFIG[sev].color }}>{count}</Typography>
+                  <Typography sx={{ fontSize: '10px', color: SEV_CONFIG[sev].color, textTransform: 'capitalize' }}>{sev}</Typography>
+                </Box>
+              ))}
+            </Box>
+          ) : undefined
+        }
+      >
+        <Box sx={{ flex: 1, overflowY: 'auto', px: 1.5, pb: 1 }}>
+          <DataTable
+            columns={columns}
+            rows={errors}
+            onRowClick={row => setDrillDown({ type: 'error', data: row })}
+            rowKey="id"
+            compact
+            rowTooltip="Click to view stack trace & resolution"
+          />
+        </Box>
+      </WidgetShell>
+      <DrillDownModal open={!!drillDown} onClose={() => setDrillDown(null)} drillDown={drillDown} />
+    </>
+  )
+}
+
+// ─── Tickets Widget ────────────────────────────────────────
+
+const PRIORITY_CONFIG: Record<string, { color: string; bg: string }> = {
+  P1: { color: '#c62828', bg: '#fce4ec' },
+  P2: { color: '#e65100', bg: '#fff3e0' },
+  P3: { color: '#2e7d32', bg: '#e8f5e9' },
+}
+const STATUS_CONFIG: Record<string, { color: string; bg: string }> = {
+  open:        { color: '#f57c00', bg: '#fff8e1' },
+  in_progress: { color: '#1565c0', bg: '#e3f2fd' },
+  resolved:    { color: '#2e7d32', bg: '#e8f5e9' },
+}
+
+export const TicketsWidget: React.FC = () => {
+  const [tickets, setTickets] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [drillDown, setDrillDown] = useState<DrillDownData | null>(null)
+
+  useEffect(() => {
+    fetch('http://localhost:3001/api/servicenow/tickets')
+      .then(r => r.json())
+      .then(d => { setTickets(d); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [])
+
+  const open = tickets.filter(t => t.status !== 'resolved').length
+  const breached = tickets.filter(t => t.sla?.breached).length
+
+  const summaryCards = [
+    { label: 'Open',     value: open,           color: '#f57c00', bg: '#fff8e1' },
+    { label: 'Breached', value: breached,        color: '#c62828', bg: '#fce4ec' },
+    { label: 'Total',    value: tickets.length,  color: '#1565c0', bg: '#e3f2fd' },
+  ]
+
+  const columns: ColumnDef[] = [
+    {
+      key: 'badges', header: 'Priority / Status', width: 160,
+      render: row => (
+        <Box sx={{ display: 'flex', gap: 0.4, flexWrap: 'wrap' }}>
+          <Chip label={row.priority} size="small" sx={{ height: 18, fontSize: '10px', fontWeight: 700, ...PRIORITY_CONFIG[row.priority] }} />
+          <Chip label={row.status.replace('_', ' ')} size="small" sx={{ height: 18, fontSize: '10px', ...STATUS_CONFIG[row.status] }} />
+          {row.sla?.breached && <Chip label="SLA ⚠" size="small" sx={{ height: 18, fontSize: '10px', backgroundColor: '#fce4ec', color: '#c62828' }} />}
+        </Box>
+      ),
+    },
+    {
+      key: 'title', header: 'Ticket', flex: 1,
+      render: row => (
+        <Box>
+          <Typography sx={{ fontSize: '12px', color: '#222', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.title}</Typography>
+          <Typography sx={{ fontSize: '10px', color: '#999' }}>{row.assignee} · {row.affectedService}</Typography>
+        </Box>
+      ),
+    },
+    { key: 'id', header: 'ID', width: 65, render: row => <Typography sx={{ fontSize: '10px', color: '#aaa' }}>{row.id}</Typography> },
+  ]
+
+  return (
+    <>
+      <WidgetShell
+        title="Support Tickets"
+        titleIcon={<ConfirmationNumberIcon sx={{ color: '#7b1fa2', fontSize: 18 }} />}
+        source="ServiceNow"
+        loading={loading}
+        subheader={
+          !loading ? (
+            <Box sx={{ px: 1.5, py: 1 }}>
+              <StatCardGrid items={summaryCards} columns={3} compact />
+            </Box>
+          ) : undefined
+        }
+      >
+        <Box sx={{ flex: 1, overflowY: 'auto', px: 1.5, pb: 1 }}>
+          <DataTable
+            columns={columns}
+            rows={tickets}
+            onRowClick={row => setDrillDown({ type: 'ticket', data: row })}
+            rowKey="id"
+            compact
+            rowTooltip="Click to view ticket details & activity"
+          />
+        </Box>
+      </WidgetShell>
+      <DrillDownModal open={!!drillDown} onClose={() => setDrillDown(null)} drillDown={drillDown} />
+    </>
+  )
+}
+
+// ─── Log Stream Widget ─────────────────────────────────────
+
+const LOG_COLORS: Record<string, string> = {
+  ERROR: '#e53935', WARN: '#fb8c00', INFO: '#43a047',
+}
+
+export const LogStreamWidget: React.FC = () => {
+  const [logs, setLogs] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState<string>('ALL')
+
+  useEffect(() => {
+    fetch('http://localhost:3001/api/cloudwatch/logs')
+      .then(r => r.json())
+      .then(d => { setLogs(d); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [])
+
+  const displayed = filter === 'ALL' ? logs : logs.filter(l => l.level === filter)
+
+  return (
+    <WidgetShell
+      title="Live Logs"
+      titleIcon={<StreamIcon sx={{ color: '#1565c0', fontSize: 18 }} />}
+      source="CloudWatch"
+      loading={loading}
+      subheader={
+        <Box sx={{ display: 'flex', gap: 0.5, px: 1.5, py: 0.8 }}>
+          {['ALL', 'ERROR', 'WARN', 'INFO'].map(f => (
+            <Chip key={f} label={f} size="small" onClick={() => setFilter(f)}
+              sx={{
+                fontSize: '10px', height: 20, cursor: 'pointer',
+                backgroundColor: filter === f ? (LOG_COLORS[f] || '#1976d2') : '#f0f0f0',
+                color: filter === f ? '#fff' : '#555',
+                fontWeight: filter === f ? 700 : 400,
+              }} />
+          ))}
+        </Box>
+      }
+    >
+      <Box sx={{ flex: 1, overflowY: 'auto', backgroundColor: '#0d1117', borderRadius: '0 0 4px 4px', p: 1 }}>
+        {displayed.map(log => (
+          <Box key={log.id} sx={{ display: 'flex', gap: 1, py: 0.3, borderBottom: '1px solid rgba(255,255,255,0.04)', alignItems: 'flex-start' }}>
+            <Typography sx={{ fontSize: '10px', color: '#555', flexShrink: 0, mt: 0.1, minWidth: 90 }}>
+              {new Date(log.ts).toLocaleTimeString()}
+            </Typography>
+            <Typography sx={{ fontSize: '10px', fontWeight: 700, color: LOG_COLORS[log.level] || '#aaa', flexShrink: 0, minWidth: 38 }}>
+              {log.level}
+            </Typography>
+            <Typography sx={{ fontSize: '10px', color: '#4fc3f7', flexShrink: 0, minWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {log.service}
+            </Typography>
+            <Typography sx={{ fontSize: '10px', color: '#ccc', lineHeight: 1.4 }}>
+              {log.message}
+            </Typography>
+          </Box>
+        ))}
+      </Box>
+    </WidgetShell>
+  )
+}
+
+// ─── Cost Widget ───────────────────────────────────────────
+
+export const CostWidget: React.FC = () => {
+  const [cost, setCost] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [expanded, setExpanded] = useState(false)
+
+  useEffect(() => {
+    fetch('http://localhost:3001/api/snowflake/cost')
+      .then(r => r.json())
+      .then(d => { setCost(d); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [])
+
+  const overPercent = cost ? Math.round((cost.total / cost.budget) * 100) : 0
+
+  const summaryCards = cost ? [
+    { label: 'Actual',  value: `$${(cost.total / 1000).toFixed(0)}K`,   color: '#c62828', bg: '#fce4ec' },
+    { label: 'Budget',  value: `$${(cost.budget / 1000).toFixed(0)}K`,  color: '#1565c0', bg: '#e3f2fd' },
+    { label: 'Overage', value: `$${(cost.overage / 1000).toFixed(0)}K`, color: '#e65100', bg: '#fff3e0' },
+  ] : []
+
+  const serviceItems = cost
+    ? (expanded ? cost.byService : cost.byService.slice(0, 4)).map((s: any) => ({
+        label: s.service,
+        value: Math.round(s.cost / 1000),
+        max: Math.round(cost.budget / 1000 / 2),
+        suffix: 'K',
+        color: '#1976d2',
+        right: (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.3 }}>
+            <TrendingUpIcon sx={{ fontSize: 12, color: s.change.startsWith('+') ? '#e53935' : '#43a047' }} />
+            <Typography sx={{ fontSize: '11px', color: s.change.startsWith('+') ? '#e53935' : '#43a047', fontWeight: 600 }}>
+              {s.change}
+            </Typography>
+          </Box>
+        ),
+      }))
+    : []
+
+  return (
+    <WidgetShell
+      title="Cost vs Budget"
+      titleIcon={<AttachMoneyIcon sx={{ color: '#388e3c', fontSize: 18 }} />}
+      source="Snowflake"
+      loading={loading}
+    >
+      {cost && (
+        <>
+          <Box sx={{ px: 1.5, pt: 1 }}>
+            <StatCardGrid items={summaryCards} columns={3} compact />
+          </Box>
+
+          {/* Budget utilization bar */}
+          <Box sx={{ px: 1.5, py: 1 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.3 }}>
+              <Typography sx={{ fontSize: '11px', color: '#666' }}>Budget utilization</Typography>
+              <Typography sx={{ fontSize: '11px', fontWeight: 700, color: overPercent > 100 ? '#c62828' : '#2e7d32' }}>
+                {overPercent}%
+              </Typography>
+            </Box>
+            <Box sx={{ height: 8, backgroundColor: '#e0e0e0', borderRadius: 4, overflow: 'hidden' }}>
+              <Box sx={{
+                height: '100%', width: `${Math.min(overPercent, 100)}%`,
+                background: overPercent > 110 ? 'linear-gradient(90deg, #f44336, #e91e63)'
+                          : overPercent > 100 ? 'linear-gradient(90deg, #ff9800, #f44336)'
+                          : 'linear-gradient(90deg, #4caf50, #66bb6a)',
+                transition: 'width 0.5s ease', borderRadius: 4,
+              }} />
+            </Box>
+          </Box>
+
+          {/* Top services */}
+          <Box sx={{ flex: 1, overflowY: 'auto', px: 1.5, pb: 1 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+              <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#666' }}>Top Services</Typography>
+              <Typography onClick={() => setExpanded(!expanded)}
+                sx={{ fontSize: '11px', color: '#1976d2', cursor: 'pointer' }}>
+                {expanded ? 'Show less' : 'Show all'}
+              </Typography>
+            </Box>
+            <MetricBarList items={serviceItems} barHeight={5} compact />
+          </Box>
+        </>
+      )}
+    </WidgetShell>
+  )
+}
+
+// ─── Pipelines Widget ──────────────────────────────────────
+
+const STATUS_CFG: Record<string, { color: string; bg: string; dot: string }> = {
+  healthy:  { color: '#2e7d32', bg: '#e8f5e9', dot: '#4caf50' },
+  at_risk:  { color: '#f57c00', bg: '#fff8e1', dot: '#fb8c00' },
+  critical: { color: '#c62828', bg: '#fce4ec', dot: '#e53935' },
+}
+
+export const PipelinesWidget: React.FC = () => {
+  const [pipelines, setPipelines] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [drillDown, setDrillDown] = useState<DrillDownData | null>(null)
+
+  useEffect(() => {
+    fetch('http://localhost:3001/api/postgres/pipelines')
+      .then(r => r.json())
+      .then(d => { setPipelines(d); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [])
+
+  const columns: ColumnDef[] = [
+    {
+      key: 'name', header: 'Pipeline', flex: 1,
+      render: row => (
+        <Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.3 }}>
+            <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1a1a1a' }}>{row.name}</Typography>
+            <Chip label={row.status.replace('_', ' ')} size="small"
+              sx={{ height: 18, fontSize: '10px', fontWeight: 700, ...STATUS_CFG[row.status] }} />
+          </Box>
+          <Box sx={{ display: 'flex', gap: 2, mb: 0.4 }}>
+            <Typography sx={{ fontSize: '11px', color: '#777' }}>Success: <b>{row.successRate}%</b></Typography>
+            <Typography sx={{ fontSize: '11px', color: '#777' }}>Avg: <b>{row.avgDuration}</b></Typography>
+            <Typography sx={{ fontSize: '11px', color: '#777' }}>{row.schedule}</Typography>
+          </Box>
+          <Box sx={{ height: 4, backgroundColor: '#e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
+            <Box sx={{ height: '100%', width: `${row.successRate}%`, backgroundColor: STATUS_CFG[row.status]?.dot || '#aaa', borderRadius: 2 }} />
+          </Box>
+        </Box>
+      ),
+    },
+  ]
+
+  return (
+    <>
+      <WidgetShell
+        title="Pipeline Status"
+        titleIcon={<PipelineIcon sx={{ color: '#1976d2', fontSize: 18 }} />}
+        source="PostgreSQL"
+        loading={loading}
+      >
+        <Box sx={{ flex: 1, overflowY: 'auto', px: 1.5, py: 1 }}>
+          <DataTable
+            columns={columns}
+            rows={pipelines}
+            onRowClick={row => setDrillDown({ type: 'pipeline', data: row })}
+            rowKey="id"
+            compact
+            rowTooltip="Click to view run history & details"
+          />
+        </Box>
+      </WidgetShell>
+      <DrillDownModal open={!!drillDown} onClose={() => setDrillDown(null)} drillDown={drillDown} />
+    </>
+  )
+}
+
+

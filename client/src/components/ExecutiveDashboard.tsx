@@ -1,18 +1,23 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect } from 'react'
+import { Box, Typography, Chip, CircularProgress, Button, Paper, Tooltip } from '@mui/material'
+import StorageIcon from '@mui/icons-material/Storage'
+import SupportAgentIcon from '@mui/icons-material/SupportAgent'
+import CloudIcon from '@mui/icons-material/Cloud'
+import AccountTreeIcon from '@mui/icons-material/AccountTree'
+import DashboardIcon from '@mui/icons-material/Dashboard'
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
+import SmartToyIcon from '@mui/icons-material/SmartToy'
+import TuneIcon from '@mui/icons-material/Tune'
 import {
-  Box,
-  Paper,
-  Button,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  FormControlLabel,
-  Checkbox,
-  Divider,
-} from '@mui/material'
-import RefreshIcon from '@mui/icons-material/Refresh'
-import SettingsIcon from '@mui/icons-material/Settings'
+  WidgetShell,
+  StatCardGrid,
+  StatCardItem,
+  MetricBarList,
+  ComposedBarLineChart,
+  AlertBanner,
+} from './widgets'
+import { DMFPipelineWidget } from './DMFWidgets'
+import { ErrorsWidget, TicketsWidget, LogStreamWidget, CostWidget, PipelinesWidget } from './DataSourceWidgets'
 import {
   KPISummary,
   PipelineHealthHeatmap,
@@ -21,533 +26,679 @@ import {
   TopRiskyPipelines,
 } from './ExecutiveWidgets'
 
-interface GridItem {
-  id: string
-  title: string
-  col: number
-  row: number
-  width: number
-  height: number
-  component: React.ReactNode
-  visible: boolean
+// ─── Source definitions ────────────────────────────────────
+type SourceKey = 'overview' | 'dmf' | 'servicenow' | 'logs' | 'pipeline'
+
+const SOURCES: {
+  key: SourceKey
+  label: string
+  icon: React.ReactElement
+  accent: string
+  sub: string
+}[] = [
+  { key: 'overview',   label: 'Overview',        icon: <DashboardIcon />,    accent: '#1976d2', sub: 'All sources'             },
+  { key: 'dmf',        label: 'DMF',             icon: <StorageIcon />,      accent: '#1565c0', sub: 'PostgreSQL'              },
+  { key: 'pipeline',   label: 'ESP',             icon: <CloudIcon />,        accent: '#2e7d32', sub: 'Enterprise Data Platform' },
+  { key: 'servicenow', label: 'ServiceNow',      icon: <SupportAgentIcon />, accent: '#c62828', sub: 'ITSM'                    },
+  { key: 'logs',       label: 'Talend',          icon: <AccountTreeIcon />,  accent: '#e65100', sub: 'Data Integration'        },
+]
+
+// ─── Overview widget preferences ─────────────────────────────
+type OverviewPrefs = {
+  kpiStrip: boolean
+  operationalSnapshot: boolean
+  dmfTrend: boolean
+  snapDmf: boolean
+  snapServiceNow: boolean
+  snapLogs: boolean
+  snapPipeline: boolean
 }
 
+const DEFAULT_PREFS: OverviewPrefs = {
+  kpiStrip: true,
+  operationalSnapshot: true,
+  dmfTrend: true,
+  snapDmf: true,
+  snapServiceNow: true,
+  snapLogs: true,
+  snapPipeline: true,
+}
+
+const PREFS_STORAGE_KEY = 'executive-overview-prefs'
+
+// ─── Overview / Landing page ───────────────────────────────
+const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({ onSourceSelect }) => {
+  // ── Widget visibility preferences ──────────────────────
+  const [prefs, setPrefs] = useState<OverviewPrefs>(() => {
+    try {
+      const stored = localStorage.getItem(PREFS_STORAGE_KEY)
+      return stored ? { ...DEFAULT_PREFS, ...JSON.parse(stored) } : DEFAULT_PREFS
+    } catch { return DEFAULT_PREFS }
+  })
+  const [showPrefs, setShowPrefs] = useState(false)
+
+  useEffect(() => {
+    localStorage.setItem(PREFS_STORAGE_KEY, JSON.stringify(prefs))
+  }, [prefs])
+
+  const togglePref = (key: keyof OverviewPrefs) =>
+    setPrefs(p => ({ ...p, [key]: !p[key] }))
+  const resetPrefs = () => setPrefs(DEFAULT_PREFS)
+
+  const [dmfSummary,   setDmfSummary]   = useState<any>(null)
+  const [tickets,      setTickets]      = useState<any[]>([])
+  const [errors,       setErrors]       = useState<any[]>([])
+  const [cost,         setCost]         = useState<any>(null)
+  const [runsOverTime, setRunsOverTime] = useState<any[]>([])
+  const [pipelines,    setPipelines]    = useState<any[]>([])
+  const [loading,      setLoading]      = useState(true)
+
+  useEffect(() => {
+    const B = 'http://localhost:3001'
+    Promise.all([
+      fetch(`${B}/api/dmf/summary`).then(r => r.json()),
+      fetch(`${B}/api/servicenow/tickets`).then(r => r.json()),
+      fetch(`${B}/api/cloudwatch/errors`).then(r => r.json()),
+      fetch(`${B}/api/snowflake/cost`).then(r => r.json()),
+      fetch(`${B}/api/dmf/runs-over-time`).then(r => r.json()),
+      fetch(`${B}/api/postgres/pipelines`).then(r => r.json()),
+    ]).then(([dmf, tix, err, cst, rot, pls]) => {
+      setDmfSummary(dmf)
+      setTickets(Array.isArray(tix) ? tix : [])
+      setErrors(Array.isArray(err) ? err : [])
+      setCost(cst)
+      setRunsOverTime(Array.isArray(rot) ? rot : [])
+      setPipelines(Array.isArray(pls) ? pls : [])
+      setLoading(false)
+    }).catch(() => setLoading(false))
+  }, [])
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 300 }}>
+        <CircularProgress />
+      </Box>
+    )
+  }
+
+  // ── Derived metrics ──────────────────────────────────────
+  const openTickets       = tickets.filter(t => t.status === 'open' || t.status === 'in_progress').length
+  const breachedSLAs      = tickets.filter(t => t.breached).length
+  const p1Tickets         = tickets.filter(t => t.priority === 'P1').length
+  const criticalErrors    = errors.filter(e => e.severity === 'critical').length
+  const highErrors        = errors.filter(e => e.severity === 'high').length
+  const budgetPct         = cost ? Math.round((cost.total / cost.budget) * 100) : 0
+  const healthyPipelines  = pipelines.filter(p => p.status === 'healthy').length
+  const atRiskPipelines   = pipelines.filter(p => p.status === 'at_risk').length
+  const criticalPipelines = pipelines.filter(p => p.status === 'critical').length
+  const slaPct = tickets.length > 0
+    ? Math.round(((tickets.length - breachedSLAs) / tickets.length) * 100)
+    : 100
+
+  // ── Global KPI strip (one number from each source) ────────
+  const globalKpis: StatCardItem[] = [
+    {
+      label: 'DMF Success Rate',
+      value: dmfSummary?.successRate?.value ?? '—',
+      unit: '%',
+      color: '#2e7d32',
+      bg: '#e8f5e9',
+      trend: dmfSummary?.successRate?.trend,
+      trendPositiveIsGood: true,
+      description: 'DMF pipeline execution success rate across all stages',
+    },
+    {
+      label: 'Open Tickets',
+      value: openTickets,
+      color: breachedSLAs > 0 ? '#c62828' : '#1565c0',
+      bg: breachedSLAs > 0 ? '#fce4ec' : '#e3f2fd',
+      trend: breachedSLAs > 0 ? `${breachedSLAs} SLA breached` : 'No breaches',
+      trendPositiveIsGood: false,
+      description: 'Open ServiceNow incident tickets',
+    },
+    {
+      label: 'Active Errors',
+      value: criticalErrors + highErrors,
+      color: criticalErrors > 0 ? '#c62828' : '#f57c00',
+      bg: criticalErrors > 0 ? '#fce4ec' : '#fff3e0',
+      trend: `${criticalErrors} critical · ${highErrors} high`,
+      trendPositiveIsGood: false,
+      description: 'CloudWatch critical and high severity errors',
+    },
+    {
+      label: 'Budget Usage',
+      value: budgetPct,
+      unit: '%',
+      color: budgetPct > 110 ? '#c62828' : budgetPct > 100 ? '#f57c00' : '#2e7d32',
+      bg: budgetPct > 110 ? '#fce4ec' : budgetPct > 100 ? '#fff3e0' : '#e8f5e9',
+      trend: cost ? `$${(cost.overage / 1000).toFixed(0)}K over budget` : '',
+      trendPositiveIsGood: false,
+      description: 'Snowflake compute + infrastructure budget utilisation',
+    },
+  ]
+
+  // ── Source snapshot definitions ───────────────────────────
+  type SnapshotDef = {
+    key: SourceKey
+    prefKey: keyof OverviewPrefs
+    title: string
+    accent: string
+    source: string
+    kpis: StatCardItem[]
+    alert?: string
+  }
+
+  const snapshots: SnapshotDef[] = [
+    {
+      key: 'dmf',
+      prefKey: 'snapDmf',
+      title: 'DMF',
+      accent: '#1565c0',
+      source: 'PostgreSQL',
+      kpis: [
+        { label: 'Total Runs',  value: dmfSummary?.totalRuns?.value?.toLocaleString() ?? '—',
+          color: '#1565c0', bg: '#e3f2fd',
+          description: 'Total DMF pipeline runs executed in the current period.',
+          dialogStats: [{ label: 'Failed', value: dmfSummary?.failedRuns?.value ?? '—' }, { label: 'In Progress', value: dmfSummary?.runsInProgress?.value ?? '—' }] },
+        { label: 'Failed',      value: dmfSummary?.failedRuns?.value ?? '—',
+          color: '#c62828', bg: '#fce4ec',
+          description: 'Total DMF pipeline runs that reached a failed state.',
+          dialogStats: [{ label: 'Success Rate', value: `${dmfSummary?.successRate?.value ?? '—'}%` }, { label: 'Total Runs', value: dmfSummary?.totalRuns?.value ?? '—' }] },
+        { label: 'In Progress', value: dmfSummary?.runsInProgress?.value ?? '—',
+          color: '#e65100', bg: '#fff3e0',
+          description: 'DMF pipeline runs currently executing.',
+          dialogStats: [{ label: 'Total Runs', value: dmfSummary?.totalRuns?.value ?? '—' }, { label: 'Success Rate', value: `${dmfSummary?.successRate?.value ?? '—'}%` }] },
+        { label: 'Success',     value: `${dmfSummary?.successRate?.value ?? '—'}%`,
+          color: '#2e7d32', bg: '#e8f5e9',
+          description: 'Percentage of DMF pipeline runs that completed successfully.',
+          dialogStats: [{ label: 'Total Runs', value: dmfSummary?.totalRuns?.value ?? '—' }, { label: 'Failed', value: dmfSummary?.failedRuns?.value ?? '—' }] },
+      ],
+      alert: (dmfSummary?.failedRuns?.value ?? 0) > 50
+        ? `⚠ ${dmfSummary.failedRuns.value} failed runs this week`
+        : undefined,
+    },
+    {
+      key: 'servicenow',
+      prefKey: 'snapServiceNow',
+      title: 'ServiceNow',
+      accent: '#c62828',
+      source: 'ITSM',
+      kpis: [
+        { label: 'Total Tickets', value: tickets.length, color: '#1565c0', bg: '#e3f2fd',
+          description: 'Total number of ServiceNow incident tickets in the system.',
+          dialogStats: [{ label: 'Open', value: openTickets }, { label: 'Resolved', value: tickets.length - openTickets }] },
+        { label: 'Open',          value: openTickets,
+          color: openTickets > 5 ? '#c62828' : '#2e7d32',  bg: openTickets > 5 ? '#fce4ec' : '#e8f5e9',
+          description: 'Tickets currently open or in progress requiring action.',
+          dialogStats: [{ label: 'P1', value: p1Tickets }, { label: 'SLA Breached', value: breachedSLAs }] },
+        { label: 'SLA Breached',  value: breachedSLAs,
+          color: breachedSLAs > 0 ? '#c62828' : '#2e7d32', bg: breachedSLAs > 0 ? '#fce4ec' : '#e8f5e9',
+          description: 'Tickets that have exceeded their SLA target time.',
+          dialogStats: [{ label: 'SLA Compliance', value: `${slaPct}%` }, { label: 'Open Tickets', value: openTickets }] },
+        { label: 'P1 Incidents',  value: p1Tickets, color: '#c62828', bg: '#fce4ec',
+          description: 'Critical Priority 1 incidents requiring immediate escalation.',
+          dialogStats: [{ label: 'Total Open', value: openTickets }, { label: 'SLA Breached', value: breachedSLAs }] },
+      ],
+      alert: breachedSLAs > 0 ? `⚠ ${breachedSLAs} SLA breach${breachedSLAs > 1 ? 'es' : ''} need attention` : undefined,
+    },
+    {
+      key: 'logs',
+      prefKey: 'snapLogs',
+      title: 'Talend',
+      accent: '#e65100',
+      source: 'Data Integration',
+      kpis: [
+        { label: 'Critical',    value: criticalErrors,
+          color: criticalErrors > 0 ? '#c62828' : '#2e7d32', bg: criticalErrors > 0 ? '#fce4ec' : '#e8f5e9',
+          description: 'CloudWatch critical severity errors active in the current window.',
+          dialogStats: [{ label: 'High', value: highErrors }, { label: 'Total Errors', value: errors.length }] },
+        { label: 'High Errors', value: highErrors,
+          color: highErrors > 0 ? '#f57c00' : '#2e7d32',     bg: highErrors > 0 ? '#fff3e0' : '#e8f5e9',
+          description: 'CloudWatch high severity errors that need investigation.',
+          dialogStats: [{ label: 'Critical', value: criticalErrors }, { label: 'Total Errors', value: errors.length }] },
+        { label: 'Budget Used', value: `${budgetPct}%`,
+          color: budgetPct > 100 ? '#c62828' : '#2e7d32',  bg: budgetPct > 100 ? '#fce4ec' : '#e8f5e9',
+          description: 'Snowflake and infrastructure cost as a percentage of budget.',
+          dialogStats: [{ label: 'Total Spend', value: cost ? `$${(cost.total / 1000).toFixed(0)}K` : '—' }, { label: 'Budget', value: cost ? `$${(cost.budget / 1000).toFixed(0)}K` : '—' }] },
+        { label: 'Total Spend', value: cost ? `$${(cost.total / 1000).toFixed(0)}K` : '—',
+          color: '#1565c0', bg: '#e3f2fd',
+          description: 'Total Snowflake compute and infrastructure spend this period.',
+          dialogStats: [{ label: 'Budget', value: cost ? `$${(cost.budget / 1000).toFixed(0)}K` : '—' }, { label: 'Overage', value: cost ? `$${(cost.overage / 1000).toFixed(0)}K` : '—' }] },
+      ],
+      alert: criticalErrors > 0 ? `⚠ ${criticalErrors} critical error${criticalErrors > 1 ? 's' : ''} active` : undefined,
+    },
+    {
+      key: 'pipeline',
+      prefKey: 'snapPipeline',
+      title: 'ESP',
+      accent: '#2e7d32',
+      source: 'Enterprise Data Platform',
+      kpis: [
+        { label: 'Total',    value: pipelines.length,  color: '#1565c0', bg: '#e3f2fd',
+          description: 'Total number of data pipelines tracked in PostgreSQL.',
+          dialogStats: [{ label: 'Healthy', value: healthyPipelines }, { label: 'At Risk', value: atRiskPipelines }] },
+        { label: 'Healthy',  value: healthyPipelines,  color: '#2e7d32', bg: '#e8f5e9',
+          description: 'Pipelines running within normal parameters with high success rates.',
+          dialogStats: [{ label: 'Total', value: pipelines.length }, { label: 'At Risk', value: atRiskPipelines }] },
+        { label: 'At Risk',  value: atRiskPipelines,   color: '#f57c00', bg: '#fff3e0',
+          description: 'Pipelines showing degraded performance or elevated failure rates.',
+          dialogStats: [{ label: 'Critical', value: criticalPipelines }, { label: 'Healthy', value: healthyPipelines }] },
+        { label: 'Critical', value: criticalPipelines, color: '#c62828', bg: '#fce4ec',
+          description: 'Pipelines in a critical state requiring immediate intervention.',
+          dialogStats: [{ label: 'At Risk', value: atRiskPipelines }, { label: 'Total', value: pipelines.length }] },
+      ],
+      alert: criticalPipelines > 0 ? `⚠ ${criticalPipelines} pipeline${criticalPipelines > 1 ? 's' : ''} in critical state` : undefined,
+    },
+  ]
+
+  // ── Pref toggle chip definitions ─────────────────────────
+  const prefChips: { key: keyof OverviewPrefs; label: string }[] = [
+    { key: 'kpiStrip',            label: 'KPI Strip'            },
+    { key: 'operationalSnapshot', label: 'Operational Snapshot' },
+    { key: 'dmfTrend',            label: 'DMF Trend'            },
+    { key: 'snapDmf',             label: 'DMF'        },
+    { key: 'snapServiceNow',      label: 'ServiceNow' },
+    { key: 'snapLogs',            label: 'Talend'     },
+    { key: 'snapPipeline',        label: 'ESP'        },
+  ]
+
+  const visibleSnapshots = snapshots.filter(s => prefs[s.prefKey])
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, p: 2 }}>
+
+      {/* ── Widget preference toolbar ── */}
+      <Paper
+        elevation={0}
+        sx={{
+          borderRadius: 2,
+          border: '1px solid #e8ecf1',
+          backgroundColor: '#f8f9fb',
+          overflow: 'hidden',
+        }}
+      >
+        <Box
+          sx={{
+            px: 2,
+            py: 1,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            flexWrap: 'wrap',
+            cursor: 'pointer',
+          }}
+          onClick={() => setShowPrefs(p => !p)}
+        >
+          <TuneIcon sx={{ fontSize: 15, color: '#78909c' }} />
+          <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#78909c', textTransform: 'uppercase', letterSpacing: '0.6px', userSelect: 'none' }}>
+            Customize View
+          </Typography>
+          <Typography sx={{ fontSize: '10px', color: '#aaa', ml: 0.5 }}>
+            {showPrefs ? '▲ hide' : '▼ expand'}
+          </Typography>
+          {!showPrefs && (
+            <Typography sx={{ fontSize: '10px', color: '#bbb', ml: 'auto' }}>
+              {prefChips.filter(c => prefs[c.key]).length}/{prefChips.length} widgets visible
+            </Typography>
+          )}
+        </Box>
+
+        {showPrefs && (
+          <Box
+            sx={{
+              px: 2,
+              pb: 1.5,
+              pt: 0.5,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              flexWrap: 'wrap',
+              borderTop: '1px solid #edf0f3',
+            }}
+          >
+            {prefChips.map(({ key, label }) => (
+              <Tooltip key={key} title={prefs[key] ? `Hide "${label}"` : `Show "${label}"`} placement="top">
+                <Chip
+                  label={label}
+                  size="small"
+                  onClick={e => { e.stopPropagation(); togglePref(key) }}
+                  sx={{
+                    fontSize: '11px',
+                    height: 26,
+                    fontWeight: prefs[key] ? 700 : 400,
+                    backgroundColor: prefs[key] ? '#1976d218' : '#efefef',
+                    color: prefs[key] ? '#1565c0' : '#aaa',
+                    border: prefs[key] ? '1px solid #1976d240' : '1px solid transparent',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s',
+                    '& .MuiChip-label': { px: 1.2 },
+                    '&:hover': {
+                      backgroundColor: prefs[key] ? '#1976d230' : '#e0e0e0',
+                    },
+                  }}
+                />
+              </Tooltip>
+            ))}
+            <Button
+              size="small"
+              onClick={e => { e.stopPropagation(); resetPrefs() }}
+              sx={{
+                ml: 'auto',
+                fontSize: '11px',
+                color: '#f57c00',
+                textTransform: 'none',
+                minWidth: 'auto',
+                px: 1.5,
+                border: '1px solid #f57c0040',
+                borderRadius: 1,
+                '&:hover': { backgroundColor: '#fff3e0', borderColor: '#f57c00' },
+              }}
+            >
+              Reset Preferences
+            </Button>
+          </Box>
+        )}
+      </Paper>
+
+      {/* ── Cross-source KPI strip ── */}
+      {prefs.kpiStrip && (
+        <Paper sx={{ borderRadius: 2, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+          <WidgetShell
+            title="Live DataOps Health"
+            source="All Sources"
+            titleIcon={<DashboardIcon sx={{ color: '#1976d2', fontSize: 18 }} />}
+          >
+            <Box sx={{ p: 1.5 }}>
+              <StatCardGrid items={globalKpis} columns={4} withDialog />
+            </Box>
+          </WidgetShell>
+        </Paper>
+      )}
+
+      {/* ── Two hero widgets ── */}
+      {(prefs.operationalSnapshot || prefs.dmfTrend) && (
+        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1.7fr', gap: 2 }}>
+
+          {/* Hero 1: Operational snapshot — one bar per source */}
+          {prefs.operationalSnapshot && (
+            <Paper sx={{ borderRadius: 2, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+              <WidgetShell
+                title="Operational Snapshot"
+                source="Cross-source"
+                titleIcon={<DashboardIcon sx={{ color: '#1976d2', fontSize: 18 }} />}
+              >
+                <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                  <MetricBarList
+                    items={[
+                      {
+                        label: 'DMF Success Rate',
+                        value: dmfSummary?.successRate?.value ?? 0,
+                        suffix: '%',
+                        color: '#2e7d32',
+                        max: 100,
+                        sublabel: 'PostgreSQL · DMF Pipeline',
+                      },
+                      {
+                        label: 'Pipeline Health',
+                        value: healthyPipelines,
+                        max: Math.max(pipelines.length, 1),
+                        color: criticalPipelines > 0 ? '#c62828' : atRiskPipelines > 0 ? '#f57c00' : '#2e7d32',
+                        sublabel: `${healthyPipelines} of ${pipelines.length} healthy`,
+                      },
+                      {
+                        label: 'SLA Compliance',
+                        value: slaPct,
+                        suffix: '%',
+                        color: slaPct < 90 ? '#c62828' : slaPct < 98 ? '#f57c00' : '#2e7d32',
+                        max: 100,
+                        sublabel: `ServiceNow · ${breachedSLAs} breach${breachedSLAs !== 1 ? 'es' : ''}`,
+                      },
+                      {
+                        label: 'Error Pressure',
+                        value: criticalErrors + highErrors,
+                        max: Math.max(errors.length, 1),
+                        color: criticalErrors > 0 ? '#c62828' : highErrors > 0 ? '#f57c00' : '#2e7d32',
+                        sublabel: `CloudWatch · ${criticalErrors} critical, ${highErrors} high`,
+                      },
+                      {
+                        label: 'Budget Usage',
+                        value: Math.min(budgetPct, 120),
+                        suffix: '%',
+                        color: budgetPct > 110 ? '#c62828' : budgetPct > 100 ? '#f57c00' : '#2e7d32',
+                        max: 120,
+                        sublabel: cost ? `Snowflake · $${(cost.total / 1000).toFixed(0)}K / $${(cost.budget / 1000).toFixed(0)}K` : 'Snowflake',
+                      },
+                    ]}
+                    barHeight={10}
+                  />
+                  {(criticalErrors > 0 || breachedSLAs > 0 || criticalPipelines > 0) && (
+                    <AlertBanner
+                      severity="warning"
+                      title="Action required"
+                      message={[
+                        criticalErrors > 0    ? `${criticalErrors} critical CloudWatch error${criticalErrors > 1 ? 's' : ''}` : null,
+                        breachedSLAs > 0      ? `${breachedSLAs} SLA breach${breachedSLAs > 1 ? 'es' : ''} in ServiceNow`    : null,
+                        criticalPipelines > 0 ? `${criticalPipelines} pipeline${criticalPipelines > 1 ? 's' : ''} critical`   : null,
+                      ].filter(Boolean).join(' · ')}
+                    />
+                  )}
+                </Box>
+              </WidgetShell>
+            </Paper>
+          )}
+
+          {/* Hero 2: DMF 7-day pipeline trend */}
+          {prefs.dmfTrend && (
+            <Paper sx={{ borderRadius: 2, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+              <WidgetShell
+                title="DMF Pipeline Runs — Last 7 Days"
+                source="PostgreSQL"
+                titleIcon={<StorageIcon sx={{ color: '#1565c0', fontSize: 18 }} />}
+              >
+                <Box sx={{ px: 2, pb: 2, pt: 1 }}>
+                  <ComposedBarLineChart
+                    data={runsOverTime}
+                    xKey="date"
+                    bars={[
+                      { key: 'total',  label: 'Total Runs', color: '#1976d2' },
+                      { key: 'failed', label: 'Failed',     color: '#d32f2f' },
+                    ]}
+                    lines={[
+                      { key: 'successRate', label: 'Success Rate', color: '#2e7d32', unit: '%', yAxisId: 'right' },
+                    ]}
+                    rightYDomain={[85, 100]}
+                    height={220}
+                  />
+                </Box>
+              </WidgetShell>
+            </Paper>
+          )}
+        </Box>
+      )}
+
+      {/* ── Source-of-truth snapshot cards ── */}
+      {visibleSnapshots.length > 0 && (
+        <Box>
+          <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#999', textTransform: 'uppercase', letterSpacing: '0.8px', mb: 1 }}>
+            System Snapshots
+          </Typography>
+          <Box sx={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(visibleSnapshots.length, 4)}, 1fr)`, gap: 2 }}>
+            {visibleSnapshots.map(snap => (
+              <Paper
+                key={snap.key}
+                sx={{
+                  borderRadius: 2,
+                  border: `1px solid ${snap.accent}33`,
+                  borderTop: `3px solid ${snap.accent}`,
+                  overflow: 'hidden',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+                  transition: 'box-shadow 0.2s',
+                  '&:hover': { boxShadow: `0 4px 16px ${snap.accent}33` },
+                }}
+              >
+                <Box sx={{ px: 2, pt: 1.5, pb: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #f5f5f5' }}>
+                  <Box>
+                    <Typography sx={{ fontWeight: 700, fontSize: '13px', color: snap.accent }}>{snap.title}</Typography>
+                    <Typography sx={{ fontSize: '10px', color: '#aaa' }}>{snap.source}</Typography>
+                  </Box>
+                  <Chip
+                    label="Live"
+                    size="small"
+                    sx={{ fontSize: '9px', height: 18, backgroundColor: `${snap.accent}18`, color: snap.accent, fontWeight: 700 }}
+                  />
+                </Box>
+
+                <Box sx={{ px: 1.5, py: 1, flex: 1 }}>
+                  <StatCardGrid items={snap.kpis} columns={2} compact withDialog />
+                </Box>
+
+                <Box sx={{ px: 1.5, pb: 1.5, mt: 'auto' }}>
+                  {snap.alert && (
+                    <Typography sx={{ fontSize: '10px', color: '#c62828', mb: 0.75, fontWeight: 600 }}>
+                      {snap.alert}
+                    </Typography>
+                  )}
+                  <Button
+                    fullWidth
+                    size="small"
+                    endIcon={<ArrowForwardIcon sx={{ fontSize: '13px !important' }} />}
+                    onClick={() => onSourceSelect(snap.key)}
+                    sx={{
+                      textTransform: 'none',
+                      fontSize: '11px',
+                      color: snap.accent,
+                      border: `1px solid ${snap.accent}55`,
+                      borderRadius: 1,
+                      py: 0.5,
+                      '&:hover': { backgroundColor: `${snap.accent}11`, borderColor: snap.accent },
+                    }}
+                  >
+                    View {snap.title}
+                  </Button>
+                </Box>
+              </Paper>
+            ))}
+          </Box>
+        </Box>
+      )}
+
+      {/* ── Empty state when all widgets hidden ── */}
+      {!prefs.kpiStrip && !prefs.operationalSnapshot && !prefs.dmfTrend && visibleSnapshots.length === 0 && (
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 8, gap: 2 }}>
+          <TuneIcon sx={{ fontSize: 40, color: '#ccc' }} />
+          <Typography sx={{ color: '#aaa', fontSize: '14px' }}>All widgets are hidden.</Typography>
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={resetPrefs}
+            sx={{ textTransform: 'none', color: '#1976d2', borderColor: '#1976d2', fontSize: '12px' }}
+          >
+            Restore Default View
+          </Button>
+        </Box>
+      )}
+    </Box>
+  )
+}
+
+// ─── Executive Dashboard shell ─────────────────────────────
 interface ExecutiveDashboardProps {
   onChatClick: () => void
 }
 
-const GRID_COLS = 4
-const GRID_GAP = 12
-const CELL_HEIGHT = 110
-
-interface ExecutivePreferences {
-  kpi: boolean
-  heatmap: boolean
-  trend: boolean
-  impact: boolean
-  risky: boolean
-}
-
-const DEFAULT_PREFERENCES: ExecutivePreferences = {
-  kpi: true,
-  heatmap: true,
-  trend: true,
-  impact: true,
-  risky: true,
-}
-
 export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onChatClick }) => {
-  const [gridItems, setGridItems] = useState<GridItem[]>([])
-  const [isDragging, setIsDragging] = useState(false)
-  const [draggedId, setDraggedId] = useState<string | null>(null)
-  const [preferencesOpen, setPreferencesOpen] = useState(false)
-  const [preferences, setPreferences] = useState<ExecutivePreferences>(DEFAULT_PREFERENCES)
-  const gridContainerRef = useRef<HTMLDivElement>(null)
-
-  // Initialize grid items from localStorage or defaults
-  useEffect(() => {
-    // Clear old layout to prevent loading stale data
-    localStorage.removeItem('executiveDashboardLayout')
-    
-    const savedPreferences = localStorage.getItem('executiveDashboardPreferences')
-
-    // Load preferences
-    if (savedPreferences) {
-      try {
-        const parsed = JSON.parse(savedPreferences)
-        setPreferences(parsed)
-      } catch (error) {
-        console.error('Failed to load saved preferences:', error)
-      }
-    }
-
-    setGridItems(initializeDefaultLayout())
-  }, [])
-
-  // Save layout to localStorage whenever it changes
-  useEffect(() => {
-    if (gridItems.length > 0) {
-      const layoutToSave = gridItems.map(item => ({
-        id: item.id,
-        title: item.title,
-        col: item.col,
-        row: item.row,
-        width: item.width,
-        height: item.height,
-      }))
-      localStorage.setItem('executiveDashboardLayout', JSON.stringify(layoutToSave))
-    }
-  }, [gridItems])
-
-  // Save preferences to localStorage whenever they change
-  useEffect(() => {
-    localStorage.setItem('executiveDashboardPreferences', JSON.stringify(preferences))
-  }, [preferences])
-
-  const initializeDefaultLayout = () => {
-    const allItems: GridItem[] = [
-      {
-        id: 'kpi',
-        title: 'KPI Summary',
-        col: 0,
-        row: 0,
-        width: 4,
-        height: 2,
-        component: <KPISummary />,
-        visible: preferences.kpi,
-      },
-      {
-        id: 'heatmap',
-        title: 'Pipeline Health Heatmap',
-        col: 0,
-        row: 0,
-        width: 2,
-        height: 2,
-        component: <PipelineHealthHeatmap />,
-        visible: preferences.heatmap,
-      },
-      {
-        id: 'trend',
-        title: 'Failures vs Auto-Recovery Trend',
-        col: 0,
-        row: 0,
-        width: 2,
-        height: 2,
-        component: <FailuresVsRecoveryTrend />,
-        visible: preferences.trend,
-      },
-      {
-        id: 'impact',
-        title: 'Business Impact',
-        col: 0,
-        row: 0,
-        width: 2,
-        height: 2,
-        component: <BusinessImpact />,
-        visible: preferences.impact,
-      },
-      {
-        id: 'risky',
-        title: 'Top Risky Pipelines',
-        col: 0,
-        row: 0,
-        width: 2,
-        height: 2,
-        component: <TopRiskyPipelines />,
-        visible: preferences.risky,
-      },
-    ]
-
-    // Reposition items to fill grid sequentially
-    const visibleItems = allItems.filter(item => item.visible)
-    let currentRow = 0
-    let currentCol = 0
-
-    const repositioned = visibleItems.map(item => {
-      const itemCol = currentCol
-      const itemRow = currentRow
-
-      currentCol += item.width
-      if (currentCol >= GRID_COLS) {
-        currentCol = 0
-        currentRow += item.height
-      }
-
-      return {
-        ...item,
-        col: itemCol,
-        row: itemRow,
-      }
-    })
-
-    return repositioned
-  }
-
-  const handleDragStart = (e: React.DragEvent, itemId: string) => {
-    setIsDragging(true)
-    setDraggedId(itemId)
-    e.dataTransfer.effectAllowed = 'move'
-    e.dataTransfer.setData('itemId', itemId)
-  }
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
-  }
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    if (!gridContainerRef.current || !draggedId) return
-
-    const rect = gridContainerRef.current.getBoundingClientRect()
-    
-    // Calculate drop position in pixels
-    const dropX = e.clientX - rect.left
-    const dropY = e.clientY - rect.top
-
-    // Calculate which grid cell was dropped on
-    const cellWidth = (rect.width - GRID_GAP * (GRID_COLS - 1)) / GRID_COLS
-    let dropCol = Math.floor(dropX / (cellWidth + GRID_GAP))
-    let dropRow = Math.floor(dropY / (CELL_HEIGHT + GRID_GAP))
-
-    // Ensure within bounds
-    dropCol = Math.max(0, Math.min(dropCol, GRID_COLS - 1))
-    dropRow = Math.max(0, dropRow)
-
-    // Reposition widget to drop location and reorder others
-    setGridItems(prevItems => {
-      const visibleItems = prevItems.filter(item => item.visible)
-      const hiddenItems = prevItems.filter(item => !item.visible)
-
-      // Find the dragged item
-      const draggedItem = visibleItems.find(item => item.id === draggedId)
-      if (!draggedItem) return prevItems
-
-      // Remove dragged item from its current position
-      let otherItems = visibleItems.filter(item => item.id !== draggedId)
-
-      // Find which position in the visible list corresponds to drop location
-      let insertIndex = 0
-      let currentRow = 0
-      let currentCol = 0
-
-      for (let i = 0; i < otherItems.length; i++) {
-        if (currentRow > dropRow || (currentRow === dropRow && currentCol > dropCol)) {
-          insertIndex = i
-          break
-        }
-        insertIndex = i + 1
-        currentCol += otherItems[i].width
-        if (currentCol >= GRID_COLS) {
-          currentCol = 0
-          currentRow += otherItems[i].height
-        }
-      }
-
-      // Insert dragged item at the drop position
-      otherItems.splice(insertIndex, 0, draggedItem)
-
-      // Reposition all visible items sequentially
-      let updatedItems = otherItems.map(item => {
-        const col = 0
-        const row = 0
-        return { ...item, col, row }
-      })
-
-      let currentRow2 = 0
-      let currentCol2 = 0
-
-      updatedItems = updatedItems.map(item => {
-        const itemCol = currentCol2
-        const itemRow = currentRow2
-
-        currentCol2 += item.width
-        if (currentCol2 >= GRID_COLS) {
-          currentCol2 = 0
-          currentRow2 += item.height
-        }
-
-        return {
-          ...item,
-          col: itemCol,
-          row: itemRow,
-        }
-      })
-
-      // Combine with hidden items
-      return [...updatedItems, ...hiddenItems]
-    })
-
-    setIsDragging(false)
-    setDraggedId(null)
-  }
-
-  const handleDragEnd = () => {
-    setIsDragging(false)
-    setDraggedId(null)
-  }
-
-  const handleResetLayout = () => {
-    localStorage.removeItem('executiveDashboardLayout')
-    localStorage.removeItem('executiveDashboardPreferences')
-    setGridItems(initializeDefaultLayout())
-    setPreferences(DEFAULT_PREFERENCES)
-  }
-
-  const handleToggleWidget = (widgetId: string) => {
-    const newPreferences = {
-      ...preferences,
-      [widgetId]: !preferences[widgetId as keyof ExecutivePreferences],
-    }
-    setPreferences(newPreferences)
-    
-    // Update visibility and reposition
-    setGridItems(prevItems => {
-      const updated = prevItems.map(item =>
-        item.id === widgetId
-          ? { ...item, visible: !item.visible }
-          : item
-      )
-      
-      // Reposition all visible items sequentially
-      const visibleItems = updated.filter(item => item.visible)
-      let currentRow = 0
-      let currentCol = 0
-
-      const repositioned = visibleItems.map(item => {
-        const itemCol = currentCol
-        const itemRow = currentRow
-
-        currentCol += item.width
-        if (currentCol >= GRID_COLS) {
-          currentCol = 0
-          currentRow += item.height
-        }
-
-        return {
-          ...item,
-          col: itemCol,
-          row: itemRow,
-        }
-      })
-
-      return repositioned
-    })
-  }
-
-  const handleResetPreferences = () => {
-    setPreferences(DEFAULT_PREFERENCES)
-    localStorage.removeItem('executiveDashboardLayout')
-    setGridItems(initializeDefaultLayout())
-  }
-
-  const handleClosePreferences = () => {
-    setPreferencesOpen(false)
-  }
+  const [source, setSource] = useState<SourceKey>('overview')
+  const active = SOURCES.find(s => s.key === source)!
 
   return (
-    <Box
-      sx={{
-        flex: 1,
-        overflow: 'auto',
-        backgroundColor: '#fafafa',
-        display: 'flex',
-        flexDirection: 'column',
-      }}
-    >
-      {/* Header - Fixed blue background */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#455a64', p: 2, color: '#fff' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+
+      {/* ── Fixed header ── */}
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#1a2535', px: 3, py: 1.5, flexShrink: 0 }}>
         <Box>
-          <h2 style={{ margin: '0 0 4px 0', color: '#fff', fontSize: '22px', fontWeight: 600 }}>
+          <Typography sx={{ color: '#fff', fontWeight: 700, fontSize: '18px', lineHeight: 1.2 }}>
             Executive DataOps Health
-          </h2>
-          <p style={{ margin: 0, color: '#b0bec5', fontSize: '13px' }}>
-            Drag and drop widgets to customize your view
-          </p>
+          </Typography>
+          <Typography sx={{ color: '#90a4ae', fontSize: '12px' }}>
+            {active.label} — {active.sub}
+          </Typography>
         </Box>
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <Button
-            startIcon={<SettingsIcon />}
-            onClick={() => setPreferencesOpen(true)}
-            variant="outlined"
-            size="small"
-            sx={{ color: '#fff', borderColor: '#fff', '&:hover': { borderColor: '#fff', backgroundColor: 'rgba(255,255,255,0.1)' } }}
-          >
-            Preferences
-          </Button>
-          <Button
-            startIcon={<RefreshIcon />}
-            onClick={handleResetLayout}
-            variant="outlined"
-            size="small"
-            sx={{ color: '#fff', borderColor: '#fff', '&:hover': { borderColor: '#fff', backgroundColor: 'rgba(255,255,255,0.1)' } }}
-          >
-            Reset Layout
-          </Button>
-          <Button onClick={onChatClick} variant="contained" size="small" sx={{ ml: 1, backgroundColor: '#1976d2', '&:hover': { backgroundColor: '#1565c0' } }}>
-            Ask DataOps Agent
-          </Button>
-        </Box>
+        <Button
+          onClick={onChatClick}
+          variant="contained"
+          size="small"
+          startIcon={<SmartToyIcon />}
+          sx={{ backgroundColor: '#1976d2', textTransform: 'none', '&:hover': { backgroundColor: '#1565c0' } }}
+        >
+          Ask DataOps Agent
+        </Button>
       </Box>
 
-      {/* Content area with scrolling */}
-      <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
-
-      {/* Grid Container */}
-      <Box
-        ref={gridContainerRef}
-        sx={{
-          display: 'grid',
-          gridTemplateColumns: `repeat(${GRID_COLS}, 1fr)`,
-          gap: `${GRID_GAP}px`,
-          gridAutoRows: 'auto',
-          gridAutoFlow: 'dense',
-          position: 'relative',
-        }}
-        onDragOver={handleDragOver}
-        onDrop={handleDrop}
-      >
-        {gridItems.filter(item => item.visible).map(item => (
-          <Paper
-            key={item.id}
-            draggable
-            onDragStart={e => handleDragStart(e, item.id)}
-            onDragOver={handleDragOver}
-            onDragEnd={handleDragEnd}
-            sx={{
-              gridColumn: `${item.col + 1} / span ${item.width}`,
-              gridRow: `${item.row + 1} / span ${item.height}`,
-              p: 0,
-              backgroundColor: '#fff',
-              cursor: isDragging && draggedId === item.id ? 'grabbing' : 'grab',
-              opacity: isDragging && draggedId === item.id ? 0.6 : 1,
-              transition: 'all 0.2s ease',
-              boxShadow: isDragging && draggedId === item.id ? '0 8px 24px rgba(25, 118, 210, 0.3)' : '0 1px 3px rgba(0,0,0,0.08)',
-              border: isDragging && draggedId === item.id ? '2px solid #1976d2' : 'none',
-              transform: isDragging && draggedId === item.id ? 'scale(0.98)' : 'scale(1)',
-              '&:hover': {
-                boxShadow: !isDragging ? '0 4px 12px rgba(0,0,0,0.12)' : undefined,
-              },
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden',
-              minHeight: 0,
-              borderRadius: '4px',
-              height: 'auto',
-            }}
-          >
-            {item.id !== 'kpi' && (
-              <Box
-                sx={{
-                  fontWeight: 600,
-                  fontSize: '14px',
-                  color: '#1976d2',
-                  mb: 1.5,
-                  pb: 1,
-                  borderBottom: '1px solid #e0e0e0',
-                  cursor: 'grab',
-                  px: 2,
-                  pt: 2,
-                  '&:active': {
-                    cursor: 'grabbing',
-                  },
-                }}
-              >
-                {item.title}
-              </Box>
-            )}
+      {/* ── Source selector tabs ── */}
+      <Box sx={{ display: 'flex', backgroundColor: '#263548', px: 2, flexShrink: 0, borderBottom: '1px solid #1a2535' }}>
+        {SOURCES.map(src => {
+          const isActive = source === src.key
+          return (
             <Box
+              key={src.key}
+              onClick={() => setSource(src.key)}
               sx={{
-                flex: 1,
-                overflow: 'auto',
-                minHeight: 0,
-                px: item.id === 'kpi' ? 0 : 2,
-                pb: item.id === 'kpi' ? 0 : 2,
-                pt: item.id === 'kpi' ? 0 : 0,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 0.75,
+                px: 2,
+                py: 1.2,
+                cursor: 'pointer',
+                borderBottom: isActive ? `3px solid ${src.accent}` : '3px solid transparent',
+                color: isActive ? '#fff' : '#78909c',
+                transition: 'all 0.15s',
+                '&:hover': { color: '#fff', backgroundColor: 'rgba(255,255,255,0.05)' },
               }}
             >
-              {item.component}
+              {React.cloneElement(src.icon, {
+                sx: { fontSize: 15, color: isActive ? src.accent : 'inherit' },
+              })}
+              <Typography sx={{ fontSize: '12px', fontWeight: isActive ? 700 : 400 }}>
+                {src.label}
+              </Typography>
             </Box>
-          </Paper>
-        ))}
+          )
+        })}
       </Box>
+
+      {/* ── Scrollable content ── */}
+      <Box sx={{ flex: 1, overflow: 'auto', backgroundColor: '#f5f6f8' }}>
+        {source === 'overview'   && <OverviewLanding onSourceSelect={setSource} />}
+        {source === 'dmf'        && <DMFPipelineWidget />}
+        {source === 'servicenow' && (
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, p: 2, alignItems: 'start' }}>
+            <TicketsWidget />
+            <ErrorsWidget />
+          </Box>
+        )}
+        {source === 'logs' && (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, p: 2 }}>
+            <LogStreamWidget />
+            <CostWidget />
+          </Box>
+        )}
+        {source === 'pipeline' && (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, p: 2 }}>
+            <KPISummary />
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+              <PipelineHealthHeatmap />
+              <FailuresVsRecoveryTrend />
+            </Box>
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+              <BusinessImpact />
+              <TopRiskyPipelines />
+            </Box>
+            <PipelinesWidget />
+          </Box>
+        )}
       </Box>
-
-      {/* Preferences Dialog */}
-      <Dialog open={preferencesOpen} onClose={handleClosePreferences} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ fontWeight: 600, color: '#1976d2' }}>
-          Dashboard Preferences
-        </DialogTitle>
-        <DialogContent sx={{ pt: 3 }}>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={preferences.kpi}
-                  onChange={() => handleToggleWidget('kpi')}
-                />
-              }
-              label="Executive DataOps Health (KPI Summary)"
-            />
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={preferences.heatmap}
-                  onChange={() => handleToggleWidget('heatmap')}
-                />
-              }
-              label="Pipeline Health Heatmap"
-            />
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={preferences.trend}
-                  onChange={() => handleToggleWidget('trend')}
-                />
-              }
-              label="Failures vs Auto-Recovery Trend"
-            />
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={preferences.impact}
-                  onChange={() => handleToggleWidget('impact')}
-                />
-              }
-              label="Business Impact"
-            />
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={preferences.risky}
-                  onChange={() => handleToggleWidget('risky')}
-                />
-              }
-              label="Top Risky Pipelines"
-            />
-          </Box>
-
-          <Divider sx={{ my: 2 }} />
-
-          <Box sx={{ fontSize: '12px', color: '#666', mb: 2 }}>
-            <p style={{ margin: '0 0 8px 0', fontWeight: 600 }}>Tips:</p>
-            <ul style={{ margin: '0', paddingLeft: '20px' }}>
-              <li>Toggle widgets on/off to customize your dashboard view</li>
-              <li>Use drag-drop to rearrange widget positions</li>
-              <li>Your preferences are saved automatically</li>
-              <li>Click "Reset Layout" to restore default arrangement</li>
-            </ul>
-          </Box>
-        </DialogContent>
-        <DialogActions sx={{ p: 2 }}>
-          <Button onClick={handleResetPreferences} variant="outlined" size="small" color="inherit">
-            Reset to Defaults
-          </Button>
-          <Button onClick={handleClosePreferences} variant="contained" size="small">
-            Done
-          </Button>
-        </DialogActions>
-      </Dialog>
     </Box>
   )
 }
