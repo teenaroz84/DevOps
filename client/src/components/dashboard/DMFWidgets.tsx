@@ -31,7 +31,8 @@ import {
   ColumnDef,
   WidgetShell,
   MetricBarList,
-} from './widgets'
+} from '../widgets'
+import { dmfService } from '../../services'
 
 const STAGE_COLORS: Record<string, string> = {
   Ingestion: '#1565c0',
@@ -159,13 +160,13 @@ export const DMFPipelineWidget: React.FC = () => {
 
   useEffect(() => {
     Promise.all([
-      fetch('http://localhost:3001/api/dmf/summary').then(r => r.json()),
-      fetch('http://localhost:3001/api/dmf/stages').then(r => r.json()),
-      fetch('http://localhost:3001/api/dmf/run-status').then(r => r.json()),
-      fetch('http://localhost:3001/api/dmf/failed-by-stage').then(r => r.json()),
-      fetch('http://localhost:3001/api/dmf/runs-over-time').then(r => r.json()),
-      fetch('http://localhost:3001/api/dmf/error-reasons').then(r => r.json()),
-      fetch('http://localhost:3001/api/dmf/recent-failures').then(r => r.json()),
+      dmfService.getSummary(),
+      dmfService.getStages(),
+      dmfService.getRunStatus(),
+      dmfService.getFailedByStage(),
+      dmfService.getRunsOverTime(),
+      dmfService.getErrorReasons(),
+      dmfService.getRecentFailures(),
     ])
       .then(([sum, stg, rs, fbs, rot, er, rf]) => {
         setSummary(sum)
@@ -183,10 +184,9 @@ export const DMFPipelineWidget: React.FC = () => {
   // ── Lazy-load Lineage data ────────────────────────────────
   useEffect(() => {
     if (activeTab !== 'lineage' || lineageLoaded) return
-    const B = 'http://localhost:3001'
     Promise.all([
-      fetch(`${B}/api/dmf/lineage/meta`).then(r => r.json()),
-      fetch(`${B}/api/dmf/lineage/jobs`).then(r => r.json()),
+      dmfService.getLineageMeta(),
+      dmfService.getLineageJobs(),
     ]).then(([meta, jobs]) => {
       setLineageMeta(meta)
       setLineageJobs(Array.isArray(jobs) ? jobs : [])
@@ -197,8 +197,7 @@ export const DMFPipelineWidget: React.FC = () => {
   // ── Lazy-load Analytics data ──────────────────────────────
   useEffect(() => {
     if (activeTab !== 'analytics' || analyticsLoaded) return
-    fetch('http://localhost:3001/api/dmf/analytics')
-      .then(r => r.json())
+    dmfService.getAnalytics()
       .then(d => { setAnalytics(d); setAnalyticsLoaded(true) })
       .catch(() => setAnalyticsLoaded(true))
   }, [activeTab, analyticsLoaded])
@@ -206,12 +205,11 @@ export const DMFPipelineWidget: React.FC = () => {
   // ── Lazy-load Trends data ─────────────────────────────────
   useEffect(() => {
     if (activeTab !== 'trends' || trendsLoaded) return
-    const B = 'http://localhost:3001'
     Promise.all([
-      fetch(`${B}/api/dmf/status-trend`).then(r => r.json()),
-      fetch(`${B}/api/dmf/rows-trend`).then(r => r.json()),
-      fetch(`${B}/api/dmf/jobs-trend`).then(r => r.json()),
-      fetch(`${B}/api/dmf/step-failure-trend`).then(r => r.json()),
+      dmfService.getStatusTrend(),
+      dmfService.getRowsTrend(),
+      dmfService.getJobsTrend(),
+      dmfService.getStepFailureTrend(),
     ]).then(([st, rt, jt, sft]) => {
       setStatusTrend(st); setRowsTrend(rt); setJobsTrend(jt); setStepFailureTrend(sft)
       setTrendsLoaded(true)

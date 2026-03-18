@@ -13,7 +13,7 @@ import {
   HeatmapGrid,
   AlertBanner,
   WidgetDetailModal,
-} from './widgets'
+} from '../widgets'
 
 // ─── KPI Summary ──────────────────────────────────────────
 export const KPISummary: React.FC = () => {

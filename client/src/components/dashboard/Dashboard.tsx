@@ -21,7 +21,7 @@ import StorageIcon from '@mui/icons-material/Storage'
 import GroupIcon from '@mui/icons-material/Group'
 import AnalyticsIcon from '@mui/icons-material/Analytics'
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator'
-import { WidgetPreferences } from './UserPreferences'
+import { WidgetPreferences } from '../settings/UserPreferences'
 
 interface Workflow {
   id: string

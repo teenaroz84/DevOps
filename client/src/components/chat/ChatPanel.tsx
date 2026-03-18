@@ -17,6 +17,29 @@ import {
 import SendIcon from '@mui/icons-material/Send'
 import CloseIcon from '@mui/icons-material/Close'
 import SmartToyIcon from '@mui/icons-material/SmartToy'
+import FileDownloadIcon from '@mui/icons-material/FileDownload'
+import { chatService } from '../../services'
+
+function exportDataAsCsv(data: any[]) {
+  if (!data || data.length === 0) return
+  const headers = Object.keys(data[0])
+  const csvRows = [
+    headers.join(','),
+    ...data.map(row =>
+      headers.map(h => {
+        const val = String(row[h] ?? '').replace(/"/g, '""')
+        return `"${val}"`
+      }).join(',')
+    ),
+  ]
+  const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `export_${new Date().toISOString().slice(0, 10)}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
 
 interface Message {
   role: 'user' | 'agent'
@@ -71,24 +94,14 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false }: ChatPanelProp
     setLoading(true)
 
     try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: textToSend })
-      })
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: Failed to get response`)
-      }
-
-      const data = await response.json()
+      const data = await chatService.sendMessage(textToSend)
       
       const agentResponse: Message = {
         role: 'agent',
         content: data.text,
-        type: data.type,
+        type: data.type as Message['type'],
         data: data.data,
-        suggestedActions: data.suggestedActions
+        suggestedActions: (data as any).suggestedActions
       }
       setMessages(prev => [...prev, agentResponse])
     } catch (error) {
@@ -389,9 +402,19 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false }: ChatPanelProp
                   }}
                 >
                   {msg.type === 'table' && msg.data ? (
-                    <Typography variant="body2" sx={{ fontSize: '13px' }}>
-                      📊 {msg.content}
-                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" sx={{ fontSize: '13px' }}>
+                        📊 {msg.content}
+                      </Typography>
+                      <IconButton
+                        size="small"
+                        onClick={() => exportDataAsCsv(msg.data)}
+                        title="Export as CSV"
+                        sx={{ ml: 1, color: '#1976d2', '&:hover': { backgroundColor: 'rgba(25,118,210,0.08)' } }}
+                      >
+                        <FileDownloadIcon sx={{ fontSize: 18 }} />
+                      </IconButton>
+                    </Box>
                   ) : (
                     <Typography variant="body2" sx={{ fontSize: '13px', lineHeight: 1.4 }}>
                       {msg.content}
@@ -517,10 +540,20 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false }: ChatPanelProp
         >
           {lastMessageWithData ? (
             <>
-              <Box sx={{ p: 2.5, borderBottom: '1px solid #e0e0e0', backgroundColor: '#fff' }}>
+              <Box sx={{ p: 2.5, borderBottom: '1px solid #e0e0e0', backgroundColor: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#1976d2' }}>
                   Results
                 </Typography>
+                {lastMessageWithData.data && lastMessageWithData.data.length > 0 && (
+                  <IconButton
+                    size="small"
+                    onClick={() => exportDataAsCsv(lastMessageWithData.data)}
+                    title="Export as CSV"
+                    sx={{ color: '#1976d2', '&:hover': { backgroundColor: 'rgba(25,118,210,0.08)' } }}
+                  >
+                    <FileDownloadIcon sx={{ fontSize: 20 }} />
+                  </IconButton>
+                )}
               </Box>
               <Box sx={{ flex: 1, overflowY: 'auto', p: 2.5 }}>
                 <Paper sx={{ p: 2, backgroundColor: '#fff' }}>
@@ -694,7 +727,15 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false }: ChatPanelProp
               }}
             >
               {msg.type === 'table' && msg.data ? (
-                <Box sx={{ overflowX: 'auto', maxHeight: '300px', overflowY: 'auto' }}>
+                <Box sx={{ overflowX: 'auto', maxHeight: '300px', overflowY: 'auto', position: 'relative' }}>
+                  <IconButton
+                    size="small"
+                    onClick={() => exportDataAsCsv(msg.data)}
+                    title="Export as CSV"
+                    sx={{ position: 'absolute', top: 2, right: 2, zIndex: 11, color: '#1976d2', backgroundColor: 'rgba(255,255,255,0.8)', '&:hover': { backgroundColor: 'rgba(25,118,210,0.1)' } }}
+                  >
+                    <FileDownloadIcon sx={{ fontSize: 16 }} />
+                  </IconButton>
                   <Table size="small" sx={{ fontSize: '11px' }}>
                     <TableHead sx={{ position: 'sticky', top: 0, zIndex: 10 }}>
                       <TableRow sx={{ backgroundColor: 'rgba(25, 118, 210, 0.1)' }}>

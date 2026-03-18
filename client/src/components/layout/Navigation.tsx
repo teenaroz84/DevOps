@@ -128,14 +128,13 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuChange
           </Box>
         </Tooltip>
 
-        {/* Dashboard */}
+        {/* Dashboard - hidden */}
         <Tooltip title={!isExpanded ? 'Sample Dashboard' : ''} placement="right">
           <Box
             component="button"
             onClick={() => onMenuChange('dashboard')}
             sx={{
-            width: isExpanded ? 'calc(100% - 24px)' : 'calc(100% - 24px)',
-            display: 'flex',
+            display: 'none',
             alignItems: 'center',
             justifyContent: isExpanded ? 'flex-start' : 'center',
             gap: isExpanded ? 2 : 0,
@@ -216,14 +215,13 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuChange
           </Box>
         </Tooltip>
 
-        {/* QuickSight Demo */}
+        {/* QuickSight Demo - hidden */}
         <Tooltip title={!isExpanded ? 'QuickSight' : ''} placement="right">
           <Box
             component="button"
             onClick={() => onMenuChange('quicksight-demo')}
             sx={{
-            width: isExpanded ? 'calc(100% - 24px)' : 'calc(100% - 24px)',
-            display: 'flex',
+            display: 'none',
             alignItems: 'center',
             justifyContent: isExpanded ? 'flex-start' : 'center',
             gap: isExpanded ? 2 : 0,
@@ -260,14 +258,13 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuChange
           </Box>
         </Tooltip>
 
-        {/* User Preferences */}
+        {/* User Preferences - hidden */}
         <Tooltip title={!isExpanded ? 'Preferences' : ''} placement="right">
           <Box
             component="button"
             onClick={() => onMenuChange('preferences')}
             sx={{
-            width: isExpanded ? 'calc(100% - 24px)' : 'calc(100% - 24px)',
-            display: 'flex',
+            display: 'none',
             alignItems: 'center',
             justifyContent: isExpanded ? 'flex-start' : 'center',
             gap: isExpanded ? 2 : 0,

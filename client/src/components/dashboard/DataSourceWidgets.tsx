@@ -7,7 +7,8 @@ import AttachMoneyIcon from '@mui/icons-material/AttachMoney'
 import TrendingUpIcon from '@mui/icons-material/TrendingUp'
 import PipelineIcon from '@mui/icons-material/AccountTree'
 import { DrillDownModal, DrillDownData } from './DrillDownModal'
-import { WidgetShell, StatCardGrid, MetricBarList, DataTable, ColumnDef } from './widgets'
+import { WidgetShell, StatCardGrid, MetricBarList, DataTable, ColumnDef } from '../widgets'
+import { cloudwatchService, servicenowService, snowflakeService, postgresService } from '../../services'
 
 const SEV_CONFIG: Record<string, { color: string; bg: string; dot: string }> = {
   critical: { color: '#c62828', bg: '#fce4ec', dot: '#e53935' },
@@ -27,8 +28,7 @@ export const ErrorsWidget: React.FC = () => {
   const [drillDown, setDrillDown] = useState<DrillDownData | null>(null)
 
   useEffect(() => {
-    fetch('http://localhost:3001/api/cloudwatch/errors')
-      .then(r => r.json())
+    cloudwatchService.getErrors()
       .then(d => { setErrors(d); setLoading(false) })
       .catch(() => setLoading(false))
   }, [])
@@ -123,8 +123,7 @@ export const TicketsWidget: React.FC = () => {
   const [drillDown, setDrillDown] = useState<DrillDownData | null>(null)
 
   useEffect(() => {
-    fetch('http://localhost:3001/api/servicenow/tickets')
-      .then(r => r.json())
+    servicenowService.getTickets()
       .then(d => { setTickets(d); setLoading(false) })
       .catch(() => setLoading(false))
   }, [])
@@ -204,8 +203,7 @@ export const LogStreamWidget: React.FC = () => {
   const [filter, setFilter] = useState<string>('ALL')
 
   useEffect(() => {
-    fetch('http://localhost:3001/api/cloudwatch/logs')
-      .then(r => r.json())
+    cloudwatchService.getLogs()
       .then(d => { setLogs(d); setLoading(false) })
       .catch(() => setLoading(false))
   }, [])
@@ -262,8 +260,7 @@ export const CostWidget: React.FC = () => {
   const [expanded, setExpanded] = useState(false)
 
   useEffect(() => {
-    fetch('http://localhost:3001/api/snowflake/cost')
-      .then(r => r.json())
+    snowflakeService.getCost()
       .then(d => { setCost(d); setLoading(false) })
       .catch(() => setLoading(false))
   }, [])
@@ -357,8 +354,7 @@ export const PipelinesWidget: React.FC = () => {
   const [drillDown, setDrillDown] = useState<DrillDownData | null>(null)
 
   useEffect(() => {
-    fetch('http://localhost:3001/api/postgres/pipelines')
-      .then(r => r.json())
+    postgresService.getPipelines()
       .then(d => { setPipelines(d); setLoading(false) })
       .catch(() => setLoading(false))
   }, [])

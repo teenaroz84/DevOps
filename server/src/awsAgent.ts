@@ -99,7 +99,16 @@ function getRecoverySuggestions(failureType: string): SuggestedAction[] {
   return suggestions[failureType] || suggestions.generic_error;
 }
 
+function withExportAction(response: AWSResponse): AWSResponse {
+  return response;
+}
+
 export function generateAWSResponse(userMessage: string): AWSResponse {
+  const response = _buildResponse(userMessage);
+  return withExportAction(response);
+}
+
+function _buildResponse(userMessage: string): AWSResponse {
   const lower = userMessage.toLowerCase();
   
   // Detect failure scenarios first

@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react'
 import { ThemeProvider, createTheme, CssBaseline } from '@mui/material'
 import { Box } from '@mui/material'
-import { Navigation } from './components/Navigation'
-import { Dashboard } from './components/Dashboard'
-import { ChatPanel } from './components/ChatPanel'
-import { UserPreferences, WidgetPreferences } from './components/UserPreferences'
-import { ExecutiveDashboard } from './components/ExecutiveDashboard'
-import ExecutiveDashboardEnhanced from './components/ExecutiveDashboardEnhanced'
+import { Navigation } from './components/layout/Navigation'
+import { Dashboard } from './components/dashboard/Dashboard'
+import { ChatPanel } from './components/chat/ChatPanel'
+import { UserPreferences, WidgetPreferences } from './components/settings/UserPreferences'
+import { ExecutiveDashboard } from './components/dashboard/ExecutiveDashboard'
+import ExecutiveDashboardEnhanced from './components/dashboard/ExecutiveDashboardEnhanced'
 
 // Default preferences
 const DEFAULT_PREFERENCES: WidgetPreferences = {

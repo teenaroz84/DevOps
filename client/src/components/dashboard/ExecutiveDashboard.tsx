@@ -15,9 +15,10 @@ import {
   MetricBarList,
   ComposedBarLineChart,
   AlertBanner,
-} from './widgets'
+} from '../widgets'
 import { DMFPipelineWidget } from './DMFWidgets'
 import { ErrorsWidget, TicketsWidget, LogStreamWidget, CostWidget, PipelinesWidget } from './DataSourceWidgets'
+import { dmfService, servicenowService, cloudwatchService, snowflakeService, postgresService } from '../../services'
 import {
   KPISummary,
   PipelineHealthHeatmap,
@@ -94,14 +95,13 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
   const [loading,      setLoading]      = useState(true)
 
   useEffect(() => {
-    const B = 'http://localhost:3001'
     Promise.all([
-      fetch(`${B}/api/dmf/summary`).then(r => r.json()),
-      fetch(`${B}/api/servicenow/tickets`).then(r => r.json()),
-      fetch(`${B}/api/cloudwatch/errors`).then(r => r.json()),
-      fetch(`${B}/api/snowflake/cost`).then(r => r.json()),
-      fetch(`${B}/api/dmf/runs-over-time`).then(r => r.json()),
-      fetch(`${B}/api/postgres/pipelines`).then(r => r.json()),
+      dmfService.getSummary(),
+      servicenowService.getTickets(),
+      cloudwatchService.getErrors(),
+      snowflakeService.getCost(),
+      dmfService.getRunsOverTime(),
+      postgresService.getPipelines(),
     ]).then(([dmf, tix, err, cst, rot, pls]) => {
       setDmfSummary(dmf)
       setTickets(Array.isArray(tix) ? tix : [])
