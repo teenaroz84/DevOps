@@ -1,0 +1,275 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  DevOps Dashboard — SAM template
+  Deploys Lambda functions behind API Gateway for the DevOps dashboard.
+
+# ── Parameters ─────────────────────────────────────────────
+Parameters:
+  StageName:
+    Type: String
+    Default: prod
+    AllowedValues: [dev, staging, prod]
+
+# ── Global defaults ────────────────────────────────────────
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    Timeout: 30
+    MemorySize: 256
+    Architectures:
+      - x86_64
+
+  Api:
+    Cors:
+      AllowMethods: "'GET,POST,OPTIONS'"
+      AllowHeaders: "'Content-Type'"
+      AllowOrigin: "'*'"
+
+# ── Resources ──────────────────────────────────────────────
+Resources:
+
+  # ─── API Gateway ──────────────────────────────────────────
+  DevOpsApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: devops-api
+      StageName: !Ref StageName
+
+  # ─── Snowflake Function ──────────────────────────────────
+  SnowflakeFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: devops-snowflake
+      Handler: snowflake/handler.handler
+      CodeUri: lambdas/
+      Description: Snowflake KPIs and cost data
+      Events:
+        GetKpis:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DevOpsApi
+            Path: /api/snowflake/kpis
+            Method: GET
+        GetCost:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DevOpsApi
+            Path: /api/snowflake/cost
+            Method: GET
+
+  # ─── Postgres Function ───────────────────────────────────
+  PostgresFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: devops-postgres
+      Handler: postgres/handler.handler
+      CodeUri: lambdas/
+      Description: Pipeline data from PostgreSQL
+      Events:
+        GetPipelines:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DevOpsApi
+            Path: /api/postgres/pipelines
+            Method: GET
+        GetPipelineById:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DevOpsApi
+            Path: /api/postgres/pipelines/{id}
+            Method: GET
+
+  # ─── CloudWatch Function ─────────────────────────────────
+  CloudWatchFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: devops-cloudwatch
+      Handler: cloudwatch/handler.handler
+      CodeUri: lambdas/
+      Description: CloudWatch errors and logs
+      Events:
+        GetErrors:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DevOpsApi
+            Path: /api/cloudwatch/errors
+            Method: GET
+        GetErrorById:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DevOpsApi
+            Path: /api/cloudwatch/errors/{id}
+            Method: GET
+        GetLogs:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DevOpsApi
+            Path: /api/cloudwatch/logs
+            Method: GET
+
+  # ─── ServiceNow Function ─────────────────────────────────
+  ServiceNowFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: devops-servicenow
+      Handler: servicenow/handler.handler
+      CodeUri: lambdas/
+      Description: ServiceNow tickets
+      Events:
+        GetTickets:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DevOpsApi
+            Path: /api/servicenow/tickets
+            Method: GET
+        GetTicketById:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DevOpsApi
+            Path: /api/servicenow/tickets/{id}
+            Method: GET
+
+  # ─── DMF Function ────────────────────────────────────────
+  DMFFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: devops-dmf
+      Handler: dmf/handler.handler
+      CodeUri: lambdas/
+      Description: DMF pipeline, trends, analytics, lineage
+      Events:
+        Summary:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DevOpsApi
+            Path: /api/dmf/summary
+            Method: GET
+        Stages:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DevOpsApi
+            Path: /api/dmf/stages
+            Method: GET
+        RunStatus:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DevOpsApi
+            Path: /api/dmf/run-status
+            Method: GET
+        FailedByStage:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DevOpsApi
+            Path: /api/dmf/failed-by-stage
+            Method: GET
+        RunsOverTime:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DevOpsApi
+            Path: /api/dmf/runs-over-time
+            Method: GET
+        ErrorReasons:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DevOpsApi
+            Path: /api/dmf/error-reasons
+            Method: GET
+        RecentFailures:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DevOpsApi
+            Path: /api/dmf/recent-failures
+            Method: GET
+        StatusTrend:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DevOpsApi
+            Path: /api/dmf/status-trend
+            Method: GET
+        RowsTrend:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DevOpsApi
+            Path: /api/dmf/rows-trend
+            Method: GET
+        JobsTrend:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DevOpsApi
+            Path: /api/dmf/jobs-trend
+            Method: GET
+        StepFailureTrend:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DevOpsApi
+            Path: /api/dmf/step-failure-trend
+            Method: GET
+        Analytics:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DevOpsApi
+            Path: /api/dmf/analytics
+            Method: GET
+        LineageMeta:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DevOpsApi
+            Path: /api/dmf/lineage/meta
+            Method: GET
+        LineageJobs:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DevOpsApi
+            Path: /api/dmf/lineage/jobs
+            Method: GET
+
+  # ─── Chat Function ───────────────────────────────────────
+  ChatFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: devops-chat
+      Handler: chat/handler.handler
+      CodeUri: lambdas/
+      Description: Chat / DataOps assistant
+      Events:
+        PostChat:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DevOpsApi
+            Path: /api/chat
+            Method: POST
+
+  # ─── Health check ─────────────────────────────────────────
+  HealthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: devops-health
+      Handler: index.handler
+      CodeUri: lambdas/health/
+      Description: Health check endpoint
+      InlineCode: |
+        exports.handler = async () => ({
+          statusCode: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          },
+          body: JSON.stringify({ status: 'DevOps API is running' }),
+        });
+      Events:
+        Health:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DevOpsApi
+            Path: /api/health
+            Method: GET
+
+# ── Outputs ────────────────────────────────────────────────
+Outputs:
+  ApiUrl:
+    Description: API Gateway endpoint URL
+    Value: !Sub "https://${DevOpsApi}.execute-api.${AWS::Region}.amazonaws.com/${StageName}"
+  ApiId:
+    Description: API Gateway ID
+    Value: !Ref DevOpsApi
