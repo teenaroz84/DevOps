@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { generateAWSResponse } from './awsAgent';
 import { mockKPIs, mockCostBreakdown, mockPipelines, mockErrors, mockLogs, mockTickets, mockDMFSummary, mockDMFStages, mockDMFRunStatus, mockDMFFailedByStage, mockDMFRunsOverTime, mockDMFErrorReasons, mockDMFRecentFailures, mockDMFStatusTrend, mockDMFRowsTrend, mockDMFJobsTrend, mockDMFStepFailureTrend, mockDMFAnalytics, mockDMFLineageMeta, mockDMFLineageJobs } from './mockData';
+import { espRoutes, servicenowDbRoutes, dmfDbRoutes } from './routes';
 
 dotenv.config();
 
@@ -12,6 +13,11 @@ const port = process.env.PORT || 3001;
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// ─── DATABASE-BACKED ROUTES (real queries — mounted first for priority) ──
+app.use('/api/esp',        espRoutes);          // GET /api/esp/job-counts
+app.use('/api/servicenow', servicenowDbRoutes); // GET /api/servicenow/incidents
+app.use('/api/dmf',        dmfDbRoutes);        // GET /api/dmf/run-status
 
 // ─── Existing chat route ───────────────────────────────────
 app.get('/api/health', (req: Request, res: Response) => {

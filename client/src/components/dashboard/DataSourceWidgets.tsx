@@ -8,7 +8,8 @@ import TrendingUpIcon from '@mui/icons-material/TrendingUp'
 import PipelineIcon from '@mui/icons-material/AccountTree'
 import { DrillDownModal, DrillDownData } from './DrillDownModal'
 import { WidgetShell, StatCardGrid, MetricBarList, DataTable, ColumnDef } from '../widgets'
-import { cloudwatchService, servicenowService, snowflakeService, postgresService } from '../../services'
+import { cloudwatchService, servicenowService, snowflakeService, postgresService, espService } from '../../services'
+import { DonutChart } from '../widgets'
 
 const SEV_CONFIG: Record<string, { color: string; bg: string; dot: string }> = {
   critical: { color: '#c62828', bg: '#fce4ec', dot: '#e53935' },
@@ -334,6 +335,132 @@ export const CostWidget: React.FC = () => {
             </Box>
             <MetricBarList items={serviceItems} barHeight={5} compact />
           </Box>
+        </>
+      )}
+    </WidgetShell>
+  )
+}
+
+// ─── ESP Jobs Widget ───────────────────────────────────────
+
+import WorkIcon from '@mui/icons-material/Work'
+
+export const ESPJobsWidget: React.FC = () => {
+  const [jobs, setJobs] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    espService.getJobCounts()
+      .then(d => { setJobs(Array.isArray(d) ? d : []); setLoading(false) })
+      .catch(err => { setError(err.message || 'Failed to fetch ESP job counts'); setLoading(false) })
+  }, [])
+
+  const totalJobs = jobs.reduce((sum, j) => sum + (j.total_jobs || 0), 0)
+
+  return (
+    <WidgetShell
+      title="ESP Job Counts"
+      titleIcon={<WorkIcon sx={{ color: '#2e7d32', fontSize: 18 }} />}
+      source="SQL Server · dbo.esp_job_cmnd"
+      loading={loading}
+      error={error ?? undefined}
+    >
+      {!error && (
+        <>
+          <Box sx={{ px: 1.5, py: 1 }}>
+            <StatCardGrid
+              items={[
+                { label: 'Applications', value: jobs.length, color: '#1565c0', bg: '#e3f2fd' },
+                { label: 'Total Jobs', value: totalJobs.toLocaleString(), color: '#2e7d32', bg: '#e8f5e9' },
+              ]}
+              columns={2}
+              compact
+            />
+          </Box>
+          <Box sx={{ flex: 1, overflowY: 'auto', px: 1.5, pb: 1 }}>
+            <MetricBarList
+              items={jobs.slice(0, 15).map(j => ({
+                label: j.appl_name || 'Unknown',
+                value: j.total_jobs || 0,
+                max: Math.max(jobs[0]?.total_jobs || 1, 1),
+                color: '#2e7d32',
+                suffix: ' jobs',
+              }))}
+              barHeight={6}
+              compact
+            />
+          </Box>
+        </>
+      )}
+    </WidgetShell>
+  )
+}
+
+// ─── Incidents Widget (DB-backed) ──────────────────────────
+
+import WarningAmberIcon from '@mui/icons-material/WarningAmber'
+
+const INCIDENT_COLORS: Record<string, string> = {
+  P1: '#c62828',
+  P2: '#e65100',
+  P3: '#2e7d32',
+}
+
+export const IncidentsWidget: React.FC = () => {
+  const [incidents, setIncidents] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    servicenowService.getIncidents()
+      .then(d => { setIncidents(Array.isArray(d) ? d : []); setLoading(false) })
+      .catch(err => { setError(err.message || 'Failed to fetch incidents'); setLoading(false) })
+  }, [])
+
+  const totalIncidents = incidents.reduce((sum, i) => sum + (i.incident_count || 0), 0)
+
+  const donutData = incidents.map(i => ({
+    name: i.priority_field || 'Unknown',
+    value: i.incident_count || 0,
+    color: INCIDENT_COLORS[i.priority_field] || '#757575',
+  }))
+
+  return (
+    <WidgetShell
+      title="Incidents by Priority"
+      titleIcon={<WarningAmberIcon sx={{ color: '#c62828', fontSize: 18 }} />}
+      source="SQL Server · ServiceNow"
+      loading={loading}
+      error={error ?? undefined}
+    >
+      {!error && (
+        <>
+          <Box sx={{ px: 1.5, py: 1 }}>
+            <StatCardGrid
+              items={[
+                ...incidents.map(i => ({
+                  label: i.priority_field || 'Unknown',
+                  value: i.incident_count || 0,
+                  color: INCIDENT_COLORS[i.priority_field] || '#757575',
+                  bg: i.priority_field === 'P1' ? '#fce4ec' : i.priority_field === 'P2' ? '#fff3e0' : '#e8f5e9',
+                })),
+                { label: 'Total', value: totalIncidents, color: '#1565c0', bg: '#e3f2fd' },
+              ]}
+              columns={Math.min(incidents.length + 1, 4)}
+              compact
+            />
+          </Box>
+          {donutData.length > 0 && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
+              <DonutChart
+                data={donutData}
+                centerLabel={totalIncidents}
+                showLegend
+                size={140}
+              />
+            </Box>
+          )}
         </>
       )}
     </WidgetShell>

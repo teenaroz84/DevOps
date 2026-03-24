@@ -17,7 +17,7 @@ import {
   AlertBanner,
 } from '../widgets'
 import { DMFPipelineWidget } from './DMFWidgets'
-import { ErrorsWidget, TicketsWidget, LogStreamWidget, CostWidget, PipelinesWidget } from './DataSourceWidgets'
+import { TicketsWidget, LogStreamWidget, CostWidget, PipelinesWidget, ESPJobsWidget, IncidentsWidget } from './DataSourceWidgets'
 import { dmfService, servicenowService, cloudwatchService, snowflakeService, postgresService } from '../../services'
 import {
   KPISummary,
@@ -675,7 +675,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onChatCl
         {source === 'servicenow' && (
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, p: 2, alignItems: 'start' }}>
             <TicketsWidget />
-            <ErrorsWidget />
+            <IncidentsWidget />
           </Box>
         )}
         {source === 'logs' && (
@@ -686,6 +686,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onChatCl
         )}
         {source === 'pipeline' && (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, p: 2 }}>
+            <ESPJobsWidget />
             <KPISummary />
             <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
               <PipelineHealthHeatmap />
