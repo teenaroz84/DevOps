@@ -17,15 +17,9 @@ import {
   AlertBanner,
 } from '../widgets'
 import { DMFPipelineWidget } from './DMFWidgets'
-import { TicketsWidget, LogStreamWidget, CostWidget, PipelinesWidget, ESPJobsWidget, IncidentsWidget } from './DataSourceWidgets'
+import { TicketsWidget, LogStreamWidget, CostWidget, IncidentsWidget } from './DataSourceWidgets'
+import { ESPDashboardTab } from './ESPDashboardTab'
 import { dmfService, servicenowService, cloudwatchService, snowflakeService, postgresService } from '../../services'
-import {
-  KPISummary,
-  PipelineHealthHeatmap,
-  FailuresVsRecoveryTrend,
-  BusinessImpact,
-  TopRiskyPipelines,
-} from './ExecutiveWidgets'
 
 // ─── Source definitions ────────────────────────────────────
 type SourceKey = 'overview' | 'dmf' | 'servicenow' | 'logs' | 'pipeline'
@@ -37,9 +31,8 @@ const SOURCES: {
   accent: string
   sub: string
 }[] = [
-  { key: 'overview',   label: 'Overview',        icon: <DashboardIcon />,    accent: '#1976d2', sub: 'All sources'             },
-  { key: 'dmf',        label: 'DMF',             icon: <StorageIcon />,      accent: '#1565c0', sub: 'PostgreSQL'              },
   { key: 'pipeline',   label: 'ESP',             icon: <CloudIcon />,        accent: '#2e7d32', sub: 'Enterprise Data Platform' },
+  { key: 'dmf',        label: 'DMF',             icon: <StorageIcon />,      accent: '#1565c0', sub: 'PostgreSQL'              },
   { key: 'servicenow', label: 'ServiceNow',      icon: <SupportAgentIcon />, accent: '#c62828', sub: 'ITSM'                    },
   { key: 'logs',       label: 'Talend',          icon: <AccountTreeIcon />,  accent: '#e65100', sub: 'Data Integration'        },
 ]
@@ -609,7 +602,7 @@ interface ExecutiveDashboardProps {
 }
 
 export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onChatClick }) => {
-  const [source, setSource] = useState<SourceKey>('overview')
+  const [source, setSource] = useState<SourceKey>('pipeline')
   const active = SOURCES.find(s => s.key === source)!
 
   return (
@@ -619,7 +612,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onChatCl
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#1a2535', px: 3, py: 1.5, flexShrink: 0 }}>
         <Box>
           <Typography sx={{ color: '#fff', fontWeight: 700, fontSize: '18px', lineHeight: 1.2 }}>
-            Executive DataOps Health
+            Executive DataOps Dashboard
           </Typography>
           <Typography sx={{ color: '#90a4ae', fontSize: '12px' }}>
             {active.label} — {active.sub}
@@ -684,22 +677,9 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onChatCl
             <CostWidget />
           </Box>
         )}
-        {source === 'pipeline' && (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, p: 2 }}>
-            <ESPJobsWidget />
-            <KPISummary />
-            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
-              <PipelineHealthHeatmap />
-              <FailuresVsRecoveryTrend />
-            </Box>
-            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
-              <BusinessImpact />
-              <TopRiskyPipelines />
-            </Box>
-            <PipelinesWidget />
-          </Box>
-        )}
-      </Box>
-    </Box>
-  )
-}
+        {source === 'pipeline' && <ESPDashboardTab />}
+        </Box>
+
+s
+    </Box>  )
+} 

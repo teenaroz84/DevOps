@@ -7,6 +7,7 @@ import {
   Divider,
   IconButton,
   Tooltip,
+  Switch,
 } from '@mui/material'
 import DashboardIcon from '@mui/icons-material/Dashboard'
 import SmartToyIcon from '@mui/icons-material/SmartToy'
@@ -14,6 +15,8 @@ import TuneIcon from '@mui/icons-material/Tune'
 import AnalyticsIcon from '@mui/icons-material/Analytics'
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
+import DataObjectIcon from '@mui/icons-material/DataObject'
+import { useMockData } from '../../context/MockDataContext'
 
 interface NavigationProps {
   activeMenu: 'dashboard' | 'chat' | 'preferences' | 'executive' | 'quicksight-demo'
@@ -23,6 +26,7 @@ interface NavigationProps {
 export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuChange }) => {
   const [isExpanded, setIsExpanded] = useState(true)
   const drawerWidth = isExpanded ? 260 : 80
+  const { useMock, toggleMock } = useMockData()
 
   return (
     <Drawer
@@ -301,6 +305,44 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuChange
           </Box>
         </Tooltip>
       </Box>
+
+      {/* Mock Data Toggle */}
+      <Divider sx={{ my: 1 }} />
+      <Tooltip title={useMock ? 'Switch to Live API data' : 'Switch to Mock data'} placement="right">
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: isExpanded ? 'space-between' : 'center',
+            px: isExpanded ? 2 : 0,
+            py: 0.75,
+            cursor: 'pointer',
+            '&:hover': { bgcolor: '#f0f4ff' },
+          }}
+          onClick={toggleMock}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <DataObjectIcon sx={{ fontSize: 18, color: useMock ? '#f57c00' : '#9e9e9e' }} />
+            {isExpanded && (
+              <Typography sx={{ fontSize: 12, fontWeight: 600, color: useMock ? '#f57c00' : '#777' }}>
+                {useMock ? 'Mock Data' : 'Live Data'}
+              </Typography>
+            )}
+          </Box>
+          {isExpanded && (
+            <Switch
+              checked={useMock}
+              onChange={toggleMock}
+              onClick={e => e.stopPropagation()}
+              size="small"
+              sx={{
+                '& .MuiSwitch-switchBase.Mui-checked': { color: '#f57c00' },
+                '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#f57c00' },
+              }}
+            />
+          )}
+        </Box>
+      </Tooltip>
 
       {/* Status */}
       {isExpanded && (

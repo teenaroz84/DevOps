@@ -346,23 +346,40 @@ export const CostWidget: React.FC = () => {
 import WorkIcon from '@mui/icons-material/Work'
 
 export const ESPJobsWidget: React.FC = () => {
-  const [jobs, setJobs] = useState<any[]>([])
+  const [jobsSummary, setJobsSummary] = useState<any[]>([])
+  const [applications, setApplications] = useState<any[]>([])
+  const [specialJobs, setSpecialJobs] = useState<any[]>([])
+  const [pipelines, setPipelines] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    espService.getJobCounts()
-      .then(d => { setJobs(Array.isArray(d) ? d : []); setLoading(false) })
-      .catch(err => { setError(err.message || 'Failed to fetch ESP job counts'); setLoading(false) })
+    Promise.all([
+      espService.getJobCounts(),
+      espService.getApplications(),
+      espService.getSpecialJobs(),
+      postgresService.getPipelines(),
+    ])
+      .then(([jobCounts, apps, splJobs, pgData]) => {
+        setJobsSummary(jobCounts?.jobs_summary || [])
+        setApplications(apps?.applications || [])
+        setSpecialJobs(splJobs?.spl_jobs || [])
+        setPipelines(Array.isArray(pgData) ? pgData : [])
+        setLoading(false)
+      })
+      .catch(err => { setError(err.message || 'Failed to fetch data'); setLoading(false) })
   }, [])
 
-  const totalJobs = jobs.reduce((sum, j) => sum + (j.total_jobs || 0), 0)
+  const totalJobs = jobsSummary.reduce((sum, j) => sum + (j.total_jobs || 0), 0)
+  const healthyPipelines = pipelines.filter(p => p.status === 'healthy').length
+  const atRiskPipelines = pipelines.filter(p => p.status === 'at_risk').length
+  const criticalPipelines = pipelines.filter(p => p.status === 'critical').length
 
   return (
     <WidgetShell
-      title="ESP Job Counts"
+      title="ESP Jobs & Pipelines"
       titleIcon={<WorkIcon sx={{ color: '#2e7d32', fontSize: 18 }} />}
-      source="SQL Server · dbo.esp_job_cmnd"
+      source="PostgreSQL · esp_job_cmnd | pipelines"
       loading={loading}
       error={error ?? undefined}
     >
@@ -371,19 +388,24 @@ export const ESPJobsWidget: React.FC = () => {
           <Box sx={{ px: 1.5, py: 1 }}>
             <StatCardGrid
               items={[
-                { label: 'Applications', value: jobs.length, color: '#1565c0', bg: '#e3f2fd' },
+                { label: 'Applications', value: applications.length, color: '#1565c0', bg: '#e3f2fd' },
                 { label: 'Total Jobs', value: totalJobs.toLocaleString(), color: '#2e7d32', bg: '#e8f5e9' },
+                { label: 'Special Jobs', value: specialJobs.reduce((sum, j) => sum + (j.spl_jobs || 0), 0), color: '#f57c00', bg: '#fff8e1' },
+                { label: 'Pipelines', value: pipelines.length, color: '#6a1b9a', bg: '#f3e5f5' },
+                { label: 'Healthy', value: healthyPipelines, color: '#2e7d32', bg: '#e8f5e9' },
+                { label: 'At Risk', value: atRiskPipelines, color: '#f57c00', bg: '#fff8e1' },
+                { label: 'Critical', value: criticalPipelines, color: '#c62828', bg: '#fce4ec' },
               ]}
-              columns={2}
+              columns={3}
               compact
             />
           </Box>
           <Box sx={{ flex: 1, overflowY: 'auto', px: 1.5, pb: 1 }}>
             <MetricBarList
-              items={jobs.slice(0, 15).map(j => ({
+              items={jobsSummary.slice(0, 15).map(j => ({
                 label: j.appl_name || 'Unknown',
                 value: j.total_jobs || 0,
-                max: Math.max(jobs[0]?.total_jobs || 1, 1),
+                max: Math.max(jobsSummary[0]?.total_jobs || 1, 1),
                 color: '#2e7d32',
                 suffix: ' jobs',
               }))}
@@ -393,6 +415,47 @@ export const ESPJobsWidget: React.FC = () => {
           </Box>
         </>
       )}
+    </WidgetShell>
+  )
+}
+
+// ─── ESP Job List Widget ────────────────────────────────
+export const JobListWidget: React.FC = () => {
+  const [jobList, setJobList] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    espService.getJobList()
+      .then(res => {
+        setJobList(res?.job_lists || [])
+        setLoading(false)
+      })
+      .catch(err => { setError(err.message || 'Failed to fetch job list'); setLoading(false) })
+  }, [])
+
+  const columns: ColumnDef[] = [
+    { key: 'appl_name', header: 'Application', flex: 1 },
+    { key: 'last_run_date', header: 'Last Run Date', flex: 1, render: row => row.last_run_date ? fmt(row.last_run_date) : '—' },
+  ]
+
+  return (
+    <WidgetShell
+      title="ESP Job List"
+      titleIcon={<WorkIcon sx={{ color: '#1976d2', fontSize: 18 }} />}
+      source="PostgreSQL · esp_job_cmnd"
+      loading={loading}
+      error={error ?? undefined}
+    >
+      <Box sx={{ flex: 1, overflowY: 'auto', px: 1.5, pb: 1 }}>
+        <DataTable
+          columns={columns}
+          rows={jobList}
+          rowKey="appl_name"
+          compact
+          rowTooltip="Application job last run date"
+        />
+      </Box>
     </WidgetShell>
   )
 }
@@ -430,7 +493,7 @@ export const IncidentsWidget: React.FC = () => {
     <WidgetShell
       title="Incidents by Priority"
       titleIcon={<WarningAmberIcon sx={{ color: '#c62828', fontSize: 18 }} />}
-      source="SQL Server · ServiceNow"
+      source="PostgreSQL · ServiceNow"
       loading={loading}
       error={error ?? undefined}
     >

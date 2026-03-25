@@ -90,7 +90,7 @@ export const ExecutiveDashboardEnhanced: React.FC = () => {
       {/* Header with QuickSight-style branding */}
       <Box sx={{ mb: 2 }}>
         <Typography variant="h4" sx={{ fontWeight: 700, color: '#1a1a1a', mb: 0.5 }}>
-          Executive DataOps Health
+          Executive DataOps Dashboard
         </Typography>
         <Typography variant="body2" sx={{ color: '#666' }}>
           Real-time operational metrics and performance analytics

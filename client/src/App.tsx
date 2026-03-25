@@ -7,6 +7,7 @@ import { ChatPanel } from './components/chat/ChatPanel'
 import { UserPreferences, WidgetPreferences } from './components/settings/UserPreferences'
 import { ExecutiveDashboard } from './components/dashboard/ExecutiveDashboard'
 import ExecutiveDashboardEnhanced from './components/dashboard/ExecutiveDashboardEnhanced'
+import { MockDataProvider } from './context/MockDataContext'
 
 // Default preferences
 const DEFAULT_PREFERENCES: WidgetPreferences = {
@@ -98,6 +99,7 @@ function App() {
   }, [widgetOrder])
 
   return (
+    <MockDataProvider>
     <ThemeProvider theme={theme}>
       <CssBaseline />
       {activeMenu === 'chat' ? (
@@ -144,6 +146,7 @@ function App() {
         </Box>
       )}
     </ThemeProvider>
+    </MockDataProvider>
   )
 }
 

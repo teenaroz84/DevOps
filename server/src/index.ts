@@ -2,8 +2,8 @@ import express, { Express, Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { generateAWSResponse } from './awsAgent';
-import { mockKPIs, mockCostBreakdown, mockPipelines, mockErrors, mockLogs, mockTickets, mockDMFSummary, mockDMFStages, mockDMFRunStatus, mockDMFFailedByStage, mockDMFRunsOverTime, mockDMFErrorReasons, mockDMFRecentFailures, mockDMFStatusTrend, mockDMFRowsTrend, mockDMFJobsTrend, mockDMFStepFailureTrend, mockDMFAnalytics, mockDMFLineageMeta, mockDMFLineageJobs } from './mockData';
-import { espRoutes, servicenowDbRoutes, dmfDbRoutes } from './routes';
+import { mockKPIs, mockCostBreakdown, mockErrors, mockLogs, mockTickets, mockDMFSummary, mockDMFStages, mockDMFRunStatus, mockDMFFailedByStage, mockDMFRunsOverTime, mockDMFErrorReasons, mockDMFRecentFailures, mockDMFStatusTrend, mockDMFRowsTrend, mockDMFJobsTrend, mockDMFStepFailureTrend, mockDMFAnalytics, mockDMFLineageMeta, mockDMFLineageJobs } from './mockData';
+import { espRoutes, servicenowDbRoutes, dmfDbRoutes, postgresDbRoutes } from './routes';
 
 dotenv.config();
 
@@ -18,6 +18,7 @@ app.use(express.json());
 app.use('/api/esp',        espRoutes);          // GET /api/esp/job-counts
 app.use('/api/servicenow', servicenowDbRoutes); // GET /api/servicenow/incidents
 app.use('/api/dmf',        dmfDbRoutes);        // GET /api/dmf/run-status
+app.use('/api/postgres',   postgresDbRoutes);   // GET /api/postgres/pipelines
 
 // ─── Existing chat route ───────────────────────────────────
 app.get('/api/health', (req: Request, res: Response) => {
@@ -42,17 +43,6 @@ app.get('/api/snowflake/kpis', (_req: Request, res: Response) => {
 
 app.get('/api/snowflake/cost', (_req: Request, res: Response) => {
   res.json(mockCostBreakdown);
-});
-
-// ─── POSTGRESQL — Pipelines ────────────────────────────────
-app.get('/api/postgres/pipelines', (_req: Request, res: Response) => {
-  res.json(mockPipelines);
-});
-
-app.get('/api/postgres/pipelines/:id', (req: Request, res: Response) => {
-  const pipeline = mockPipelines.find(p => p.id === req.params.id);
-  if (!pipeline) return res.status(404).json({ error: 'Pipeline not found' });
-  res.json(pipeline);
 });
 
 // ─── CLOUDWATCH — Errors & Logs ────────────────────────────

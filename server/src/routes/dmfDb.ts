@@ -2,18 +2,19 @@
  * DMF routes — queries against Snowflake _DMF.CORE.*
  */
 import { Router, Request, Response } from 'express';
-import { querySnowflake } from '../db';
+import { getPgPool } from '../db/postgres';
 
 const router = Router();
 
 // GET /api/dmf/run-status
 router.get('/run-status', async (_req: Request, res: Response) => {
   try {
-    const rows = await querySnowflake(`
+    const pool = getPgPool();
+    const result = await pool.query(`
       SELECT run_status,
              COUNT(*) AS status_count
-      FROM   _DMF.CORE.DMF_RUN_MASTER
-      WHERE  proc_dt >= DATEADD(month, -3, CURRENT_DATE)
+      FROM   dmf_run_master
+      WHERE  proc_dt >= NOW() - INTERVAL '3 months'
       GROUP BY run_status
       ORDER BY status_count DESC
     `);
@@ -26,10 +27,10 @@ router.get('/run-status', async (_req: Request, res: Response) => {
       'PARTIAL LOAD': '#ff9800',
     };
 
-    const data = rows.map((row: any) => ({
-      name:  row.RUN_STATUS || row.run_status,
-      value: parseInt(row.STATUS_COUNT || row.status_count, 10),
-      color: colorMap[(row.RUN_STATUS || row.run_status || '').toUpperCase()] || '#757575',
+    const data = result.rows.map((row: any) => ({
+      name:  row.run_status,
+      value: parseInt(row.status_count, 10),
+      color: colorMap[(row.run_status || '').toUpperCase()] || '#757575',
     }));
 
     res.json(data);
