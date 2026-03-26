@@ -31,7 +31,7 @@ router.get('/failed-by-stage', async (_req: Request, res: Response) => {
     };
     const rows = await safeQuery(`
       SELECT step_nm, COUNT(*) AS cnt
-      FROM edoops."DMF_RUN_STEP_DETAIL"
+      FROM edoops.DMF_RUN_STEP_DETAIL
       WHERE step_status = 'FAILED'
         AND proc_dt >= CURRENT_DATE - INTERVAL '3 months'
       GROUP BY step_nm
@@ -54,7 +54,7 @@ router.get('/run-status', async (_req: Request, res: Response) => {
     const pool = getPgPool();
     const { rows } = await pool.query(`
       SELECT run_status, COUNT(*) AS cnt
-      FROM   edoops."DMF_RUN_MASTER"
+      FROM   edoops.DMF_RUN_MASTER
       WHERE  proc_dt >= CURRENT_DATE - INTERVAL '3 months'
       GROUP BY run_status
       ORDER BY cnt DESC
@@ -74,11 +74,11 @@ router.get('/run-status', async (_req: Request, res: Response) => {
 router.get('/lineage/meta', async (_req: Request, res: Response) => {
   try {
     const [srcCds, datasetNms, srcNms, tgtNms, procTypes] = await Promise.all([
-      safeQuery(`SELECT DISTINCT src_cd      FROM edoops."DMF_RUN_MASTER" WHERE src_cd      IS NOT NULL ORDER BY src_cd`),
-      safeQuery(`SELECT DISTINCT dataset_nm  FROM edoops."DMF_RUN_MASTER" WHERE dataset_nm  IS NOT NULL ORDER BY dataset_nm`),
-      safeQuery(`SELECT DISTINCT src_nm      FROM edoops."DMF_RUN_MASTER" WHERE src_nm      IS NOT NULL ORDER BY src_nm`),
-      safeQuery(`SELECT DISTINCT tgt_nm      FROM edoops."DMF_RUN_MASTER" WHERE tgt_nm      IS NOT NULL ORDER BY tgt_nm`),
-      safeQuery(`SELECT DISTINCT proc_typ_cd FROM edoops."DMF_RUN_MASTER" WHERE proc_typ_cd IS NOT NULL ORDER BY proc_typ_cd`),
+      safeQuery(`SELECT DISTINCT src_cd      FROM edoops.DMF_RUN_MASTER WHERE src_cd      IS NOT NULL ORDER BY src_cd`),
+      safeQuery(`SELECT DISTINCT dataset_nm  FROM edoops.DMF_RUN_MASTER WHERE dataset_nm  IS NOT NULL ORDER BY dataset_nm`),
+      safeQuery(`SELECT DISTINCT src_nm      FROM edoops.DMF_RUN_MASTER WHERE src_nm      IS NOT NULL ORDER BY src_nm`),
+      safeQuery(`SELECT DISTINCT tgt_nm      FROM edoops.DMF_RUN_MASTER WHERE tgt_nm      IS NOT NULL ORDER BY tgt_nm`),
+      safeQuery(`SELECT DISTINCT proc_typ_cd FROM edoops.DMF_RUN_MASTER WHERE proc_typ_cd IS NOT NULL ORDER BY proc_typ_cd`),
     ]);
     res.json({
       sourceCodes:   srcCds.map((r: any)    => r.src_cd).filter(Boolean),
@@ -122,7 +122,7 @@ router.get('/lineage/jobs', async (req: Request, res: Response) => {
     const { rows } = await pool.query(`
       SELECT DISTINCT proc_dt, src_cd, dataset_nm, proc_typ_cd,
                       src_nm, tgt_nm, run_strt_tm, run_end_tm, run_status
-      FROM edoops."DMF_RUN_MASTER"
+      FROM edoops.DMF_RUN_MASTER
       ${where}
       ORDER BY proc_dt DESC
       LIMIT 500
@@ -149,11 +149,11 @@ router.get('/lineage/jobs', async (req: Request, res: Response) => {
 router.get('/analytics/meta', async (_req: Request, res: Response) => {
   try {
     const [srcTyps, tgtTyps, stepNms, runStatuses, tgtNms] = await Promise.all([
-      safeQuery(`SELECT DISTINCT src_typ  FROM edoops."DMF_RUN_STEP_DETAIL" WHERE src_typ  IS NOT NULL ORDER BY src_typ`),
-      safeQuery(`SELECT DISTINCT tgt_typ  FROM edoops."DMF_RUN_STEP_DETAIL" WHERE tgt_typ  IS NOT NULL ORDER BY tgt_typ`),
-      safeQuery(`SELECT DISTINCT step_nm  FROM edoops."DMF_RUN_STEP_DETAIL" WHERE step_nm  IS NOT NULL ORDER BY step_nm`),
-      safeQuery(`SELECT DISTINCT run_status FROM edoops."DMF_RUN_MASTER"    WHERE run_status IS NOT NULL ORDER BY run_status`),
-      safeQuery(`SELECT DISTINCT tgt_nm   FROM edoops."DMF_RUN_MASTER"     WHERE tgt_nm   IS NOT NULL ORDER BY tgt_nm`),
+      safeQuery(`SELECT DISTINCT src_typ  FROM edoops.DMF_RUN_STEP_DETAIL WHERE src_typ  IS NOT NULL ORDER BY src_typ`),
+      safeQuery(`SELECT DISTINCT tgt_typ  FROM edoops.DMF_RUN_STEP_DETAIL WHERE tgt_typ  IS NOT NULL ORDER BY tgt_typ`),
+      safeQuery(`SELECT DISTINCT step_nm  FROM edoops.DMF_RUN_STEP_DETAIL WHERE step_nm  IS NOT NULL ORDER BY step_nm`),
+      safeQuery(`SELECT DISTINCT run_status FROM edoops.DMF_RUN_MASTER    WHERE run_status IS NOT NULL ORDER BY run_status`),
+      safeQuery(`SELECT DISTINCT tgt_nm   FROM edoops.DMF_RUN_MASTER     WHERE tgt_nm   IS NOT NULL ORDER BY tgt_nm`),
     ]);
     res.json({
       sourceTypes:  srcTyps.map((r: any) => r.src_typ).filter(Boolean),
@@ -204,15 +204,15 @@ router.get('/analytics', async (req: Request, res: Response) => {
 
     const pool = getPgPool();
     const [statusRows, srcTypRows, tgtTypRows, stepRows, failSrcRows, execTimeRows] = await Promise.all([
-      pool.query(`SELECT run_status, COUNT(*) AS cnt FROM edoops."DMF_RUN_MASTER"     WHERE ${mWhere} GROUP BY run_status`,  masterParams),
-      pool.query(`SELECT src_typ,    COUNT(*) AS cnt FROM edoops."DMF_RUN_STEP_DETAIL" WHERE ${dWhere} GROUP BY src_typ`,     detailParams),
-      pool.query(`SELECT tgt_typ,    COUNT(*) AS cnt FROM edoops."DMF_RUN_STEP_DETAIL" WHERE ${dWhere} GROUP BY tgt_typ`,     detailParams),
-      pool.query(`SELECT step_nm,    COUNT(*) AS cnt FROM edoops."DMF_RUN_STEP_DETAIL" WHERE ${dWhere} GROUP BY step_nm`,     detailParams),
-      pool.query(`SELECT src_nm,     COUNT(*) AS cnt FROM edoops."DMF_RUN_MASTER"     WHERE ${mWhere} AND run_status = 'FAILED' GROUP BY src_nm ORDER BY cnt DESC`, masterParams),
+      pool.query(`SELECT run_status, COUNT(*) AS cnt FROM edoops.DMF_RUN_MASTER     WHERE ${mWhere} GROUP BY run_status`,  masterParams),
+      pool.query(`SELECT src_typ,    COUNT(*) AS cnt FROM edoops.DMF_RUN_STEP_DETAIL WHERE ${dWhere} GROUP BY src_typ`,     detailParams),
+      pool.query(`SELECT tgt_typ,    COUNT(*) AS cnt FROM edoops.DMF_RUN_STEP_DETAIL WHERE ${dWhere} GROUP BY tgt_typ`,     detailParams),
+      pool.query(`SELECT step_nm,    COUNT(*) AS cnt FROM edoops.DMF_RUN_STEP_DETAIL WHERE ${dWhere} GROUP BY step_nm`,     detailParams),
+      pool.query(`SELECT src_nm,     COUNT(*) AS cnt FROM edoops.DMF_RUN_MASTER     WHERE ${mWhere} AND run_status = 'FAILED' GROUP BY src_nm ORDER BY cnt DESC`, masterParams),
       pool.query(`
         SELECT dataset_nm,
                AVG(EXTRACT(EPOCH FROM (run_end_tm::timestamp - run_strt_tm::timestamp)) * 1000) AS avg_ms
-        FROM edoops."DMF_RUN_MASTER"
+        FROM edoops.DMF_RUN_MASTER
         WHERE ${mWhere}
           AND run_end_tm IS NOT NULL AND run_strt_tm IS NOT NULL
         GROUP BY dataset_nm ORDER BY avg_ms DESC
@@ -241,7 +241,7 @@ router.get('/status-trend', async (_req: Request, res: Response) => {
       SELECT run_status,
              TO_CHAR(proc_dt, 'Mon') AS month_name,
              COUNT(*) AS cnt
-      FROM edoops."DMF_RUN_MASTER"
+      FROM edoops.DMF_RUN_MASTER
       WHERE proc_dt >= CURRENT_DATE - INTERVAL '3 months'
       GROUP BY run_status, TO_CHAR(proc_dt, 'Mon')
       ORDER BY MIN(proc_dt)
@@ -280,9 +280,9 @@ router.get('/rows-trend', async (_req: Request, res: Response) => {
              SUM(rows_loaded) AS rows_loaded,
              SUM(rows_parsed) AS rows_parsed,
              SUM(rows_rjctd)  AS rows_rjctd
-      FROM edoops."DMF_RUN_STEP_DETAIL"
+      FROM edoops.DMF_RUN_STEP_DETAIL
       WHERE proc_dt >= CURRENT_DATE - INTERVAL '3 months'
-      GROUP BY month_name
+      GROUP BY TO_CHAR(proc_dt, 'Mon')
       ORDER BY MIN(proc_dt)
     `);
     res.json(rows.map((r: any) => ({
@@ -305,7 +305,7 @@ router.get('/jobs-trend', async (_req: Request, res: Response) => {
       SELECT proc_typ_cd,
              TO_CHAR(proc_dt, 'Mon') AS month_name,
              COUNT(DISTINCT run_id)  AS cnt
-      FROM edoops."DMF_RUN_MASTER"
+      FROM edoops.DMF_RUN_MASTER
       WHERE proc_dt >= CURRENT_DATE - INTERVAL '3 months'
       GROUP BY proc_typ_cd, TO_CHAR(proc_dt, 'Mon')
       ORDER BY MIN(proc_dt)
@@ -332,9 +332,9 @@ router.get('/step-failure-trend', async (_req: Request, res: Response) => {
     const { rows } = await pool.query(`
       SELECT TO_CHAR(proc_dt, 'Mon') AS period,
              COUNT(*) AS cnt
-      FROM edoops."DMF_RUN_STEP_DETAIL"
+      FROM edoops.DMF_RUN_STEP_DETAIL
       WHERE proc_dt >= CURRENT_DATE - INTERVAL '3 months'
-      GROUP BY period
+      GROUP BY TO_CHAR(proc_dt, 'Mon')
       ORDER BY MIN(proc_dt)
     `);
     res.json(rows.map((r: any) => ({
@@ -357,7 +357,7 @@ router.get('/summary', async (_req: Request, res: Response) => {
         SUM(CASE WHEN run_status = 'SUCCESS'                              THEN 1 ELSE 0 END) AS success_count,
         SUM(CASE WHEN run_status = 'FAILED'                               THEN 1 ELSE 0 END) AS failed_count,
         SUM(CASE WHEN run_status IN ('IN PROGRESS','IN_PROGRESS','STARTED') THEN 1 ELSE 0 END) AS in_progress_count
-      FROM edoops."DMF_RUN_MASTER"
+      FROM edoops.DMF_RUN_MASTER
       WHERE proc_dt >= CURRENT_DATE - INTERVAL '3 months'
     `);
     const r = rows[0] || {};
@@ -390,7 +390,7 @@ router.get('/stages', async (_req: Request, res: Response) => {
         SUM(CASE WHEN run_status IN ('IN PROGRESS','IN_PROGRESS','STARTED') THEN 1 ELSE 0 END) AS in_progress,
         SUM(CASE WHEN run_status = 'FAILED'                               THEN 1 ELSE 0 END)  AS failed,
         COUNT(*)                                                                              AS total
-      FROM edoops."DMF_RUN_MASTER"
+      FROM edoops.DMF_RUN_MASTER
       WHERE proc_dt >= CURRENT_DATE - INTERVAL '3 months'
       GROUP BY proc_typ_cd
       ORDER BY proc_typ_cd
@@ -422,7 +422,7 @@ router.get('/runs-over-time', async (_req: Request, res: Response) => {
         proc_dt::date                                                   AS date,
         COUNT(*)                                                        AS total,
         SUM(CASE WHEN run_status = 'FAILED' THEN 1 ELSE 0 END)         AS failed
-      FROM edoops."DMF_RUN_MASTER"
+      FROM edoops.DMF_RUN_MASTER
       WHERE proc_dt >= CURRENT_DATE - INTERVAL '14 days'
       GROUP BY proc_dt::date
       ORDER BY proc_dt::date
@@ -447,7 +447,7 @@ router.get('/error-reasons', async (_req: Request, res: Response) => {
         step_nm,
         proc_typ_cd,
         COUNT(*) AS cnt
-      FROM edoops."DMF_RUN_STEP_DETAIL"
+      FROM edoops.DMF_RUN_STEP_DETAIL
       WHERE step_status = 'FAILED'
         AND proc_dt >= CURRENT_DATE - INTERVAL '3 months'
       GROUP BY step_nm, proc_typ_cd
@@ -480,7 +480,7 @@ router.get('/recent-failures', async (_req: Request, res: Response) => {
     const pool = getPgPool();
     const { rows } = await pool.query(`
       SELECT run_id, dataset_nm, proc_typ_cd, run_strt_tm, run_end_tm, src_nm, tgt_nm, run_status
-      FROM edoops."DMF_RUN_MASTER"
+      FROM edoops.DMF_RUN_MASTER
       WHERE run_status = 'FAILED'
         AND proc_dt >= CURRENT_DATE - INTERVAL '3 months'
       ORDER BY proc_dt DESC, run_strt_tm DESC
