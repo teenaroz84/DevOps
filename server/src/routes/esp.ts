@@ -182,7 +182,129 @@ router.get('/accounts', async (_req: Request, res: Response) => {
   }
 });
 
-// GET /api/esp/job-run-trend
+// GET /api/esp/metadata/:appl_name
+// Full metadata from esp_job_cmnd: jobname, command, argument, agent, job_type, account, comp_code, runs, user_job
+router.get('/metadata/:appl_name', async (req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const appl_name = decodeURIComponent(req.params.appl_name);
+    const result = await pool.query(
+      `SELECT jobname,
+              cmnd          AS command,
+              argument,
+              agent,
+              job_type,
+              account,
+              CAST(cmpl_cd AS TEXT) AS comp_code,
+              runs,
+              user_job
+       FROM esp_job_cmnd
+       WHERE appl_name = $1
+       ORDER BY jobname
+       LIMIT 200`,
+      [appl_name]
+    );
+    res.json(result.rows.map((r: any) => ({
+      jobname:    r.jobname,
+      command:    r.command  ?? null,
+      argument:   r.argument ?? null,
+      agent:      r.agent    ?? null,
+      job_type:   r.job_type ?? null,
+      account:    r.account  ?? null,
+      comp_code:  r.comp_code ?? null,
+      runs:       r.runs != null ? parseInt(r.runs, 10) : null,
+      user_job:   r.user_job ?? null,
+    })));
+  } catch (err: any) {
+    console.error('ESP metadata error:', err.message);
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
+// GET /api/esp/job-run-table/:appl_name
+// Joins esp_job_cmnd + esp_job_stats_recent for detailed run records
+router.get('/job-run-table/:appl_name', async (req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const appl_name = decodeURIComponent(req.params.appl_name);
+    const result = await pool.query(
+      `SELECT ec.appl_name,
+              es.job_longname,
+              ec.cmnd        AS command,
+              ec.argument,
+              ec.runs,
+              es.start_date,
+              es.start_time,
+              es.end_date,
+              es.end_time,
+              es.exec_qtime,
+              es.ccfail,
+              es.comp_code
+       FROM esp_job_cmnd ec
+       JOIN esp_job_stats_recent es
+         ON ec.appl_name = es.appl_name
+        AND ec.jobname   = es.job_longname
+       WHERE ec.appl_name = $1
+       ORDER BY es.end_date DESC, es.end_time DESC
+       LIMIT 500`,
+      [appl_name]
+    );
+    res.json(result.rows.map((r: any) => ({
+      job_longname: r.job_longname,
+      command:      r.command    ?? null,
+      argument:     r.argument   ?? null,
+      runs:         r.runs != null ? parseInt(r.runs, 10) : null,
+      start_date:   r.start_date ? String(r.start_date).split('T')[0] : null,
+      start_time:   r.start_time ?? null,
+      end_date:     r.end_date   ? String(r.end_date).split('T')[0]   : null,
+      end_time:     r.end_time   ?? null,
+      exec_qtime:   r.exec_qtime ?? null,
+      ccfail:       r.ccfail     ?? null,
+      comp_code:    r.comp_code  ?? null,
+    })));
+  } catch (err: any) {
+    console.error('ESP job-run-table error:', err.message);
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
+// GET /api/esp/job-run-trend/:appl_name?days=N
+// Uses esp_job_stats_recent (end_time, end_date, jobname, ccfail)
+router.get('/job-run-trend/:appl_name', async (req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const appl_name = decodeURIComponent(req.params.appl_name);
+    const rawDays = parseInt(String(req.query.days ?? '2'), 10);
+    // Guard: 1–7 days only
+    const days = Math.min(Math.max(rawDays, 1), 7);
+
+    const result = await pool.query(
+      `SELECT
+         end_date::date                                                 AS day,
+         EXTRACT(HOUR FROM end_time)::int                              AS hour,
+         COUNT(jobname)                                                 AS job_count,
+         SUM(CASE WHEN ccfail = 'YES' THEN 1 ELSE 0 END)::int         AS job_fail_count
+       FROM esp_job_stats_recent
+       WHERE appl_name = $1
+         AND end_date >= CURRENT_DATE - ($2 - 1) * INTERVAL '1 day'
+       GROUP BY end_date::date, EXTRACT(HOUR FROM end_time)
+       ORDER BY end_date::date, EXTRACT(HOUR FROM end_time)`,
+      [appl_name, days]
+    );
+
+    res.json(result.rows.map((r: any) => ({
+      day:            String(r.day).split('T')[0],
+      hour:           parseInt(r.hour, 10),
+      job_count:      parseInt(r.job_count, 10),
+      job_fail_count: parseInt(r.job_fail_count, 10),
+    })));
+  } catch (err: any) {
+    console.error('ESP job-run-trend error:', err.message);
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
+// GET /api/esp/job-run-trend  (legacy — no appl_name, kept for compat)
 router.get('/job-run-trend', async (_req: Request, res: Response) => {
   try {
     const pool = getPgPool();

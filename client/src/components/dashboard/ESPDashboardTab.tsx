@@ -30,10 +30,12 @@ interface AppData {
   completion_codes: NameCount[]
   accounts: NameCount[]
   job_list: Array<{ jobname: string; last_run_date: string | null }>
-  job_run_trend: Array<{ day: string; hour: number; count: number }>
+  job_run_trend: Array<{ day: string; hour: number; job_count: number; job_fail_count: number }>
   successor_jobs: Array<{ jobname: string; successor_job: string }>
   predecessor_jobs: Array<{ jobname: string; predecessor_job: string }>
   metadata: Array<{ jobname: string; command: string | null; argument: string | null }>
+  metadata_detail: Array<{ jobname: string; command: string | null; argument: string | null; agent: string | null; job_type: string | null; account: string | null; comp_code: string | null; runs: number | null; user_job: string | null }>
+  job_run_table: Array<{ job_longname: string; command: string | null; argument: string | null; runs: number | null; start_date: string | null; start_time: string | null; end_date: string | null; end_time: string | null; exec_qtime: string | null; ccfail: string | null; comp_code: string | null }>
 }
 
 const TREND_LINE_COLORS = ['#1565c0', '#2e7d32', '#c62828', '#f57c00']
@@ -58,6 +60,12 @@ export const ESPDashboardTab: React.FC = () => {
   const [data, setData] = React.useState<AppData | null>(null)
   const [loading, setLoading] = React.useState(false)
   const [appsLoading, setAppsLoading] = React.useState(true)
+  const [trendDays, setTrendDays] = React.useState<number>(2)
+  const [trendData, setTrendData] = React.useState<Array<{ day: string; hour: number; job_count: number; job_fail_count: number }>>([]) 
+  const [trendLoading, setTrendLoading] = React.useState(false)
+  const [metadataDetail, setMetadataDetail] = React.useState<AppData['metadata_detail']>([])
+  const [jobRunTable, setJobRunTable] = React.useState<AppData['job_run_table']>([])
+  const [tableLoading, setTableLoading] = React.useState(false)
 
   // Load application list on mount or when mock mode changes
   React.useEffect(() => {
@@ -97,26 +105,91 @@ export const ESPDashboardTab: React.FC = () => {
       .finally(() => setLoading(false))
   }, [selected, useMock])
 
-  // Transform trend data for recharts: one key per day, indexed by hour
+  // Load metadata detail + job run table whenever selection or mock mode changes
+  React.useEffect(() => {
+    if (!selected) return
+    setTableLoading(true)
+    setMetadataDetail([])
+    setJobRunTable([])
+    if (useMock) {
+      const mockApp = getMockAppData(selected)
+      setMetadataDetail(mockApp?.metadata_detail ?? [])
+      setJobRunTable(mockApp?.job_run_table ?? [])
+      setTableLoading(false)
+      return
+    }
+    Promise.all([
+      espService.getMetadata(selected).catch(() => []),
+      espService.getJobRunTable(selected).catch(() => []),
+    ]).then(([meta, runs]: any) => {
+      setMetadataDetail(Array.isArray(meta) ? meta : [])
+      setJobRunTable(Array.isArray(runs) ? runs : [])
+    }).finally(() => setTableLoading(false))
+  }, [selected, useMock])
+
+  // Load trend data independently so the day-range selector works without re-fetching all data
+  React.useEffect(() => {
+    if (!selected) return
+    setTrendLoading(true)
+    setTrendData([])
+    if (useMock) {
+      const mockApp = getMockAppData(selected)
+      setTrendData((mockApp?.job_run_trend as any) ?? [])
+      setTrendLoading(false)
+      return
+    }
+    espService.getJobRunTrend(selected, trendDays)
+      .then((res: any) => setTrendData(Array.isArray(res) ? res : []))
+      .catch(() => setTrendData([]))
+      .finally(() => setTrendLoading(false))
+  }, [selected, trendDays, useMock])
+
+  // Transform trend data for recharts: keys ${day}_count and ${day}_fail per hour
   const trendChart = React.useMemo(() => {
-    if (!data?.job_run_trend?.length) return { rows: [], days: [] }
-    const days = [...new Set(data.job_run_trend.map(t => t.day))].sort()
+    if (!trendData.length) return { rows: [], days: [] }
+    const days = [...new Set(trendData.map(t => t.day))].sort()
     const byHour: Record<number, Record<string, number>> = {}
-    data.job_run_trend.forEach(({ day, hour, count }) => {
+    trendData.forEach(({ day, hour, job_count, job_fail_count }) => {
       if (!byHour[hour]) byHour[hour] = {}
-      byHour[hour][day] = count
+      byHour[hour][`${day}_count`] = job_count
+      byHour[hour][`${day}_fail`] = job_fail_count
     })
     const rows = Object.entries(byHour)
       .sort(([a], [b]) => Number(a) - Number(b))
-      .map(([hour, vals]) => ({ hour: Number(hour), ...vals }))
+      .map(([hour, vals]) => ({ hour: `${hour}:00`, ...vals }))
     return { rows, days }
-  }, [data])
+  }, [trendData])
 
-  // Metadata table column defs
+  // Metadata detail columns (full esp_job_cmnd data)
   const metaCols: ColumnDef[] = [
-    { key: 'jobname',  header: 'Jobname (EJC)',   flex: 1,  noWrap: true },
-    { key: 'command',  header: 'Command (EJC)',    flex: 1,  render: r => r.command ?? '—' },
-    { key: 'argument', header: 'Argument (EJC)',   flex: 1.5, render: r => r.argument ?? '—' },
+    { key: 'jobname',   header: 'Job Name',       flex: 1,   noWrap: true },
+    { key: 'command',   header: 'Command',         flex: 1,   render: r => r.command   ?? '—' },
+    { key: 'argument',  header: 'Argument',        flex: 1.5, render: r => r.argument  ?? '—' },
+    { key: 'agent',     header: 'Agent',           flex: 1,   render: r => r.agent     ?? '—' },
+    { key: 'job_type',  header: 'Job Type',        width: 90, render: r => r.job_type  ?? '—' },
+    { key: 'account',   header: 'Account',         flex: 1,   render: r => r.account   ?? '—' },
+    { key: 'comp_code', header: 'Cmpl Code',       width: 80, render: r => r.comp_code ?? '—' },
+    { key: 'runs',      header: 'Runs',            width: 60, render: r => r.runs != null ? r.runs : '—' },
+    { key: 'user_job',  header: 'User Job',        width: 100, render: r => r.user_job ?? '—' },
+  ]
+
+  // Job run table columns (esp_job_cmnd JOIN esp_job_stats_recent)
+  const jobRunTableCols: ColumnDef[] = [
+    { key: 'job_longname', header: 'Job Name',    flex: 1,   noWrap: true },
+    { key: 'start_date',   header: 'Start Date',  width: 90, render: r => r.start_date ?? '—' },
+    { key: 'start_time',   header: 'Start Time',  width: 80, render: r => r.start_time ? String(r.start_time).slice(0, 8) : '—' },
+    { key: 'end_date',     header: 'End Date',    width: 90, render: r => r.end_date   ?? '—' },
+    { key: 'end_time',     header: 'End Time',    width: 80, render: r => r.end_time   ? String(r.end_time).slice(0, 8) : '—' },
+    { key: 'exec_qtime',   header: 'Exec Time',   width: 80, render: r => r.exec_qtime ? String(r.exec_qtime).slice(0, 8) : '—' },
+    { key: 'runs',         header: 'Runs',        width: 55, render: r => r.runs != null ? r.runs : '—' },
+    { key: 'ccfail',       header: 'CC Fail',     width: 70, render: r => {
+      const v = r.ccfail
+      if (!v) return '—'
+      return <Typography component="span" sx={{ fontSize: '10px', fontWeight: 700, color: v === 'YES' ? '#c62828' : '#2e7d32' }}>{v}</Typography>
+    }},
+    { key: 'comp_code',    header: 'Comp Code',  width: 80, render: r => r.comp_code ?? '—' },
+    { key: 'command',      header: 'Command',     flex: 1,   render: r => r.command   ?? '—' },
+    { key: 'argument',     header: 'Argument',    flex: 1.5, render: r => r.argument  ?? '—' },
   ]
 
   const jobListCols: ColumnDef[] = [
@@ -247,21 +320,42 @@ export const ESPDashboardTab: React.FC = () => {
 
             <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
               <WidgetShell
-                title="Job Run Trend — Last 2 Days"
-                source="ESP"
+                title={`Job Run Trend — Last ${trendDays} Day${trendDays > 1 ? 's' : ''}`}
+                source="ESP · esp_job_stats_recent"
                 titleIcon={<TrendingUpIcon sx={{ color: '#1565c0', fontSize: 18 }} />}
+                actions={
+                  <Box sx={{ display: 'flex', gap: 0.5 }}>
+                    {[1, 2, 3, 5, 7].map(d => (
+                      <Chip
+                        key={d}
+                        label={`${d}d`}
+                        size="small"
+                        onClick={() => setTrendDays(d)}
+                        sx={{
+                          fontSize: '10px', height: 20, cursor: 'pointer',
+                          bgcolor: trendDays === d ? '#1565c0' : '#e3f2fd',
+                          color: trendDays === d ? '#fff' : '#1565c0',
+                          fontWeight: trendDays === d ? 700 : 400,
+                          '&:hover': { bgcolor: trendDays === d ? '#1565c0' : '#bbdefb' },
+                        }}
+                      />
+                    ))}
+                  </Box>
+                }
               >
                 <Box sx={{ px: 2, pb: 2, pt: 0.5 }}>
-                  {trendChart.rows.length > 0 ? (
+                  {trendLoading ? (
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 260 }}>
+                      <CircularProgress size={24} sx={{ color: '#1565c0' }} />
+                    </Box>
+                  ) : trendChart.rows.length > 0 ? (
                     <TrendLineChart
                       data={trendChart.rows}
                       xKey="hour"
-                      lines={trendChart.days.map((day, i) => ({
-                        key: day,
-                        label: day,
-                        color: TREND_LINE_COLORS[i % TREND_LINE_COLORS.length],
-                        strokeWidth: 2,
-                      }))}
+                      lines={trendChart.days.flatMap((day, i) => [
+                        { key: `${day}_count`, label: `${day} Runs`, color: TREND_LINE_COLORS[i % TREND_LINE_COLORS.length], strokeWidth: 2 },
+                        { key: `${day}_fail`,  label: `${day} Fail`, color: TREND_LINE_COLORS[i % TREND_LINE_COLORS.length], dashed: true, strokeWidth: 1.5 },
+                      ])}
                       height={260}
                       margin={{ top: 8, right: 16, left: -10, bottom: 4 }}
                     />
@@ -344,23 +438,75 @@ export const ESPDashboardTab: React.FC = () => {
 
             <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
               <WidgetShell
-                title="Metadata Table"
+                title="Job Commands (esp_job_cmnd)"
                 source={`${data.metadata.length} records`}
                 titleIcon={<TableChartIcon sx={{ color: '#37474f', fontSize: 18 }} />}
               >
                 <Box sx={{ flex: 1, overflowY: 'auto', px: 1.5, pb: 1 }}>
                   <DataTable
-                    columns={metaCols}
+                    columns={[
+                      { key: 'jobname',  header: 'Job Name',  flex: 1, noWrap: true },
+                      { key: 'command',  header: 'Command',   flex: 1, render: r => r.command  ?? '—' },
+                      { key: 'argument', header: 'Argument', flex: 1.5, render: r => r.argument ?? '—' },
+                    ]}
                     rows={data.metadata}
                     rowKey="jobname"
                     compact
                     maxHeight={220}
-                    emptyMessage="No metadata records"
+                    emptyMessage="No records"
                   />
                 </Box>
               </WidgetShell>
             </Paper>
           </Box>
+
+          {/* ── Row 5: Metadata Detail ── */}
+          <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #37474f', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+            <WidgetShell
+              title="Metadata Table (esp_job_cmnd)"
+              source={`${metadataDetail.length} records · SELECT * FROM esp_job_cmnd`}
+              titleIcon={<TableChartIcon sx={{ color: '#37474f', fontSize: 18 }} />}
+            >
+              {tableLoading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress size={22} sx={{ color: '#37474f' }} /></Box>
+              ) : (
+                <Box sx={{ px: 1.5, pb: 1 }}>
+                  <DataTable
+                    columns={metaCols}
+                    rows={metadataDetail}
+                    rowKey="jobname"
+                    compact
+                    maxHeight={280}
+                    emptyMessage="No metadata records"
+                  />
+                </Box>
+              )}
+            </WidgetShell>
+          </Paper>
+
+          {/* ── Row 6: Job Run Table ── */}
+          <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #1565c0', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+            <WidgetShell
+              title="Job Run Table (esp_job_cmnd ⋈ esp_job_stats_recent)"
+              source={`${jobRunTable.length} records · JOIN on jobname = job_longname`}
+              titleIcon={<ScheduleIcon sx={{ color: '#1565c0', fontSize: 18 }} />}
+            >
+              {tableLoading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress size={22} sx={{ color: '#1565c0' }} /></Box>
+              ) : (
+                <Box sx={{ px: 1.5, pb: 1 }}>
+                  <DataTable
+                    columns={jobRunTableCols}
+                    rows={jobRunTable}
+                    rowKey="job_longname"
+                    compact
+                    maxHeight={320}
+                    emptyMessage="No run records found"
+                  />
+                </Box>
+              )}
+            </WidgetShell>
+          </Paper>
         </>
       )}
     </Box>

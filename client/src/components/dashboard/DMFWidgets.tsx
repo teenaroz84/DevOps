@@ -33,6 +33,13 @@ import {
   MetricBarList,
 } from '../widgets'
 import { dmfService } from '../../services'
+import { useMockData } from '../../context/MockDataContext'
+import {
+  MOCK_DMF_SUMMARY, MOCK_DMF_STAGES, MOCK_DMF_RUN_STATUS, MOCK_DMF_FAILED_BY_STAGE,
+  MOCK_DMF_RUNS_OVER_TIME, MOCK_DMF_ERROR_REASONS, MOCK_DMF_RECENT_FAILURES,
+  MOCK_DMF_STATUS_TREND, MOCK_DMF_ROWS_TREND, MOCK_DMF_JOBS_TREND, MOCK_DMF_STEP_FAILURE_TREND,
+  MOCK_DMF_ANALYTICS, MOCK_DMF_LINEAGE_META, MOCK_DMF_LINEAGE_JOBS,
+} from '../../services/dmfMockData'
 
 const STAGE_COLORS: Record<string, string> = {
   Ingestion: '#1565c0',
@@ -115,6 +122,7 @@ type DMFTab = typeof DMF_TABS[number]['key']
 
 
 export const DMFPipelineWidget: React.FC = () => {
+  const { useMock } = useMockData()
   const [activeTab, setActiveTab] = useState<DMFTab>('overview')
 
   // ── Overview state ────────────────────────────────────────
@@ -158,7 +166,33 @@ export const DMFPipelineWidget: React.FC = () => {
   const [selectedFailure, setSelectedFailure] = useState<DMFFailure | null>(null)
   const [selectedError, setSelectedError] = useState<DMFErrorReason | null>(null)
 
+  // Reset all lazy-loaded tab data whenever mock toggle changes
   useEffect(() => {
+    setLineageLoaded(false)
+    setLineageMeta(null)
+    setLineageJobs([])
+    setAnalyticsLoaded(false)
+    setAnalytics(null)
+    setTrendsLoaded(false)
+    setStatusTrend([])
+    setRowsTrend([])
+    setJobsTrend([])
+    setStepFailureTrend([])
+  }, [useMock])
+
+  useEffect(() => {
+    setLoading(true)
+    if (useMock) {
+      setSummary(MOCK_DMF_SUMMARY as any)
+      setStages(MOCK_DMF_STAGES as any)
+      setRunStatus(MOCK_DMF_RUN_STATUS as any)
+      setFailedByStage(MOCK_DMF_FAILED_BY_STAGE as any)
+      setRunsOverTime(MOCK_DMF_RUNS_OVER_TIME)
+      setErrorReasons(MOCK_DMF_ERROR_REASONS as any)
+      setRecentFailures(MOCK_DMF_RECENT_FAILURES as any)
+      setLoading(false)
+      return
+    }
     Promise.all([
       dmfService.getSummary(),
       dmfService.getStages(),
@@ -179,11 +213,17 @@ export const DMFPipelineWidget: React.FC = () => {
         setLoading(false)
       })
       .catch(() => setLoading(false))
-  }, [])
+  }, [useMock])
 
   // ── Lazy-load Lineage data ────────────────────────────────
   useEffect(() => {
     if (activeTab !== 'lineage' || lineageLoaded) return
+    if (useMock) {
+      setLineageMeta(MOCK_DMF_LINEAGE_META)
+      setLineageJobs(MOCK_DMF_LINEAGE_JOBS)
+      setLineageLoaded(true)
+      return
+    }
     Promise.all([
       dmfService.getLineageMeta(),
       dmfService.getLineageJobs(),
@@ -192,19 +232,32 @@ export const DMFPipelineWidget: React.FC = () => {
       setLineageJobs(Array.isArray(jobs) ? jobs : [])
       setLineageLoaded(true)
     }).catch(() => setLineageLoaded(true))
-  }, [activeTab, lineageLoaded])
+  }, [activeTab, lineageLoaded, useMock])
 
   // ── Lazy-load Analytics data ──────────────────────────────
   useEffect(() => {
     if (activeTab !== 'analytics' || analyticsLoaded) return
+    if (useMock) {
+      setAnalytics(MOCK_DMF_ANALYTICS)
+      setAnalyticsLoaded(true)
+      return
+    }
     dmfService.getAnalytics()
       .then(d => { setAnalytics(d); setAnalyticsLoaded(true) })
       .catch(() => setAnalyticsLoaded(true))
-  }, [activeTab, analyticsLoaded])
+  }, [activeTab, analyticsLoaded, useMock])
 
   // ── Lazy-load Trends data ─────────────────────────────────
   useEffect(() => {
     if (activeTab !== 'trends' || trendsLoaded) return
+    if (useMock) {
+      setStatusTrend(MOCK_DMF_STATUS_TREND)
+      setRowsTrend(MOCK_DMF_ROWS_TREND)
+      setJobsTrend(MOCK_DMF_JOBS_TREND)
+      setStepFailureTrend(MOCK_DMF_STEP_FAILURE_TREND)
+      setTrendsLoaded(true)
+      return
+    }
     Promise.all([
       dmfService.getStatusTrend(),
       dmfService.getRowsTrend(),
@@ -214,7 +267,7 @@ export const DMFPipelineWidget: React.FC = () => {
       setStatusTrend(st); setRowsTrend(rt); setJobsTrend(jt); setStepFailureTrend(sft)
       setTrendsLoaded(true)
     }).catch(() => setTrendsLoaded(true))
-  }, [activeTab, trendsLoaded])
+  }, [activeTab, trendsLoaded, useMock])
 
   const activeStageFilter = selectedStage ?? (stageFilter !== 'All' ? stageFilter : null)
 
@@ -939,10 +992,9 @@ export const DMFPipelineWidget: React.FC = () => {
                     data={rowsTrend}
                     xKey="month"
                     lines={[
-                      { key: 'ingestion',    label: 'Ingestion',    color: '#1565c0' },
-                      { key: 'enrichment',   label: 'Enrichment',   color: '#f57c00' },
-                      { key: 'distribution', label: 'Distribution', color: '#d32f2f' },
-                      { key: 'integration',  label: 'Integration',  color: '#7b1fa2' },
+                      { key: 'rowsLoaded', label: 'Rows Loaded',   color: '#1565c0' },
+                      { key: 'rowsParsed', label: 'Rows Parsed',   color: '#2e7d32' },
+                      { key: 'rowsRjctd',  label: 'Rows Rejected', color: '#d32f2f' },
                     ]}
                     height={200}
                   />
@@ -958,10 +1010,10 @@ export const DMFPipelineWidget: React.FC = () => {
                     data={jobsTrend}
                     xKey="month"
                     lines={[
-                      { key: 'customerLoad',    label: 'Customer Load',    color: '#2e7d32' },
-                      { key: 'orderProcessing', label: 'Order Processing', color: '#1565c0' },
-                      { key: 'salesData',       label: 'Sales Data',       color: '#d32f2f' },
-                      { key: 'finance',         label: 'Finance',          color: '#f57c00' },
+                      { key: 'ING', label: 'Ingestion',    color: '#1565c0' },
+                      { key: 'ENR', label: 'Enrichment',   color: '#f57c00' },
+                      { key: 'DIS', label: 'Distribution', color: '#2e7d32' },
+                      { key: 'INT', label: 'Integration',  color: '#7b1fa2' },
                     ]}
                     height={200}
                   />

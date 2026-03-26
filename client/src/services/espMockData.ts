@@ -14,10 +14,12 @@ export interface AppData {
   completion_codes: NameCount[]
   accounts: NameCount[]
   job_list: Array<{ jobname: string; last_run_date: string | null }>
-  job_run_trend: Array<{ day: string; hour: number; count: number }>
+  job_run_trend: Array<{ day: string; hour: number; job_count: number; job_fail_count: number }>
   successor_jobs: Array<{ jobname: string; successor_job: string }>
   predecessor_jobs: Array<{ jobname: string; predecessor_job: string }>
   metadata: Array<{ jobname: string; command: string | null; argument: string | null }>
+  metadata_detail: Array<{ jobname: string; command: string | null; argument: string | null; agent: string | null; job_type: string | null; account: string | null; comp_code: string | null; runs: number | null; user_job: string | null }>
+  job_run_table: Array<{ job_longname: string; command: string | null; argument: string | null; runs: number | null; start_date: string | null; start_time: string | null; end_date: string | null; end_time: string | null; exec_qtime: string | null; ccfail: string | null; comp_code: string | null }>
 }
 
 const MOCK_APPS: AppData[] = [
@@ -62,24 +64,24 @@ const MOCK_APPS: AppData[] = [
       { jobname: 'FINMETRICS_XFORM_PRD', last_run_date: '2026-03-24T14:10:00Z' },
     ],
     job_run_trend: [
-      { day: '2026-03-24', hour: 8,  count: 6  },
-      { day: '2026-03-24', hour: 9,  count: 12 },
-      { day: '2026-03-24', hour: 10, count: 21 },
-      { day: '2026-03-24', hour: 11, count: 30 },
-      { day: '2026-03-24', hour: 12, count: 25 },
-      { day: '2026-03-24', hour: 13, count: 18 },
-      { day: '2026-03-24', hour: 14, count: 14 },
-      { day: '2026-03-24', hour: 15, count: 16 },
-      { day: '2026-03-24', hour: 16, count: 11 },
-      { day: '2026-03-24', hour: 17, count: 8  },
-      { day: '2026-03-25', hour: 8,  count: 4  },
-      { day: '2026-03-25', hour: 9,  count: 10 },
-      { day: '2026-03-25', hour: 10, count: 19 },
-      { day: '2026-03-25', hour: 11, count: 27 },
-      { day: '2026-03-25', hour: 12, count: 22 },
-      { day: '2026-03-25', hour: 13, count: 15 },
-      { day: '2026-03-25', hour: 14, count: 12 },
-      { day: '2026-03-25', hour: 15, count: 14 },
+      { day: '2026-03-24', hour: 8,  job_count: 6,  job_fail_count: 0 },
+      { day: '2026-03-24', hour: 9,  job_count: 12, job_fail_count: 1 },
+      { day: '2026-03-24', hour: 10, job_count: 21, job_fail_count: 2 },
+      { day: '2026-03-24', hour: 11, job_count: 30, job_fail_count: 3 },
+      { day: '2026-03-24', hour: 12, job_count: 25, job_fail_count: 1 },
+      { day: '2026-03-24', hour: 13, job_count: 18, job_fail_count: 2 },
+      { day: '2026-03-24', hour: 14, job_count: 14, job_fail_count: 1 },
+      { day: '2026-03-24', hour: 15, job_count: 16, job_fail_count: 0 },
+      { day: '2026-03-24', hour: 16, job_count: 11, job_fail_count: 1 },
+      { day: '2026-03-24', hour: 17, job_count: 8,  job_fail_count: 0 },
+      { day: '2026-03-25', hour: 8,  job_count: 4,  job_fail_count: 0 },
+      { day: '2026-03-25', hour: 9,  job_count: 10, job_fail_count: 1 },
+      { day: '2026-03-25', hour: 10, job_count: 19, job_fail_count: 2 },
+      { day: '2026-03-25', hour: 11, job_count: 27, job_fail_count: 2 },
+      { day: '2026-03-25', hour: 12, job_count: 22, job_fail_count: 1 },
+      { day: '2026-03-25', hour: 13, job_count: 15, job_fail_count: 0 },
+      { day: '2026-03-25', hour: 14, job_count: 12, job_fail_count: 1 },
+      { day: '2026-03-25', hour: 15, job_count: 14, job_fail_count: 0 },
     ],
     successor_jobs: [
       { jobname: 'CD332400',          successor_job: 'CD_DOWNSTREAM_01' },
@@ -100,6 +102,24 @@ const MOCK_APPS: AppData[] = [
       { jobname: 'JSDELAY_DTDPLMET_001', command: 'jsddelay',          argument: '300' },
       { jobname: 'RETRIG_DTDPLMET_001',  command: 'retrig',            argument: '--job COMPRT_DTDOPSD57_PRD' },
       { jobname: 'FINMETRICS_LOAD_PRD',  command: '/opt/etl/load.sh', argument: '--env prod' },
+    ],
+    metadata_detail: [
+      { jobname: 'CD332400',          command: '/opt/etl/run.sh',  argument: '--env prod --app DTDPLMET',            agent: 'PRDEOLSPARKLB_V',  job_type: 'UNIX',      account: 'sv-edlprd1_metrics', comp_code: '1', runs: 42,  user_job: 'edlprd1' },
+      { jobname: 'CD332402',          command: '/opt/etl/run.sh',  argument: '--env prod --step 2',                  agent: 'PRDEOLSPARKLB_V',  job_type: 'UNIX',      account: 'sv-edlprd1_metrics', comp_code: '1', runs: 40,  user_job: 'edlprd1' },
+      { jobname: 'COMPRT_DTDOPSD57_PRD', command: 'spark-submit', argument: '--class com.company.Metrics --master yarn', agent: 'PRD_EDLCDDLBVIP', job_type: 'UNIX',   account: 'sv-edlprd1_metrics', comp_code: '1', runs: 38,  user_job: 'edlprd1' },
+      { jobname: 'COMPRT_DTDOPSD63_PRD', command: 'spark-submit', argument: '--class com.company.Transform --master yarn', agent: 'PRD_EDLCDDLBVIP', job_type: 'UNIX', account: 'sv-edlprd1_metrics', comp_code: '1', runs: 35,  user_job: 'edlprd1' },
+      { jobname: 'COMPRT_DTDOPSD64_PRD', command: 'spark-submit', argument: '--class com.company.Load --master yarn',    agent: 'PRD_EDLCDDLBVIP', job_type: 'UNIX',   account: 'sv-edlprd1_metrics', comp_code: '2', runs: 35,  user_job: 'edlprd1' },
+      { jobname: 'JSDELAY_DTDPLMET_001', command: 'jsddelay',     argument: '300',                                  agent: null,               job_type: 'MAINFRAME', account: null,                 comp_code: '1', runs: 100, user_job: null },
+      { jobname: 'RETRIG_DTDPLMET_001',  command: 'retrig',       argument: '--job COMPRT_DTDOPSD57_PRD',           agent: null,               job_type: 'MAINFRAME', account: null,                 comp_code: '1', runs: 5,   user_job: null },
+      { jobname: 'FINMETRICS_LOAD_PRD',  command: '/opt/etl/load.sh', argument: '--env prod',                      agent: 'PRDEOLSPARKLB_V',  job_type: 'UNIX',      account: 'sv-edlprd1_metrics', comp_code: '1', runs: 28,  user_job: 'edlprd1' },
+    ],
+    job_run_table: [
+      { job_longname: 'CD332400',          command: '/opt/etl/run.sh',  argument: '--env prod --app DTDPLMET',            runs: 42, start_date: '2026-03-25', start_time: '08:01:00', end_date: '2026-03-25', end_time: '08:12:00', exec_qtime: '00:11:00', ccfail: 'NO',  comp_code: '1' },
+      { job_longname: 'CD332402',          command: '/opt/etl/run.sh',  argument: '--env prod --step 2',                  runs: 40, start_date: '2026-03-25', start_time: '08:13:00', end_date: '2026-03-25', end_time: '08:22:00', exec_qtime: '00:09:00', ccfail: 'NO',  comp_code: '1' },
+      { job_longname: 'COMPRT_DTDOPSD57_PRD', command: 'spark-submit', argument: '--class com.company.Metrics',          runs: 38, start_date: '2026-03-25', start_time: '09:00:00', end_date: '2026-03-25', end_time: '09:45:00', exec_qtime: '00:45:00', ccfail: 'NO',  comp_code: '1' },
+      { job_longname: 'COMPRT_DTDOPSD63_PRD', command: 'spark-submit', argument: '--class com.company.Transform',        runs: 35, start_date: '2026-03-25', start_time: '10:00:00', end_date: '2026-03-25', end_time: '10:50:00', exec_qtime: '00:50:00', ccfail: 'YES', comp_code: '2' },
+      { job_longname: 'FINMETRICS_LOAD_PRD',  command: '/opt/etl/load.sh', argument: '--env prod',                      runs: 28, start_date: '2026-03-25', start_time: '14:00:00', end_date: '2026-03-25', end_time: '14:30:00', exec_qtime: '00:30:00', ccfail: 'NO',  comp_code: '1' },
+      { job_longname: 'FINMETRICS_XFORM_PRD', command: '/opt/etl/load.sh', argument: '--env prod --xform',              runs: 27, start_date: '2026-03-25', start_time: '14:31:00', end_date: '2026-03-25', end_time: '15:00:00', exec_qtime: '00:29:00', ccfail: 'NO',  comp_code: '1' },
     ],
   },
   {
@@ -133,17 +153,17 @@ const MOCK_APPS: AppData[] = [
       { jobname: 'RETRIG_CUST360_001', last_run_date: null },
     ],
     job_run_trend: [
-      { day: '2026-03-24', hour: 9,  count: 7  },
-      { day: '2026-03-24', hour: 10, count: 12 },
-      { day: '2026-03-24', hour: 11, count: 15 },
-      { day: '2026-03-24', hour: 12, count: 14 },
-      { day: '2026-03-24', hour: 13, count: 13 },
-      { day: '2026-03-24', hour: 14, count: 11 },
-      { day: '2026-03-24', hour: 15, count: 9  },
-      { day: '2026-03-25', hour: 9,  count: 6  },
-      { day: '2026-03-25', hour: 10, count: 11 },
-      { day: '2026-03-25', hour: 11, count: 13 },
-      { day: '2026-03-25', hour: 12, count: 10 },
+      { day: '2026-03-24', hour: 9,  job_count: 7,  job_fail_count: 0 },
+      { day: '2026-03-24', hour: 10, job_count: 12, job_fail_count: 1 },
+      { day: '2026-03-24', hour: 11, job_count: 15, job_fail_count: 2 },
+      { day: '2026-03-24', hour: 12, job_count: 14, job_fail_count: 1 },
+      { day: '2026-03-24', hour: 13, job_count: 13, job_fail_count: 0 },
+      { day: '2026-03-24', hour: 14, job_count: 11, job_fail_count: 1 },
+      { day: '2026-03-24', hour: 15, job_count: 9,  job_fail_count: 0 },
+      { day: '2026-03-25', hour: 9,  job_count: 6,  job_fail_count: 0 },
+      { day: '2026-03-25', hour: 10, job_count: 11, job_fail_count: 1 },
+      { day: '2026-03-25', hour: 11, job_count: 13, job_fail_count: 0 },
+      { day: '2026-03-25', hour: 12, job_count: 10, job_fail_count: 1 },
     ],
     successor_jobs: [
       { jobname: 'CUST360_LOAD_DW', successor_job: 'RPT_CUST360_DAILY' },
@@ -156,6 +176,21 @@ const MOCK_APPS: AppData[] = [
       { jobname: 'CUST360_TRANSFORM_01', command: 'spark-submit',          argument: '--class com.cust.Transform' },
       { jobname: 'CUST360_LOAD_DW',     command: '/opt/cust/load.sh',      argument: '--target dw --env prod' },
       { jobname: 'JSDELAY_CUST360_001', command: 'jsddelay',               argument: '600' },
+    ],
+    metadata_detail: [
+      { jobname: 'CUST360_EXTRACT_01',   command: '/opt/cust/extract.sh',  argument: '--src crm --env prod',      agent: 'PRD_CUST360_AGENT', job_type: 'UNIX',      account: 'sv-cust360_metrics', comp_code: '1', runs: 30, user_job: 'cust360' },
+      { jobname: 'CUST360_EXTRACT_02',   command: '/opt/cust/extract.sh',  argument: '--src web --env prod',      agent: 'PRD_CUST360_AGENT', job_type: 'UNIX',      account: 'sv-cust360_metrics', comp_code: '1', runs: 28, user_job: 'cust360' },
+      { jobname: 'CUST360_TRANSFORM_01', command: 'spark-submit',          argument: '--class com.cust.Transform', agent: 'PRD_CUST360_AGENT', job_type: 'UNIX',      account: 'sv-cust360_metrics', comp_code: '1', runs: 25, user_job: 'cust360' },
+      { jobname: 'CUST360_LOAD_DW',      command: '/opt/cust/load.sh',     argument: '--target dw --env prod',    agent: 'PRD_CUST360_AGENT', job_type: 'UNIX',      account: 'sv-cust360_metrics', comp_code: '2', runs: 22, user_job: 'cust360' },
+      { jobname: 'CUST360_VALIDATE',     command: '/opt/cust/validate.sh', argument: '--env prod',                agent: null,                job_type: 'MAINFRAME', account: null,                 comp_code: '1', runs: 20, user_job: null },
+      { jobname: 'JSDELAY_CUST360_001',  command: 'jsddelay',              argument: '600',                       agent: null,                job_type: 'MAINFRAME', account: null,                 comp_code: '1', runs: 88, user_job: null },
+    ],
+    job_run_table: [
+      { job_longname: 'CUST360_EXTRACT_01',   command: '/opt/cust/extract.sh',  argument: '--src crm --env prod',      runs: 30, start_date: '2026-03-25', start_time: '09:00:00', end_date: '2026-03-25', end_time: '09:15:00', exec_qtime: '00:15:00', ccfail: 'NO',  comp_code: '1' },
+      { job_longname: 'CUST360_EXTRACT_02',   command: '/opt/cust/extract.sh',  argument: '--src web --env prod',      runs: 28, start_date: '2026-03-25', start_time: '09:16:00', end_date: '2026-03-25', end_time: '09:28:00', exec_qtime: '00:12:00', ccfail: 'NO',  comp_code: '1' },
+      { job_longname: 'CUST360_TRANSFORM_01', command: 'spark-submit',          argument: '--class com.cust.Transform', runs: 25, start_date: '2026-03-25', start_time: '10:00:00', end_date: '2026-03-25', end_time: '10:40:00', exec_qtime: '00:40:00', ccfail: 'YES', comp_code: '2' },
+      { job_longname: 'CUST360_LOAD_DW',      command: '/opt/cust/load.sh',     argument: '--target dw --env prod',    runs: 22, start_date: '2026-03-25', start_time: '11:00:00', end_date: '2026-03-25', end_time: '11:30:00', exec_qtime: '00:30:00', ccfail: 'NO',  comp_code: '1' },
+      { job_longname: 'CUST360_VALIDATE',     command: '/opt/cust/validate.sh', argument: '--env prod',                runs: 20, start_date: '2026-03-25', start_time: '11:31:00', end_date: '2026-03-25', end_time: '11:45:00', exec_qtime: '00:14:00', ccfail: 'NO',  comp_code: '1' },
     ],
   },
   {
@@ -189,14 +224,14 @@ const MOCK_APPS: AppData[] = [
       { jobname: 'JSDELAY_FIN_001', last_run_date: null },
     ],
     job_run_trend: [
-      { day: '2026-03-24', hour: 6,  count: 10 },
-      { day: '2026-03-24', hour: 7,  count: 15 },
-      { day: '2026-03-24', hour: 8,  count: 18 },
-      { day: '2026-03-24', hour: 9,  count: 12 },
-      { day: '2026-03-24', hour: 10, count: 8  },
-      { day: '2026-03-25', hour: 6,  count: 9  },
-      { day: '2026-03-25', hour: 7,  count: 14 },
-      { day: '2026-03-25', hour: 8,  count: 17 },
+      { day: '2026-03-24', hour: 6,  job_count: 10, job_fail_count: 1 },
+      { day: '2026-03-24', hour: 7,  job_count: 15, job_fail_count: 2 },
+      { day: '2026-03-24', hour: 8,  job_count: 18, job_fail_count: 1 },
+      { day: '2026-03-24', hour: 9,  job_count: 12, job_fail_count: 0 },
+      { day: '2026-03-24', hour: 10, job_count: 8,  job_fail_count: 1 },
+      { day: '2026-03-25', hour: 6,  job_count: 9,  job_fail_count: 0 },
+      { day: '2026-03-25', hour: 7,  job_count: 14, job_fail_count: 1 },
+      { day: '2026-03-25', hour: 8,  job_count: 17, job_fail_count: 2 },
     ],
     successor_jobs: [
       { jobname: 'FIN_GL_LOAD_DW', successor_job: 'FIN_RECONCILE' },
@@ -210,6 +245,21 @@ const MOCK_APPS: AppData[] = [
       { jobname: 'FIN_AP_EXTRACT',  command: '/opt/fin/extract.sh', argument: '--ledger AP --date today' },
       { jobname: 'FIN_GL_LOAD_DW',  command: '/opt/fin/load.sh',   argument: '--target finance_dw' },
       { jobname: 'JSDELAY_FIN_001', command: 'jsddelay',           argument: '120' },
+    ],
+    metadata_detail: [
+      { jobname: 'FIN_GL_EXTRACT',  command: '/opt/fin/extract.sh', argument: '--ledger GL --date today', agent: 'PRD_FIN_AGENT_01', job_type: 'UNIX',      account: 'sv-finance_prod', comp_code: '1', runs: 55, user_job: 'finprd' },
+      { jobname: 'FIN_AP_EXTRACT',  command: '/opt/fin/extract.sh', argument: '--ledger AP --date today', agent: 'PRD_FIN_AGENT_01', job_type: 'UNIX',      account: 'sv-finance_prod', comp_code: '1', runs: 52, user_job: 'finprd' },
+      { jobname: 'FIN_AR_EXTRACT',  command: '/opt/fin/extract.sh', argument: '--ledger AR --date today', agent: 'PRD_FIN_AGENT_02', job_type: 'UNIX',      account: 'sv-finance_prod', comp_code: '2', runs: 48, user_job: 'finprd' },
+      { jobname: 'FIN_GL_LOAD_DW',  command: '/opt/fin/load.sh',   argument: '--target finance_dw',      agent: 'PRD_FIN_AGENT_02', job_type: 'UNIX',      account: 'sv-finance_prod', comp_code: '1', runs: 45, user_job: 'finprd' },
+      { jobname: 'FIN_RECONCILE',   command: '/opt/fin/recon.sh',  argument: '--env prod',               agent: null,               job_type: 'MAINFRAME', account: null,              comp_code: '1', runs: 40, user_job: null },
+      { jobname: 'JSDELAY_FIN_001', command: 'jsddelay',           argument: '120',                      agent: null,               job_type: 'MAINFRAME', account: null,              comp_code: '1', runs: 63, user_job: null },
+    ],
+    job_run_table: [
+      { job_longname: 'FIN_GL_EXTRACT', command: '/opt/fin/extract.sh', argument: '--ledger GL --date today', runs: 55, start_date: '2026-03-25', start_time: '06:00:00', end_date: '2026-03-25', end_time: '06:20:00', exec_qtime: '00:20:00', ccfail: 'NO',  comp_code: '1' },
+      { job_longname: 'FIN_AP_EXTRACT', command: '/opt/fin/extract.sh', argument: '--ledger AP --date today', runs: 52, start_date: '2026-03-25', start_time: '06:21:00', end_date: '2026-03-25', end_time: '06:38:00', exec_qtime: '00:17:00', ccfail: 'NO',  comp_code: '1' },
+      { job_longname: 'FIN_AR_EXTRACT', command: '/opt/fin/extract.sh', argument: '--ledger AR --date today', runs: 48, start_date: '2026-03-25', start_time: '06:39:00', end_date: '2026-03-25', end_time: '06:55:00', exec_qtime: '00:16:00', ccfail: 'YES', comp_code: '2' },
+      { job_longname: 'FIN_GL_LOAD_DW', command: '/opt/fin/load.sh',   argument: '--target finance_dw',      runs: 45, start_date: '2026-03-25', start_time: '08:00:00', end_date: '2026-03-25', end_time: '08:35:00', exec_qtime: '00:35:00', ccfail: 'NO',  comp_code: '1' },
+      { job_longname: 'FIN_RECONCILE',  command: '/opt/fin/recon.sh',  argument: '--env prod',               runs: 40, start_date: '2026-03-25', start_time: '09:00:00', end_date: '2026-03-25', end_time: '09:20:00', exec_qtime: '00:20:00', ccfail: 'NO',  comp_code: '1' },
     ],
   },
 ]
