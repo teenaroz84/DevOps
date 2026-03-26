@@ -190,7 +190,7 @@ router.get('/metadata/:appl_name', async (req: Request, res: Response) => {
     const appl_name = decodeURIComponent(req.params.appl_name);
     const result = await pool.query(
       `SELECT jobname,
-              cmnd          AS command,
+              command,
               argument,
               agent,
               job_type,
@@ -230,7 +230,7 @@ router.get('/job-run-table/:appl_name', async (req: Request, res: Response) => {
     const result = await pool.query(
       `SELECT ec.appl_name,
               es.job_longname,
-              ec.cmnd        AS command,
+              ec.command,
               ec.argument,
               ec.runs,
               es.start_date,
@@ -281,14 +281,14 @@ router.get('/job-run-trend/:appl_name', async (req: Request, res: Response) => {
     const result = await pool.query(
       `SELECT
          end_date::date                                                 AS day,
-         EXTRACT(HOUR FROM end_time)::int                              AS hour,
+         EXTRACT(HOUR FROM end_time::time)::int                        AS hour,
          COUNT(jobname)                                                 AS job_count,
          SUM(CASE WHEN ccfail = 'YES' THEN 1 ELSE 0 END)::int         AS job_fail_count
        FROM esp_job_stats_recent
        WHERE appl_name = $1
-         AND end_date >= CURRENT_DATE - ($2 - 1) * INTERVAL '1 day'
-       GROUP BY end_date::date, EXTRACT(HOUR FROM end_time)
-       ORDER BY end_date::date, EXTRACT(HOUR FROM end_time)`,
+         AND end_date::date >= CURRENT_DATE - ($2 - 1) * INTERVAL '1 day'
+       GROUP BY end_date::date, EXTRACT(HOUR FROM end_time::time)
+       ORDER BY end_date::date, EXTRACT(HOUR FROM end_time::time)`,
       [appl_name, days]
     );
 
@@ -393,7 +393,7 @@ router.get('/summary/:appl_name', async (req: Request, res: Response) => {
         [appl_name]).then(r => r.rows.map((x: any) => ({ jobname: x.jobname, predecessor_job: x.predecessor_job }))), []),
 
       safe(() => pool.query(
-        `SELECT jobname, cmnd AS command, argument FROM esp_job_cmnd WHERE appl_name = $1 ORDER BY jobname LIMIT 100`,
+        `SELECT jobname, command, argument FROM esp_job_cmnd WHERE appl_name = $1 ORDER BY jobname LIMIT 100`,
         [appl_name]).then(r => r.rows.map((x: any) => ({ jobname: x.jobname, command: x.command ?? null, argument: x.argument ?? null }))), []),
     ]);
 

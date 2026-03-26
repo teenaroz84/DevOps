@@ -15,10 +15,21 @@ export const dmfService = {
 
   // ── Lineage tab ─────────────────────────────────────────
   getLineageMeta: () => apiClient.get('/api/dmf/lineage/meta'),
-  getLineageJobs: () => apiClient.get('/api/dmf/lineage/jobs'),
+  getLineageJobs: (filters: { src_cd?: string; dataset_nm?: string; src_nm?: string; tgt_nm?: string; proc_typ_cd?: string; run_status?: string } = {}) => {
+    const params = new URLSearchParams()
+    Object.entries(filters).forEach(([k, v]) => { if (v && v !== 'All') params.set(k, v) })
+    const qs = params.toString()
+    return apiClient.get(`/api/dmf/lineage/jobs${qs ? `?${qs}` : ''}`)
+  },
 
   // ── Analytics tab ───────────────────────────────────────
-  getAnalytics: () => apiClient.get('/api/dmf/analytics'),
+  getAnalyticsMeta: () => apiClient.get('/api/dmf/analytics/meta'),
+  getAnalytics: (filters: { src_typ?: string; tgt_typ?: string; step_nm?: string; tgt_nm?: string; run_status?: string } = {}) => {
+    const params = new URLSearchParams()
+    Object.entries(filters).forEach(([k, v]) => { if (v && v !== 'All') params.set(k, v) })
+    const qs = params.toString()
+    return apiClient.get(`/api/dmf/analytics${qs ? `?${qs}` : ''}`)
+  },
 
   // ── Trends tab ──────────────────────────────────────────
   getStatusTrend: () => apiClient.get('/api/dmf/status-trend'),

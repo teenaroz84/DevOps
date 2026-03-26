@@ -8,24 +8,14 @@ import {
   MenuItem,
   FormControl,
   Button,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
 } from '@mui/material'
 import FilterListIcon from '@mui/icons-material/FilterList'
-import StorageIcon from '@mui/icons-material/Storage'
 import AccountTreeIcon from '@mui/icons-material/AccountTree'
 import AnalyticsIcon from '@mui/icons-material/Analytics'
 import TrendingUpIcon from '@mui/icons-material/TrendingUp'
 import {
   StatCardGrid,
-  StatCardItem,
-  SegmentedBarList,
-  SegmentedBarItem,
-  DonutPair,
   DonutChart,
-  ComposedBarLineChart,
   TrendLineChart,
   DataTable,
   ColumnDef,
@@ -35,59 +25,13 @@ import {
 import { dmfService } from '../../services'
 import { useMockData } from '../../context/MockDataContext'
 import {
-  MOCK_DMF_SUMMARY, MOCK_DMF_STAGES, MOCK_DMF_RUN_STATUS, MOCK_DMF_FAILED_BY_STAGE,
-  MOCK_DMF_RUNS_OVER_TIME, MOCK_DMF_ERROR_REASONS, MOCK_DMF_RECENT_FAILURES,
   MOCK_DMF_STATUS_TREND, MOCK_DMF_ROWS_TREND, MOCK_DMF_JOBS_TREND, MOCK_DMF_STEP_FAILURE_TREND,
   MOCK_DMF_ANALYTICS, MOCK_DMF_LINEAGE_META, MOCK_DMF_LINEAGE_JOBS,
 } from '../../services/dmfMockData'
 
-const STAGE_COLORS: Record<string, string> = {
-  Ingestion: '#1565c0',
-  Enrichment: '#f57c00',
-  Distribution: '#2e7d32',
-  Integration: '#7b1fa2',
-}
 
-interface DMFSummary {
-  totalRuns: { value: number; trend: string; label: string }
-  failedRuns: { value: number; trend: string; label: string }
-  runsInProgress: { value: number; trend: string; label: string }
-  successRate: { value: number; trend: string; label: string }
-}
 
-interface DMFStage {
-  stage: string
-  success: number
-  inProgress: number
-  failed: number
-  rate: number
-}
 
-interface DMFRunStatus {
-  name: string
-  value: number
-  color: string
-}
-
-interface DMFErrorReason {
-  reason: string
-  ingestion: number
-  enrichment: number
-  distribution: number
-  integration: number
-}
-
-interface DMFFailure {
-  id: string
-  etlProcess: string
-  runId: string
-  batchId: string
-  startTime: string
-  endTime: string
-  failedStage: string
-  errorDescription: string
-  details: string
-}
 
 // ─── NEW: Lineage / Analytics / Trends types ───────────────
 interface LineageJob {
@@ -113,7 +57,6 @@ interface AnalyticsData {
 }
 
 const DMF_TABS = [
-  { key: 'overview',  label: 'Overview',  icon: <StorageIcon sx={{ fontSize: 14 }} /> },
   { key: 'lineage',   label: 'Lineage',   icon: <AccountTreeIcon sx={{ fontSize: 14 }} /> },
   { key: 'analytics', label: 'Analytics', icon: <AnalyticsIcon sx={{ fontSize: 14 }} /> },
   { key: 'trends',    label: 'Trends',    icon: <TrendingUpIcon sx={{ fontSize: 14 }} /> },
@@ -123,17 +66,8 @@ type DMFTab = typeof DMF_TABS[number]['key']
 
 export const DMFPipelineWidget: React.FC = () => {
   const { useMock } = useMockData()
-  const [activeTab, setActiveTab] = useState<DMFTab>('overview')
+  const [activeTab, setActiveTab] = useState<DMFTab>('lineage')
 
-  // ── Overview state ────────────────────────────────────────
-  const [summary, setSummary] = useState<DMFSummary | null>(null)
-  const [stages, setStages] = useState<DMFStage[]>([])
-  const [runStatus, setRunStatus] = useState<DMFRunStatus[]>([])
-  const [failedByStage, setFailedByStage] = useState<DMFRunStatus[]>([])
-  const [runsOverTime, setRunsOverTime] = useState<any[]>([])
-  const [errorReasons, setErrorReasons] = useState<DMFErrorReason[]>([])
-  const [recentFailures, setRecentFailures] = useState<DMFFailure[]>([])
-  const [loading, setLoading] = useState(true)
 
   // ── Lineage state ─────────────────────────────────────────
   const [lineageMeta,   setLineageMeta]   = useState<{ sourceCodes: string[]; datasetNames: string[]; sourceNames: string[]; targetNames: string[] } | null>(null)
@@ -146,7 +80,13 @@ export const DMFPipelineWidget: React.FC = () => {
 
   // ── Analytics state ───────────────────────────────────────
   const [analytics,       setAnalytics]       = useState<AnalyticsData | null>(null)
-  const [analyticsLoaded, setAnalyticsLoaded] = useState(false)
+  const [analyticsMeta,       setAnalyticsMeta]       = useState<{ sourceTypes: string[]; targetTypes: string[]; stepNames: string[]; runStatuses: string[] } | null>(null)
+  const [analyticsMetaLoaded, setAnalyticsMetaLoaded] = useState(false)
+  const [anlSrcType,          setAnlSrcType]          = useState('All')
+  const [anlTgtType,          setAnlTgtType]          = useState('All')
+  const [anlStepName,         setAnlStepName]         = useState('All')
+  const [anlRunStatus,        setAnlRunStatus]        = useState('All')
+  const [anlLoading,          setAnlLoading]          = useState(false)
 
   // ── Trends state ──────────────────────────────────────────
   const [statusTrend,      setStatusTrend]      = useState<any[]>([])
@@ -155,24 +95,16 @@ export const DMFPipelineWidget: React.FC = () => {
   const [stepFailureTrend, setStepFailureTrend] = useState<any[]>([])
   const [trendsLoaded,     setTrendsLoaded]     = useState(false)
 
-  // Filter state
-  const [dateRange, setDateRange] = useState('Last 7 Days')
-  const [etlProcess, setEtlProcess] = useState('All')
-  const [statusFilter, setStatusFilter] = useState('All')
-  const [stageFilter, setStageFilter] = useState('All')
-
-  // Interaction state
-  const [selectedStage, setSelectedStage] = useState<string | null>(null)
-  const [selectedFailure, setSelectedFailure] = useState<DMFFailure | null>(null)
-  const [selectedError, setSelectedError] = useState<DMFErrorReason | null>(null)
 
   // Reset all lazy-loaded tab data whenever mock toggle changes
   useEffect(() => {
     setLineageLoaded(false)
     setLineageMeta(null)
     setLineageJobs([])
-    setAnalyticsLoaded(false)
     setAnalytics(null)
+    setAnalyticsMetaLoaded(false)
+    setAnalyticsMeta(null)
+    setAnlSrcType('All'); setAnlTgtType('All'); setAnlStepName('All'); setAnlRunStatus('All')
     setTrendsLoaded(false)
     setStatusTrend([])
     setRowsTrend([])
@@ -180,40 +112,6 @@ export const DMFPipelineWidget: React.FC = () => {
     setStepFailureTrend([])
   }, [useMock])
 
-  useEffect(() => {
-    setLoading(true)
-    if (useMock) {
-      setSummary(MOCK_DMF_SUMMARY as any)
-      setStages(MOCK_DMF_STAGES as any)
-      setRunStatus(MOCK_DMF_RUN_STATUS as any)
-      setFailedByStage(MOCK_DMF_FAILED_BY_STAGE as any)
-      setRunsOverTime(MOCK_DMF_RUNS_OVER_TIME)
-      setErrorReasons(MOCK_DMF_ERROR_REASONS as any)
-      setRecentFailures(MOCK_DMF_RECENT_FAILURES as any)
-      setLoading(false)
-      return
-    }
-    Promise.all([
-      dmfService.getSummary(),
-      dmfService.getStages(),
-      dmfService.getRunStatus(),
-      dmfService.getFailedByStage(),
-      dmfService.getRunsOverTime(),
-      dmfService.getErrorReasons(),
-      dmfService.getRecentFailures(),
-    ])
-      .then(([sum, stg, rs, fbs, rot, er, rf]) => {
-        setSummary(sum)
-        setStages(stg)
-        setRunStatus(rs)
-        setFailedByStage(fbs)
-        setRunsOverTime(rot)
-        setErrorReasons(er)
-        setRecentFailures(rf)
-        setLoading(false)
-      })
-      .catch(() => setLoading(false))
-  }, [useMock])
 
   // ── Lazy-load Lineage data ────────────────────────────────
   useEffect(() => {
@@ -234,18 +132,29 @@ export const DMFPipelineWidget: React.FC = () => {
     }).catch(() => setLineageLoaded(true))
   }, [activeTab, lineageLoaded, useMock])
 
-  // ── Lazy-load Analytics data ──────────────────────────────
+  // ── Lazy-load Analytics meta (once per mock toggle) ────────
   useEffect(() => {
-    if (activeTab !== 'analytics' || analyticsLoaded) return
+    if (activeTab !== 'analytics' || analyticsMetaLoaded) return
     if (useMock) {
+      setAnalyticsMeta({ sourceTypes: [], targetTypes: [], stepNames: [], runStatuses: [] })
+      setAnalyticsMetaLoaded(true)
       setAnalytics(MOCK_DMF_ANALYTICS)
-      setAnalyticsLoaded(true)
       return
     }
-    dmfService.getAnalytics()
-      .then(d => { setAnalytics(d); setAnalyticsLoaded(true) })
-      .catch(() => setAnalyticsLoaded(true))
-  }, [activeTab, analyticsLoaded, useMock])
+    dmfService.getAnalyticsMeta()
+      .then(d => { setAnalyticsMeta(d); setAnalyticsMetaLoaded(true) })
+      .catch(() => setAnalyticsMetaLoaded(true))
+  }, [activeTab, analyticsMetaLoaded, useMock])
+
+  // ── Re-fetch Analytics data when filters change ───────────
+  useEffect(() => {
+    if (activeTab !== 'analytics' || !analyticsMetaLoaded || useMock) return
+    setAnlLoading(true)
+    dmfService.getAnalytics({ src_typ: anlSrcType, tgt_typ: anlTgtType, step_nm: anlStepName, run_status: anlRunStatus })
+      .then(d => setAnalytics(d))
+      .catch(() => {})
+      .finally(() => setAnlLoading(false))
+  }, [activeTab, analyticsMetaLoaded, anlSrcType, anlTgtType, anlStepName, anlRunStatus, useMock])
 
   // ── Lazy-load Trends data ─────────────────────────────────
   useEffect(() => {
@@ -268,127 +177,6 @@ export const DMFPipelineWidget: React.FC = () => {
       setTrendsLoaded(true)
     }).catch(() => setTrendsLoaded(true))
   }, [activeTab, trendsLoaded, useMock])
-
-  const activeStageFilter = selectedStage ?? (stageFilter !== 'All' ? stageFilter : null)
-
-  const filteredFailures = recentFailures.filter(f => {
-    if (activeStageFilter && f.failedStage !== activeStageFilter) return false
-    if (etlProcess !== 'All' && f.etlProcess !== etlProcess) return false
-    return true
-  })
-
-  const handleStageClick = (stageName: string) => {
-    if (selectedStage === stageName) {
-      setSelectedStage(null)
-      setStageFilter('All')
-    } else {
-      setSelectedStage(stageName)
-      setStageFilter(stageName)
-    }
-  }
-
-  const formatTime = (iso: string) =>
-    new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-
-  if (loading) {
-    return (
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 400 }}>
-        <CircularProgress size={40} />
-      </Box>
-    )
-  }
-
-  // ── Primitive data mappings ────────────────────────────────────────────────
-
-  const kpiItems: StatCardItem[] = summary
-    ? [
-        {
-          label: 'Total Runs',
-          value: summary.totalRuns.value.toLocaleString(),
-          color: '#1565c0',
-          bg: '#e3f2fd',
-          trend: summary.totalRuns.trend,
-          trendPositiveIsGood: true,
-          description: summary.totalRuns.label,
-        },
-        {
-          label: 'Failed Runs',
-          value: summary.failedRuns.value,
-          color: '#c62828',
-          bg: '#fce4ec',
-          trend: summary.failedRuns.trend,
-          trendPositiveIsGood: false,
-          description: summary.failedRuns.label,
-        },
-        {
-          label: 'In Progress',
-          value: summary.runsInProgress.value,
-          color: '#e65100',
-          bg: '#fff3e0',
-          trend: summary.runsInProgress.trend,
-          trendPositiveIsGood: true,
-          description: summary.runsInProgress.label,
-        },
-        {
-          label: 'Success Rate',
-          value: `${summary.successRate.value}%`,
-          color: '#2e7d32',
-          bg: '#e8f5e9',
-          trend: summary.successRate.trend,
-          trendPositiveIsGood: true,
-          description: summary.successRate.label,
-        },
-      ]
-    : []
-
-  const stageItems: SegmentedBarItem[] = stages.map(stg => ({
-    label: stg.stage,
-    labelColor: STAGE_COLORS[stg.stage],
-    segments: [
-      { value: stg.success,    color: '#2e7d32', label: 'Success'     },
-      { value: stg.inProgress, color: '#f57c00', label: 'In Progress' },
-      { value: stg.failed,     color: '#d32f2f', label: 'Failed'      },
-    ],
-    rightLabel: `${stg.rate}%`,
-    rightColor: stg.rate >= 90 ? '#2e7d32' : stg.rate >= 80 ? '#f57c00' : '#d32f2f',
-    selected: selectedStage === stg.stage,
-    onClick: () => handleStageClick(stg.stage),
-  }))
-
-  const errorReasonItems: SegmentedBarItem[] = errorReasons.map(reason => ({
-    label: reason.reason,
-    segments: [
-      { value: reason.ingestion,    color: '#1565c0', label: 'Ingestion'    },
-      { value: reason.enrichment,   color: '#f57c00', label: 'Enrichment'   },
-      { value: reason.distribution, color: '#2e7d32', label: 'Distribution' },
-      { value: reason.integration,  color: '#7b1fa2', label: 'Integration'  },
-    ],
-    rightLabel: String(reason.ingestion + reason.enrichment + reason.distribution + reason.integration),
-    onClick: () => setSelectedError(reason),
-  }))
-
-  const failuresColumns: ColumnDef<DMFFailure>[] = [
-    { key: 'etlProcess',       header: 'ETL Process',      flex: 2, render: r => r.etlProcess.replace(/_/g, ' ') },
-    { key: 'runId',            header: 'Run ID',           width: 90,  noWrap: true },
-    { key: 'batchId',          header: 'Batch ID',         width: 90 },
-    { key: 'startTime',        header: 'Start Time',       width: 130, noWrap: true, render: r => formatTime(r.startTime) },
-    { key: 'endTime',          header: 'End Time',         width: 130, noWrap: true, render: r => formatTime(r.endTime) },
-    {
-      key: 'failedStage',      header: 'Failed Stage',     width: 110,
-      render: r => (
-        <Chip
-          label={r.failedStage}
-          size="small"
-          sx={{
-            fontSize: '10px', height: 20, fontWeight: 600,
-            backgroundColor: `${STAGE_COLORS[r.failedStage] ?? '#999'}22`,
-            color: STAGE_COLORS[r.failedStage] ?? '#555',
-          }}
-        />
-      ),
-    },
-    { key: 'errorDescription', header: 'Error Description', flex: 3, render: r => r.errorDescription },
-  ]
 
   // ── Lineage columns ────────────────────────────────────────
   const lineageColumns: ColumnDef<LineageJob>[] = [
@@ -442,251 +230,6 @@ export const DMFPipelineWidget: React.FC = () => {
 
       {/* ── Tab content ── */}
       <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
-
-      {/* ════════════════════════════════════════════════════════
-         OVERVIEW TAB
-         ════════════════════════════════════════════════════════ */}
-      {activeTab === 'overview' && (
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-
-      {/* ── Header + Filter Bar ── */}
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <StorageIcon sx={{ color: '#1976d2', fontSize: 20 }} />
-          <Typography sx={{ fontWeight: 700, fontSize: '15px', color: '#1a1a1a' }}>DMF Dashboard</Typography>
-          {/* <Chip label="PostgreSQL" size="small" sx={{ fontSize: '10px', height: 20, backgroundColor: '#e3f2fd', color: '#1565c0', fontWeight: 600 }} /> */}
-        </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-          <FormControl size="small">
-            <Select value={dateRange} onChange={e => setDateRange(e.target.value)} sx={{ fontSize: '12px', height: 32, minWidth: 110 }}>
-              {['Today', 'Last 7 Days', 'Last 30 Days', 'Quarter'].map(v => (
-                <MenuItem key={v} value={v} sx={{ fontSize: '12px' }}>{v}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <FormControl size="small">
-            <Select value={etlProcess} onChange={e => setEtlProcess(e.target.value)} sx={{ fontSize: '12px', height: 32, minWidth: 160 }}>
-              {['All', 'CUSTOMER_LOAD_PIPELINE', 'ORDER_PROCESSING_PIPELINE', 'SALES_DATA_PIPELINE', 'FINANCE_PIPELINE'].map(v => (
-                <MenuItem key={v} value={v} sx={{ fontSize: '12px' }}>
-                  {v === 'All' ? 'All ETL Processes' : v.replace(/_/g, ' ')}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <FormControl size="small">
-            <Select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} sx={{ fontSize: '12px', height: 32, minWidth: 95 }}>
-              {['All', 'Success', 'Failed', 'In Progress'].map(v => (
-                <MenuItem key={v} value={v} sx={{ fontSize: '12px' }}>{v === 'All' ? 'All Status' : v}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <FormControl size="small">
-            <Select value={stageFilter} onChange={e => { setStageFilter(e.target.value); setSelectedStage(null) }} sx={{ fontSize: '12px', height: 32, minWidth: 115 }}>
-              {['All', 'Ingestion', 'Enrichment', 'Distribution', 'Integration'].map(v => (
-                <MenuItem key={v} value={v} sx={{ fontSize: '12px' }}>{v === 'All' ? 'All Stages' : v}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <Button
-            variant="contained"
-            size="small"
-            startIcon={<FilterListIcon />}
-            onClick={() => { setSelectedStage(null); setStageFilter('All'); setEtlProcess('All'); setStatusFilter('All') }}
-            sx={{ height: 32, fontSize: '12px', backgroundColor: '#1976d2', textTransform: 'none', px: 1.5 }}
-          >
-            Reset
-          </Button>
-        </Box>
-      </Box>
-
-      {/* ── KPI Cards ── */}
-      {summary && <StatCardGrid items={kpiItems} columns={4} />}
-
-      {/* ── Pipeline Stages + Donuts ── */}
-      <Box sx={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 2 }}>
-        {/* Pipeline Stages */}
-        <Box sx={{ backgroundColor: '#fff', border: '1px solid #e0e0e0', borderRadius: 2, p: 2 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-            <Typography sx={{ fontWeight: 700, fontSize: '13px', color: '#1a1a1a' }}>Pipeline Stages</Typography>
-            {selectedStage && (
-              <Chip
-                label={`Filtered: ${selectedStage}`}
-                size="small"
-                onDelete={() => { setSelectedStage(null); setStageFilter('All') }}
-                sx={{ fontSize: '10px', height: 20, backgroundColor: `${STAGE_COLORS[selectedStage]}22`, color: STAGE_COLORS[selectedStage] }}
-              />
-            )}
-          </Box>
-          <SegmentedBarList
-            items={stageItems}
-            barHeight={22}
-            labelWidth={100}
-            legend={[
-              { color: '#2e7d32', label: 'Success'     },
-              { color: '#f57c00', label: 'In Progress' },
-              { color: '#d32f2f', label: 'Failed'      },
-            ]}
-          />
-        </Box>
-
-        {/* Donut Charts */}
-        <DonutPair
-          left={{  title: 'Pipeline Run Status',    data: runStatus.map(r    => ({ name: r.name, value: r.value, color: r.color })) }}
-          right={{ title: 'Failed Stage Breakdown', data: failedByStage.map(r => ({ name: r.name, value: r.value, color: r.color })) }}
-        />
-      </Box>
-
-      {/* ── Runs Over Time + Top Error Reasons ── */}
-      <Box sx={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: 2 }}>
-        {/* Runs Over Time */}
-        <Box sx={{ backgroundColor: '#fff', border: '1px solid #e0e0e0', borderRadius: 2, p: 2 }}>
-          <Typography sx={{ fontWeight: 700, fontSize: '13px', color: '#1a1a1a', mb: 1.5 }}>Pipeline Runs Over Time</Typography>
-          <ComposedBarLineChart
-            data={runsOverTime}
-            xKey="date"
-            bars={[
-              { key: 'total',  label: 'Total Runs', color: '#1976d2' },
-              { key: 'failed', label: 'Failed',     color: '#d32f2f' },
-            ]}
-            lines={[
-              { key: 'successRate', label: 'Success Rate', color: '#2e7d32', unit: '%', yAxisId: 'right' },
-            ]}
-            rightYDomain={[85, 100]}
-            height={210}
-          />
-        </Box>
-
-        {/* Top Error Reasons */}
-        <Box sx={{ backgroundColor: '#fff', border: '1px solid #e0e0e0', borderRadius: 2, p: 2 }}>
-          <Typography sx={{ fontWeight: 700, fontSize: '13px', color: '#1a1a1a', mb: 1.5 }}>Top Error Reasons</Typography>
-          <SegmentedBarList
-            items={errorReasonItems}
-            barHeight={18}
-            compact
-            legend={[
-              { color: '#1565c0', label: 'Ingestion'    },
-              { color: '#f57c00', label: 'Enrichment'   },
-              { color: '#2e7d32', label: 'Distribution' },
-              { color: '#7b1fa2', label: 'Integration'  },
-            ]}
-          />
-        </Box>
-      </Box>
-
-      {/* ── Recent Pipeline Failures Table ── */}
-      <Box sx={{ backgroundColor: '#fff', border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
-        <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#fafafa' }}>
-          <Typography sx={{ fontWeight: 700, fontSize: '13px', color: '#1a1a1a' }}>Recent Pipeline Failures</Typography>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            {activeStageFilter && (
-              <Chip
-                label={`Stage: ${activeStageFilter}`}
-                size="small"
-                onDelete={() => { setSelectedStage(null); setStageFilter('All') }}
-                sx={{ fontSize: '10px', height: 20, backgroundColor: `${STAGE_COLORS[activeStageFilter]}22`, color: STAGE_COLORS[activeStageFilter] }}
-              />
-            )}
-            <Chip
-              label={`${filteredFailures.length} failures`}
-              size="small"
-              sx={{ fontSize: '10px', height: 20, backgroundColor: '#fce4ec', color: '#c62828', fontWeight: 600 }}
-            />
-          </Box>
-        </Box>
-        <DataTable<DMFFailure>
-          columns={failuresColumns}
-          rows={filteredFailures}
-          rowKey="id"
-          onRowClick={setSelectedFailure}
-          maxHeight={320}
-          emptyMessage="No failures match the current filters"
-          compact
-        />
-      </Box>
-
-      {/* ── Failure Detail Modal ── */}
-      <Dialog open={!!selectedFailure} onClose={() => setSelectedFailure(null)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ fontWeight: 700, fontSize: '15px', color: '#c62828', borderBottom: '1px solid #fce4ec', pb: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
-          Pipeline Failure Detail
-          {selectedFailure && (
-            <Chip
-              label={selectedFailure.failedStage}
-              size="small"
-              sx={{ fontSize: '10px', height: 20, backgroundColor: `${STAGE_COLORS[selectedFailure.failedStage] ?? '#999'}22`, color: STAGE_COLORS[selectedFailure.failedStage] ?? '#555' }}
-            />
-          )}
-        </DialogTitle>
-        <DialogContent sx={{ pt: 2 }}>
-          {selectedFailure && (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
-                {[
-                  { label: 'ETL Process', value: selectedFailure.etlProcess.replace(/_/g, ' ') },
-                  { label: 'Run ID',      value: selectedFailure.runId },
-                  { label: 'Batch ID',    value: selectedFailure.batchId },
-                  { label: 'Failed Stage',value: selectedFailure.failedStage },
-                  { label: 'Start Time',  value: new Date(selectedFailure.startTime).toLocaleString() },
-                  { label: 'End Time',    value: new Date(selectedFailure.endTime).toLocaleString() },
-                ].map(({ label, value }) => (
-                  <Box key={label} sx={{ backgroundColor: '#f9f9f9', p: 1.5, borderRadius: 1, border: '1px solid #f0f0f0' }}>
-                    <Typography sx={{ fontSize: '10px', color: '#999', mb: 0.3, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{label}</Typography>
-                    <Typography sx={{ fontSize: '12px', color: '#1a1a1a', fontWeight: 600 }}>{value}</Typography>
-                  </Box>
-                ))}
-              </Box>
-              <Box sx={{ backgroundColor: '#fce4ec', border: '1px solid #ef9a9a', borderRadius: 1, p: 1.5 }}>
-                <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#c62828', mb: 0.5 }}>Error Description</Typography>
-                <Typography sx={{ fontSize: '12px', color: '#333' }}>{selectedFailure.errorDescription}</Typography>
-              </Box>
-              <Box sx={{ backgroundColor: '#f5f5f5', border: '1px solid #e0e0e0', borderRadius: 1, p: 1.5 }}>
-                <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#555', mb: 0.5 }}>Resolution Details</Typography>
-                <Typography sx={{ fontSize: '12px', color: '#444', lineHeight: 1.7 }}>{selectedFailure.details}</Typography>
-              </Box>
-            </Box>
-          )}
-        </DialogContent>
-        <DialogActions sx={{ px: 2, pb: 2 }}>
-          <Button onClick={() => setSelectedFailure(null)} variant="contained" size="small" sx={{ textTransform: 'none', backgroundColor: '#1976d2' }}>Close</Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* ── Error Reason Detail Modal ── */}
-      <Dialog open={!!selectedError} onClose={() => setSelectedError(null)} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ fontWeight: 700, fontSize: '14px', borderBottom: '1px solid #f0f0f0', pb: 1.5 }}>
-          {selectedError?.reason}
-        </DialogTitle>
-        <DialogContent sx={{ pt: 2 }}>
-          {selectedError && (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-              <Typography sx={{ fontSize: '12px', color: '#666' }}>Error count by pipeline stage:</Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                {[
-                  { stage: 'Ingestion',    count: selectedError.ingestion,    color: '#1565c0', bg: '#e3f2fd' },
-                  { stage: 'Enrichment',   count: selectedError.enrichment,   color: '#f57c00', bg: '#fff3e0' },
-                  { stage: 'Distribution', count: selectedError.distribution, color: '#2e7d32', bg: '#e8f5e9' },
-                  { stage: 'Integration',  count: selectedError.integration,  color: '#7b1fa2', bg: '#f3e5f5' },
-                ].map(({ stage, count, color, bg }) => {
-                  const total = selectedError.ingestion + selectedError.enrichment + selectedError.distribution + selectedError.integration
-                  return (
-                    <Box key={stage} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1.5, backgroundColor: bg, borderRadius: 1 }}>
-                      <Typography sx={{ fontSize: '12px', fontWeight: 700, color, width: 95, flexShrink: 0 }}>{stage}</Typography>
-                      <Box sx={{ flex: 1, height: 8, backgroundColor: '#e0e0e0', borderRadius: 4, overflow: 'hidden' }}>
-                        <Box sx={{ height: '100%', width: `${(count / total) * 100}%`, backgroundColor: color, borderRadius: 4 }} />
-                      </Box>
-                      <Typography sx={{ fontSize: '14px', fontWeight: 800, color, minWidth: 28, textAlign: 'right' }}>{count}</Typography>
-                    </Box>
-                  )
-                })}
-              </Box>
-            </Box>
-          )}
-        </DialogContent>
-        <DialogActions sx={{ px: 2, pb: 2 }}>
-          <Button onClick={() => setSelectedError(null)} variant="contained" size="small" sx={{ textTransform: 'none', backgroundColor: '#1976d2' }}>Close</Button>
-        </DialogActions>
-      </Dialog>
-      </Box>
-      )}
 
       {/* ════════════════════════════════════════════════════════
          LINEAGE TAB
@@ -813,9 +356,48 @@ export const DMFPipelineWidget: React.FC = () => {
          ANALYTICS TAB
          ════════════════════════════════════════════════════════ */}
       {activeTab === 'analytics' && (
-        !analyticsLoaded ? (
+        !analyticsMetaLoaded ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}><CircularProgress size={36} /></Box>
-        ) : analytics && (
+        ) : (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {/* Analytics Filter Bar */}
+            <Box sx={{ backgroundColor: '#fff', border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
+              <WidgetShell title="Analytics Filters" source="Charts refresh on filter change" titleIcon={<FilterListIcon sx={{ fontSize: 16, color: '#1976d2' }} />}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', px: 2, py: 1.5 }}>
+                  {[
+                    { label: 'Source Type', value: anlSrcType,   setter: setAnlSrcType,   options: analyticsMeta?.sourceTypes ?? [] },
+                    { label: 'Target Type', value: anlTgtType,   setter: setAnlTgtType,   options: analyticsMeta?.targetTypes ?? [] },
+                    { label: 'Step Name',   value: anlStepName,  setter: setAnlStepName,  options: analyticsMeta?.stepNames   ?? [] },
+                    { label: 'Run Status',  value: anlRunStatus, setter: setAnlRunStatus, options: analyticsMeta?.runStatuses ?? [] },
+                  ].map(f => (
+                    <FormControl key={f.label} size="small">
+                      <Select
+                        value={f.value}
+                        onChange={e => f.setter(e.target.value)}
+                        sx={{ fontSize: '12px', height: 32, minWidth: 140 }}
+                        displayEmpty
+                      >
+                        <MenuItem value="All" sx={{ fontSize: '12px' }}>All {f.label}s</MenuItem>
+                        {f.options.map(o => (
+                          <MenuItem key={o} value={o} sx={{ fontSize: '12px' }}>{o}</MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  ))}
+                  <Button
+                    size="small"
+                    startIcon={<FilterListIcon />}
+                    onClick={() => { setAnlSrcType('All'); setAnlTgtType('All'); setAnlStepName('All'); setAnlRunStatus('All') }}
+                    sx={{ height: 32, fontSize: '12px', textTransform: 'none', px: 1.5 }}
+                  >
+                    Reset
+                  </Button>
+                  {anlLoading && <CircularProgress size={18} sx={{ ml: 1 }} />}
+                </Box>
+              </WidgetShell>
+            </Box>
+
+          {analytics && (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {/* Analytics KPI Summary */}
             <StatCardGrid
@@ -953,6 +535,8 @@ export const DMFPipelineWidget: React.FC = () => {
                 </WidgetShell>
               </Box>
             </Box>
+          </Box>
+          )}
           </Box>
         )
       )}
