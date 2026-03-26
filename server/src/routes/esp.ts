@@ -275,25 +275,24 @@ router.get('/job-run-trend/:appl_name', async (req: Request, res: Response) => {
     const pool = getPgPool();
     const appl_name = decodeURIComponent(req.params.appl_name);
     const rawDays = parseInt(String(req.query.days ?? '2'), 10);
-    // Guard: 1–7 days only
     const days = Math.min(Math.max(rawDays, 1), 7);
 
     const result = await pool.query(
       `SELECT
-         end_date::date                                                 AS day,
-         EXTRACT(HOUR FROM end_time::time)::int                        AS hour,
-         COUNT(jobname)                                                 AS job_count,
-         SUM(CASE WHEN ccfail = 'YES' THEN 1 ELSE 0 END)::int         AS job_fail_count
+         end_date                                                        AS day,
+         EXTRACT(HOUR FROM end_time)::int                               AS hour,
+         COUNT(jobname)::int                                            AS job_count,
+         SUM(CASE WHEN ccfail = 'YES' THEN 1 ELSE 0 END)::int          AS job_fail_count
        FROM esp_job_stats_recent
        WHERE appl_name = $1
-         AND end_date::date >= CURRENT_DATE - ($2 - 1) * INTERVAL '1 day'
-       GROUP BY end_date::date, EXTRACT(HOUR FROM end_time::time)
-       ORDER BY end_date::date, EXTRACT(HOUR FROM end_time::time)`,
+         AND end_date >= (CURRENT_DATE - ($2::int - 1) * INTERVAL '1 day')
+       GROUP BY end_date, EXTRACT(HOUR FROM end_time)
+       ORDER BY end_date, EXTRACT(HOUR FROM end_time)`,
       [appl_name, days]
     );
 
     res.json(result.rows.map((r: any) => ({
-      day:            String(r.day).split('T')[0],
+      day:            r.day ? String(r.day).split('T')[0] : null,
       hour:           parseInt(r.hour, 10),
       job_count:      parseInt(r.job_count, 10),
       job_fail_count: parseInt(r.job_fail_count, 10),
@@ -379,9 +378,9 @@ router.get('/summary/:appl_name', async (req: Request, res: Response) => {
         [appl_name]).then(r => r.rows.map((x: any) => ({ jobname: x.jobname, last_run_date: x.last_run_date }))), []),
 
       safe(() => pool.query(
-        `SELECT DATE(last_run_date) AS day, EXTRACT(HOUR FROM last_run_date) AS hour, COUNT(*) AS count
+        `SELECT DATE(last_run_date) AS day, EXTRACT(HOUR FROM last_run_date)::int AS hour, COUNT(*)::int AS count
          FROM esp_job_cmnd WHERE appl_name = $1 AND last_run_date >= NOW() - INTERVAL '2 days'
-         GROUP BY day, hour ORDER BY day, hour`,
+         GROUP BY DATE(last_run_date), EXTRACT(HOUR FROM last_run_date) ORDER BY DATE(last_run_date), EXTRACT(HOUR FROM last_run_date)`,
         [appl_name]).then(r => r.rows.map((x: any) => ({ day: String(x.day), hour: parseInt(x.hour), count: parseInt(x.count) }))), []),
 
       safe(() => pool.query(
