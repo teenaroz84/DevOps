@@ -25,7 +25,9 @@ import {
   TableBody,
   TableRow,
   TableCell,
+  Typography,
 } from '@mui/material'
+import TableRowsIcon from '@mui/icons-material/TableRows'
 
 export interface ColumnDef<T = any> {
   /** Property name on the row object, or any unique string when using render */
@@ -53,10 +55,12 @@ interface DataTableProps<T = any> {
   /** Key extractor. Falls back to index. */
   rowKey?: string | ((row: T) => string)
   compact?: boolean
-  /** Background color for the header row */
+  /** Background color for the header row (overrides default) */
   headerBg?: string
   /** Tooltip shown on row hover */
   rowTooltip?: string
+  /** Accent color for header left border strip (defaults to #1976d2) */
+  accentColor?: string
 }
 
 function getKey<T>(row: T, rowKey: DataTableProps<T>['rowKey'], idx: number): string {
@@ -73,33 +77,47 @@ export function DataTable<T = any>({
   emptyMessage = 'No data',
   rowKey,
   compact = false,
-  headerBg = '#f5f5f5',
+  headerBg,
   rowTooltip,
+  accentColor = '#1976d2',
 }: DataTableProps<T>) {
-  const cellPy = compact ? 0.5 : 1
+  const cellPy = compact ? 0.6 : 1
+  const resolvedHeaderBg = headerBg ?? '#f0f4f8'
 
   return (
-    <Box sx={{ overflowX: 'auto', ...(maxHeight ? { maxHeight, overflowY: 'auto' } : {}) }}>
+    <Box
+      sx={{
+        overflowX: 'auto',
+        borderRadius: 1.5,
+        border: '1px solid #e8ecf1',
+        ...(maxHeight ? { maxHeight, overflowY: 'auto' } : {}),
+      }}
+    >
       <Table size="small" stickyHeader>
         <TableHead>
           <TableRow>
-            {columns.map(col => (
+            {columns.map((col, colIdx) => (
               <TableCell
                 key={col.key}
                 align={col.align ?? 'left'}
                 sx={{
-                  fontSize: '11px',
+                  fontSize: '10px',
                   fontWeight: 700,
-                  color: '#555',
+                  color: '#4a5568',
                   py: cellPy,
                   px: 1.5,
                   textTransform: 'uppercase',
-                  letterSpacing: '0.3px',
+                  letterSpacing: '0.5px',
                   whiteSpace: 'nowrap',
-                  borderBottom: '2px solid #e0e0e0',
-                  backgroundColor: `${headerBg} !important`,
+                  borderBottom: `2px solid ${accentColor}33`,
+                  backgroundColor: `${resolvedHeaderBg} !important`,
                   width: col.width,
                   ...(col.flex ? { minWidth: 0 } : {}),
+                  // Left accent strip on first column
+                  ...(colIdx === 0 ? {
+                    borderLeft: `3px solid ${accentColor}`,
+                    pl: '10px',
+                  } : {}),
                 }}
               >
                 {col.header}
@@ -113,9 +131,14 @@ export function DataTable<T = any>({
             <TableRow>
               <TableCell
                 colSpan={columns.length}
-                sx={{ textAlign: 'center', py: 3, color: '#888', fontSize: '13px', border: 0 }}
+                sx={{ border: 0 }}
               >
-                {emptyMessage}
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 4, gap: 1 }}>
+                  <TableRowsIcon sx={{ fontSize: 28, color: '#d0d5dd' }} />
+                  <Typography sx={{ fontSize: '12px', color: '#aab', fontWeight: 500 }}>
+                    {emptyMessage}
+                  </Typography>
+                </Box>
               </TableCell>
             </TableRow>
           ) : (
@@ -126,22 +149,32 @@ export function DataTable<T = any>({
                 title={rowTooltip}
                 sx={{
                   cursor: onRowClick ? 'pointer' : 'default',
-                  transition: 'background 0.1s',
-                  '&:hover': onRowClick ? { backgroundColor: '#f5f9ff' } : {},
+                  transition: 'background 0.12s, border-color 0.12s',
+                  backgroundColor: idx % 2 === 0 ? '#ffffff' : '#fafbfc',
+                  '&:hover': onRowClick
+                    ? { backgroundColor: `${accentColor}0d`, '& td:first-of-type': { borderLeftColor: accentColor } }
+                    : { backgroundColor: idx % 2 === 0 ? '#f7f9fc' : '#f4f6f9' },
                   '&:last-child td': { border: 0 },
                 }}
               >
-                {columns.map(col => (
+                {columns.map((col, colIdx) => (
                   <TableCell
                     key={col.key}
                     align={col.align ?? 'left'}
                     sx={{
                       fontSize: compact ? '11px' : '12px',
-                      color: '#333',
+                      color: '#2d3748',
                       py: cellPy,
                       px: 1.5,
+                      borderBottom: '1px solid #f0f2f5',
                       ...(col.noWrap ? { whiteSpace: 'nowrap' } : {}),
                       ...(col.width ? { width: col.width } : {}),
+                      // Carry the left accent through body rows too
+                      ...(colIdx === 0 ? {
+                        borderLeft: `3px solid ${accentColor}22`,
+                        pl: '10px',
+                        transition: 'border-color 0.12s',
+                      } : {}),
                     }}
                   >
                     {col.render

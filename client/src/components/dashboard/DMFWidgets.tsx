@@ -21,6 +21,7 @@ import {
   ColumnDef,
   WidgetShell,
   MetricBarList,
+  ComposedBarLineChart,
 } from '../widgets'
 import { dmfService } from '../../services'
 import { useMockData } from '../../context/MockDataContext'
@@ -334,6 +335,7 @@ export const DMFPipelineWidget: React.FC = () => {
               >
                 <DataTable<LineageJob>
                   columns={lineageColumns}
+                  accentColor="#1565c0"
                   rows={lineageJobs.filter(j => {
                     if (lgSourceCode !== 'All' && j.sourceCode !== lgSourceCode) return false
                     if (lgDataset !== 'All' && j.datasetName !== lgDataset) return false
@@ -418,7 +420,7 @@ export const DMFPipelineWidget: React.FC = () => {
               compact
             />
 
-            {/* Status Donut + Source Type + Target Type + Step Failures */}
+            {/* Status Donut + Source Type (bar) + Target Type (bar) + Step Failures (bar) */}
             <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr 1.5fr 1fr', gap: 2 }}>
               {/* Status Summary — Donut */}
               <Box sx={{ backgroundColor: '#fff', border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
@@ -437,58 +439,49 @@ export const DMFPipelineWidget: React.FC = () => {
                 </WidgetShell>
               </Box>
 
-              {/* Source Type Counts */}
+              {/* Source Type Counts — vertical bar chart */}
               <Box sx={{ backgroundColor: '#fff', border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
                 <WidgetShell title="Count of Source Type" source={`${analytics.sourceTypeCounts.length} types`}>
-                  <Box sx={{ maxHeight: 220, overflow: 'auto', px: 1.5, py: 1 }}>
-                    <MetricBarList
-                      items={analytics.sourceTypeCounts.map((r, i) => ({
-                        label: r.type,
-                        value: r.count,
-                        max: Math.max(...analytics.sourceTypeCounts.map(x => x.count)),
-                        color: ['#1565c0', '#2e7d32', '#f57c00', '#d32f2f', '#7b1fa2', '#00838f', '#4527a0'][i % 7],
-                        suffix: '',
-                      }))}
-                      compact
-                      barHeight={6}
+                  <Box sx={{ px: 1, pb: 1 }}>
+                    <ComposedBarLineChart
+                      data={analytics.sourceTypeCounts.map(r => ({ type: r.type, count: r.count }))}
+                      xKey="type"
+                      bars={[{ key: 'count', label: 'Records', color: '#1565c0' }]}
+                      lines={[]}
+                      height={190}
+                      margin={{ top: 6, right: 8, left: -20, bottom: 40 }}
                     />
                   </Box>
                 </WidgetShell>
               </Box>
 
-              {/* Target Type Counts */}
+              {/* Target Type Counts — vertical bar chart */}
               <Box sx={{ backgroundColor: '#fff', border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
                 <WidgetShell title="Count of Target Type" source={`${analytics.targetTypeCounts.length} types`}>
-                  <Box sx={{ maxHeight: 220, overflow: 'auto', px: 1.5, py: 1 }}>
-                    <MetricBarList
-                      items={analytics.targetTypeCounts.map((r, i) => ({
-                        label: r.type,
-                        value: r.count,
-                        max: Math.max(...analytics.targetTypeCounts.map(x => x.count)),
-                        color: ['#00838f', '#4527a0', '#1565c0', '#2e7d32', '#f57c00', '#d32f2f', '#7b1fa2', '#e65100'][i % 8],
-                        suffix: '',
-                      }))}
-                      compact
-                      barHeight={6}
+                  <Box sx={{ px: 1, pb: 1 }}>
+                    <ComposedBarLineChart
+                      data={analytics.targetTypeCounts.map(r => ({ type: r.type, count: r.count }))}
+                      xKey="type"
+                      bars={[{ key: 'count', label: 'Records', color: '#00838f' }]}
+                      lines={[]}
+                      height={190}
+                      margin={{ top: 6, right: 8, left: -20, bottom: 40 }}
                     />
                   </Box>
                 </WidgetShell>
               </Box>
 
-              {/* Step Failure Counts */}
+              {/* Step Failure Counts — vertical bar chart */}
               <Box sx={{ backgroundColor: '#fff', border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
                 <WidgetShell title="Step Failures" source="DMF">
-                  <Box sx={{ maxHeight: 220, overflow: 'auto', px: 1.5, py: 1 }}>
-                    <MetricBarList
-                      items={analytics.stepFailureCounts.map(r => ({
-                        label: r.step,
-                        value: r.count,
-                        max: Math.max(...analytics.stepFailureCounts.map(x => x.count)),
-                        color: '#d32f2f',
-                        suffix: '',
-                      }))}
-                      compact
-                      barHeight={6}
+                  <Box sx={{ px: 1, pb: 1 }}>
+                    <ComposedBarLineChart
+                      data={analytics.stepFailureCounts.map(r => ({ step: r.step, count: r.count }))}
+                      xKey="step"
+                      bars={[{ key: 'count', label: 'Failures', color: '#d32f2f' }]}
+                      lines={[]}
+                      height={190}
+                      margin={{ top: 6, right: 8, left: -20, bottom: 40 }}
                     />
                   </Box>
                 </WidgetShell>

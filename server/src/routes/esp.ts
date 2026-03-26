@@ -278,16 +278,24 @@ router.get('/job-run-trend/:appl_name', async (req: Request, res: Response) => {
     const days = Math.min(Math.max(rawDays, 1), 7);
 
     const result = await pool.query(
-      `SELECT
-         end_date                                                        AS day,
-         EXTRACT(HOUR FROM end_time::time)::int                         AS hour,
-         COUNT(jobname)::int                                            AS job_count,
-         SUM(CASE WHEN ccfail = 'YES' THEN 1 ELSE 0 END)::int          AS job_fail_count
-       FROM esp_job_stats_recent
-       WHERE appl_name = $1
-         AND end_date::date >= (CURRENT_DATE - ($2::int - 1) * INTERVAL '1 day')
-       GROUP BY end_date, EXTRACT(HOUR FROM end_time::time)
-       ORDER BY end_date, EXTRACT(HOUR FROM end_time::time)`,
+      `WITH base AS (
+         SELECT
+           end_date,
+           end_time::time        AS et,
+           jobname,
+           ccfail
+         FROM esp_job_stats_recent
+         WHERE appl_name = $1
+           AND end_date::date >= (CURRENT_DATE - ($2::int - 1) * INTERVAL '1 day')
+       )
+       SELECT
+         end_date                                               AS day,
+         EXTRACT(HOUR FROM et)::int                            AS hour,
+         COUNT(jobname)::int                                   AS job_count,
+         SUM(CASE WHEN ccfail = 'YES' THEN 1 ELSE 0 END)::int AS job_fail_count
+       FROM base
+       GROUP BY end_date, EXTRACT(HOUR FROM et)
+       ORDER BY end_date, EXTRACT(HOUR FROM et)`,
       [appl_name, days]
     );
 

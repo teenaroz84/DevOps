@@ -240,11 +240,11 @@ router.get('/status-trend', async (_req: Request, res: Response) => {
     const pool = getPgPool();
     const { rows } = await pool.query(`
       SELECT run_status,
-             TO_CHAR(proc_dt, 'Mon') AS month_name,
+             TO_CHAR(proc_dt::date, 'Mon') AS month_name,
              COUNT(*) AS cnt
       FROM edoops.DMF_RUN_MASTER
-      GROUP BY run_status, TO_CHAR(proc_dt, 'Mon')
-      ORDER BY MIN(proc_dt)
+      GROUP BY run_status, TO_CHAR(proc_dt::date, 'Mon')
+      ORDER BY MIN(proc_dt::date)
       LIMIT 150
     `);
 
@@ -277,13 +277,13 @@ router.get('/rows-trend', async (_req: Request, res: Response) => {
   try {
     const pool = getPgPool();
     const { rows } = await pool.query(`
-      SELECT TO_CHAR(proc_dt, 'Mon') AS month_name,
+      SELECT TO_CHAR(proc_dt::date, 'Mon') AS month_name,
              SUM(rows_loaded) AS rows_loaded,
              SUM(rows_parsed) AS rows_parsed,
              SUM(rows_rjctd)  AS rows_rjctd
       FROM edoops.DMF_RUN_STEP_DETAIL
-      GROUP BY TO_CHAR(proc_dt, 'Mon')
-      ORDER BY MIN(proc_dt)
+      GROUP BY TO_CHAR(proc_dt::date, 'Mon')
+      ORDER BY MIN(proc_dt::date)
       LIMIT 150
     `);
     res.json(rows.map((r: any) => ({
@@ -304,11 +304,11 @@ router.get('/jobs-trend', async (_req: Request, res: Response) => {
     const pool = getPgPool();
     const { rows } = await pool.query(`
       SELECT proc_typ_cd,
-             TO_CHAR(proc_dt, 'Mon') AS month_name,
+             TO_CHAR(proc_dt::date, 'Mon') AS month_name,
              COUNT(DISTINCT run_id)  AS cnt
       FROM edoops.DMF_RUN_MASTER
-      GROUP BY proc_typ_cd, TO_CHAR(proc_dt, 'Mon')
-      ORDER BY MIN(proc_dt)
+      GROUP BY proc_typ_cd, TO_CHAR(proc_dt::date, 'Mon')
+      ORDER BY MIN(proc_dt::date)
       LIMIT 150
     `);
 
@@ -331,11 +331,11 @@ router.get('/step-failure-trend', async (_req: Request, res: Response) => {
   try {
     const pool = getPgPool();
     const { rows } = await pool.query(`
-      SELECT TO_CHAR(proc_dt, 'Mon') AS period,
+      SELECT TO_CHAR(proc_dt::date, 'Mon') AS period,
              COUNT(*) AS cnt
       FROM edoops.DMF_RUN_STEP_DETAIL
-      GROUP BY TO_CHAR(proc_dt, 'Mon')
-      ORDER BY MIN(proc_dt)
+      GROUP BY TO_CHAR(proc_dt::date, 'Mon')
+      ORDER BY MIN(proc_dt::date)
       LIMIT 150
     `);
     res.json(rows.map((r: any) => ({

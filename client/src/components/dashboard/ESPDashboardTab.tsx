@@ -10,7 +10,7 @@ import PeopleIcon from '@mui/icons-material/People'
 import AppsIcon from '@mui/icons-material/Apps'
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown'
 import {
-  WidgetShell, StatCardGrid, MetricBarList, DataTable, TrendLineChart,
+  WidgetShell, StatCardGrid, MetricBarList, DataTable, TrendLineChart, DonutChart, ComposedBarLineChart,
 } from '../widgets'
 import type { ColumnDef } from '../widgets'
 import { espService } from '../../services'
@@ -312,6 +312,7 @@ export const ESPDashboardTab: React.FC = () => {
                     rowKey="jobname"
                     compact
                     maxHeight={280}
+                    accentColor="#2e7d32"
                     emptyMessage="No jobs found"
                   />
                 </Box>
@@ -369,30 +370,85 @@ export const ESPDashboardTab: React.FC = () => {
             </Paper>
           </Box>
 
-          {/* ── Row 3: Agent | Job Type | Completion Code | Account ── */}
+          {/* ── Row 3: Agent (bar) | Job Type (donut) | Completion Code (donut) | Account (bar) ── */}
           <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2 }}>
-            {[
-              { title: 'Agent',           icon: <PeopleIcon sx={{ color: '#1976d2', fontSize: 18 }} />,    items: data.agents,           accent: '#1976d2' },
-              { title: 'Job Type',        icon: <StorageIcon sx={{ color: '#6a1b9a', fontSize: 18 }} />,    items: data.job_types,        accent: '#6a1b9a' },
-              { title: 'Completion Code', icon: <ScheduleIcon sx={{ color: '#2e7d32', fontSize: 18 }} />,   items: data.completion_codes, accent: '#2e7d32' },
-              { title: 'Account',         icon: <AccountTreeIcon sx={{ color: '#f57c00', fontSize: 18 }} />, items: data.accounts,         accent: '#f57c00' },
-            ].map(({ title, icon, items, accent }) => (
-              <Paper key={title} elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: `1px solid ${accent}22`, borderTop: `3px solid ${accent}`, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-                <WidgetShell title={title} source={`${items.length} entries`} titleIcon={icon}>
-                  <Box sx={{ p: 1.5 }}>
-                    {items.length === 0 ? (
-                      <Typography sx={{ fontSize: '11px', color: '#bbb', textAlign: 'center', py: 2 }}>No data</Typography>
-                    ) : (
-                      <MetricBarList
-                        items={toBarItems(items)}
-                        barHeight={8}
-                        compact
-                      />
-                    )}
-                  </Box>
-                </WidgetShell>
-              </Paper>
-            ))}
+
+            {/* Agent — horizontal bar */}
+            <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #1976d222', borderTop: '3px solid #1976d2', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+              <WidgetShell title="Agent" source={`${data.agents.length} entries`} titleIcon={<PeopleIcon sx={{ color: '#1976d2', fontSize: 18 }} />}>
+                <Box sx={{ px: 1.5, pb: 1.5, pt: 0.5 }}>
+                  {data.agents.length === 0 ? (
+                    <Typography sx={{ fontSize: '11px', color: '#bbb', textAlign: 'center', py: 2 }}>No data</Typography>
+                  ) : (
+                    <ComposedBarLineChart
+                      data={data.agents.map(a => ({ name: a.name, count: a.count }))}
+                      xKey="name"
+                      bars={[{ key: 'count', label: 'Jobs', color: '#1976d2' }]}
+                      lines={[]}
+                      height={180}
+                      margin={{ top: 8, right: 8, left: -20, bottom: 40 }}
+                    />
+                  )}
+                </Box>
+              </WidgetShell>
+            </Paper>
+
+            {/* Job Type — donut */}
+            <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #6a1b9a22', borderTop: '3px solid #6a1b9a', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+              <WidgetShell title="Job Type" source={`${data.job_types.length} types`} titleIcon={<StorageIcon sx={{ color: '#6a1b9a', fontSize: 18 }} />}>
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
+                  {data.job_types.length === 0 ? (
+                    <Typography sx={{ fontSize: '11px', color: '#bbb', py: 2 }}>No data</Typography>
+                  ) : (
+                    <DonutChart
+                      data={data.job_types.map((t, i) => ({
+                        name: t.name,
+                        value: t.count,
+                        color: ['#6a1b9a', '#1976d2', '#2e7d32', '#f57c00', '#c62828', '#00838f'][i % 6],
+                      }))}
+                      size={140}
+                      centerLabel={data.job_types.reduce((s, t) => s + t.count, 0)}
+                      showLegend
+                    />
+                  )}
+                </Box>
+              </WidgetShell>
+            </Paper>
+
+            {/* Completion Code — donut */}
+            <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #2e7d3222', borderTop: '3px solid #2e7d32', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+              <WidgetShell title="Completion Code" source={`${data.completion_codes.length} codes`} titleIcon={<ScheduleIcon sx={{ color: '#2e7d32', fontSize: 18 }} />}>
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
+                  {data.completion_codes.length === 0 ? (
+                    <Typography sx={{ fontSize: '11px', color: '#bbb', py: 2 }}>No data</Typography>
+                  ) : (
+                    <DonutChart
+                      data={data.completion_codes.map((c, i) => ({
+                        name: c.name,
+                        value: c.count,
+                        color: ['#2e7d32', '#c62828', '#f57c00', '#1976d2', '#6a1b9a', '#00838f'][i % 6],
+                      }))}
+                      size={140}
+                      centerLabel={data.completion_codes.reduce((s, c) => s + c.count, 0)}
+                      showLegend
+                    />
+                  )}
+                </Box>
+              </WidgetShell>
+            </Paper>
+
+            {/* Account — horizontal bar */}
+            <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #f57c0022', borderTop: '3px solid #f57c00', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+              <WidgetShell title="Account" source={`${data.accounts.length} entries`} titleIcon={<AccountTreeIcon sx={{ color: '#f57c00', fontSize: 18 }} />}>
+                <Box sx={{ p: 1.5 }}>
+                  {data.accounts.length === 0 ? (
+                    <Typography sx={{ fontSize: '11px', color: '#bbb', textAlign: 'center', py: 2 }}>No data</Typography>
+                  ) : (
+                    <MetricBarList items={toBarItems(data.accounts)} barHeight={8} compact />
+                  )}
+                </Box>
+              </WidgetShell>
+            </Paper>
           </Box>
 
           {/* ── Row 4: Predecessor Jobs | Successor Jobs | Metadata Table ── */}
@@ -411,6 +467,7 @@ export const ESPDashboardTab: React.FC = () => {
                     rowKey="jobname"
                     compact
                     maxHeight={220}
+                    accentColor="#1565c0"
                     emptyMessage="No predecessor jobs"
                   />
                 </Box>
@@ -430,6 +487,7 @@ export const ESPDashboardTab: React.FC = () => {
                     rowKey="jobname"
                     compact
                     maxHeight={220}
+                    accentColor="#2e7d32"
                     emptyMessage="No successor jobs"
                   />
                 </Box>
@@ -453,6 +511,7 @@ export const ESPDashboardTab: React.FC = () => {
                     rowKey="jobname"
                     compact
                     maxHeight={220}
+                    accentColor="#37474f"
                     emptyMessage="No records"
                   />
                 </Box>
@@ -477,6 +536,7 @@ export const ESPDashboardTab: React.FC = () => {
                     rowKey="jobname"
                     compact
                     maxHeight={280}
+                    accentColor="#37474f"
                     emptyMessage="No metadata records"
                   />
                 </Box>
@@ -501,6 +561,7 @@ export const ESPDashboardTab: React.FC = () => {
                     rowKey={(r) => `${r.job_longname}-${r.start_date}-${r.start_time}`}
                     compact
                     maxHeight={320}
+                    accentColor="#1565c0"
                     emptyMessage="No run records found"
                   />
                 </Box>

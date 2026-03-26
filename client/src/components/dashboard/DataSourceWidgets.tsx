@@ -10,6 +10,8 @@ import { DrillDownModal, DrillDownData } from './DrillDownModal'
 import { WidgetShell, StatCardGrid, MetricBarList, DataTable, ColumnDef } from '../widgets'
 import { cloudwatchService, servicenowService, snowflakeService, postgresService, espService } from '../../services'
 import { DonutChart } from '../widgets'
+import { useMockData } from '../../context/MockDataContext'
+import { MOCK_SERVICENOW_TICKETS, MOCK_SERVICENOW_INCIDENTS } from '../../services/servicenowMockData'
 
 const SEV_CONFIG: Record<string, { color: string; bg: string; dot: string }> = {
   critical: { color: '#c62828', bg: '#fce4ec', dot: '#e53935' },
@@ -96,6 +98,7 @@ export const ErrorsWidget: React.FC = () => {
             onRowClick={row => setDrillDown({ type: 'error', data: row })}
             rowKey="id"
             compact
+            accentColor="#e53935"
             rowTooltip="Click to view stack trace & resolution"
           />
         </Box>
@@ -122,12 +125,18 @@ export const TicketsWidget: React.FC = () => {
   const [tickets, setTickets] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [drillDown, setDrillDown] = useState<DrillDownData | null>(null)
+  const { useMock } = useMockData()
 
   useEffect(() => {
+    if (useMock) {
+      setTickets(MOCK_SERVICENOW_TICKETS)
+      setLoading(false)
+      return
+    }
     servicenowService.getTickets()
       .then(d => { setTickets(d); setLoading(false) })
       .catch(() => setLoading(false))
-  }, [])
+  }, [useMock])
 
   const open = tickets.filter(t => t.status !== 'resolved').length
   const breached = tickets.filter(t => t.sla?.breached).length
@@ -183,6 +192,7 @@ export const TicketsWidget: React.FC = () => {
             onRowClick={row => setDrillDown({ type: 'ticket', data: row })}
             rowKey="id"
             compact
+            accentColor="#7b1fa2"
             rowTooltip="Click to view ticket details & activity"
           />
         </Box>
@@ -453,6 +463,7 @@ export const JobListWidget: React.FC = () => {
           rows={jobList}
           rowKey="appl_name"
           compact
+          accentColor="#1976d2"
           rowTooltip="Application job last run date"
         />
       </Box>
@@ -474,12 +485,19 @@ export const IncidentsWidget: React.FC = () => {
   const [incidents, setIncidents] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const { useMock } = useMockData()
 
   useEffect(() => {
+    if (useMock) {
+      setIncidents(MOCK_SERVICENOW_INCIDENTS)
+      setError(null)
+      setLoading(false)
+      return
+    }
     servicenowService.getIncidents()
       .then(d => { setIncidents(Array.isArray(d) ? d : []); setLoading(false) })
       .catch(err => { setError(err.message || 'Failed to fetch incidents'); setLoading(false) })
-  }, [])
+  }, [useMock])
 
   const totalIncidents = incidents.reduce((sum, i) => sum + (i.incident_count || 0), 0)
 
