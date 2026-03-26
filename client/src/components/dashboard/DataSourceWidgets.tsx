@@ -491,9 +491,9 @@ export const IncidentsWidget: React.FC = () => {
 
   return (
     <WidgetShell
-      title="Incidents by Priority"
+      title="Open P1/P2/P3 Problems by Priority"
       titleIcon={<WarningAmberIcon sx={{ color: '#c62828', fontSize: 18 }} />}
-      source="PostgreSQL · ServiceNow"
+      source="PostgreSQL · edoops.service_now_prb"
       loading={loading}
       error={error ?? undefined}
     >
