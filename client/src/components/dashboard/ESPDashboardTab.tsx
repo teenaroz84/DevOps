@@ -498,7 +498,7 @@ export const ESPDashboardTab: React.FC = () => {
                   <DataTable
                     columns={jobRunTableCols}
                     rows={jobRunTable}
-                    rowKey="job_longname"
+                    rowKey={(r) => `${r.job_longname}-${r.start_date}-${r.start_time}`}
                     compact
                     maxHeight={320}
                     emptyMessage="No run records found"
