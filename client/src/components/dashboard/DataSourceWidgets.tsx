@@ -128,6 +128,8 @@ export const TicketsWidget: React.FC = () => {
   const { useMock } = useMockData()
 
   useEffect(() => {
+    setLoading(true)
+    setTickets([])
     if (useMock) {
       setTickets(MOCK_SERVICENOW_TICKETS)
       setLoading(false)
@@ -488,9 +490,11 @@ export const IncidentsWidget: React.FC = () => {
   const { useMock } = useMockData()
 
   useEffect(() => {
+    setLoading(true)
+    setIncidents([])
+    setError(null)
     if (useMock) {
       setIncidents(MOCK_SERVICENOW_INCIDENTS)
-      setError(null)
       setLoading(false)
       return
     }

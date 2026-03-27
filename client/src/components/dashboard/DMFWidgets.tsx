@@ -290,32 +290,80 @@ export const DMFPipelineWidget: React.FC = () => {
               </WidgetShell>
             </Box>
 
-            {/* Reference Lists — MetricBarList showing job count per item */}
-            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 2 }}>
-              {[
-                { title: 'Source Code',  field: 'sourceCode'  as keyof LineageJob, items: lineageMeta?.sourceCodes ?? [],  color: '#1565c0' },
-                { title: 'Dataset Name', field: 'datasetName' as keyof LineageJob, items: lineageMeta?.datasetNames ?? [], color: '#2e7d32' },
-                { title: 'Source Name',  field: 'sourceName'  as keyof LineageJob, items: lineageMeta?.sourceNames ?? [],  color: '#f57c00' },
-                { title: 'Target Name',  field: 'targetName'  as keyof LineageJob, items: lineageMeta?.targetNames ?? [],  color: '#7b1fa2' },
-              ].map(col => (
-                <Box key={col.title} sx={{ backgroundColor: '#fff', border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
-                  <WidgetShell title={col.title} source={`${col.items.length} items`}>
-                    <Box sx={{ maxHeight: 220, overflow: 'auto', px: 1.5, py: 1 }}>
-                      <MetricBarList
-                        items={col.items.map(item => ({
-                          label: item,
-                          value: lineageJobs.filter(j => j[col.field] === item).length,
-                          max: Math.max(1, ...col.items.map(it => lineageJobs.filter(j => j[col.field] === it).length)),
-                          color: col.color,
-                          suffix: ' jobs',
-                        }))}
-                        compact
-                        barHeight={5}
-                      />
-                    </Box>
-                  </WidgetShell>
-                </Box>
-              ))}
+            {/* Visual breakdowns — 2×2 chart grid */}
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+
+              {/* Status donut */}
+              <Box sx={{ backgroundColor: '#fff', border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
+                <WidgetShell title="Job Status Distribution" source="All lineage jobs">
+                  <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
+                    <DonutChart
+                      data={[
+                        { name: 'Success', value: lineageJobs.filter(j => j.status === 'success').length, color: '#2e7d32' },
+                        { name: 'Failed',  value: lineageJobs.filter(j => j.status !== 'success').length, color: '#d32f2f' },
+                      ].filter(d => d.value > 0)}
+                      centerLabel={lineageJobs.length}
+                      showLegend
+                      size={150}
+                    />
+                  </Box>
+                </WidgetShell>
+              </Box>
+
+              {/* Process type donut */}
+              <Box sx={{ backgroundColor: '#fff', border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
+                <WidgetShell title="Process Type Breakdown" source="All lineage jobs">
+                  <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
+                    <DonutChart
+                      data={['ING','ENR','DIS','INT'].map((type, i) => ({
+                        name: type,
+                        value: lineageJobs.filter(j => j.processTypeCode === type).length,
+                        color: ['#1565c0','#f57c00','#2e7d32','#7b1fa2'][i],
+                      })).filter(d => d.value > 0)}
+                      centerLabel={lineageJobs.length}
+                      showLegend
+                      size={150}
+                    />
+                  </Box>
+                </WidgetShell>
+              </Box>
+
+              {/* Source code bar chart */}
+              <Box sx={{ backgroundColor: '#fff', border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
+                <WidgetShell title="Jobs by Source Code" source={`Top ${Math.min((lineageMeta?.sourceCodes ?? []).length, 10)}`}>
+                  <Box sx={{ px: 1, py: 1 }}>
+                    <ComposedBarLineChart
+                      data={(lineageMeta?.sourceCodes ?? []).slice(0, 10).map(sc => ({
+                        name: sc,
+                        count: lineageJobs.filter(j => j.sourceCode === sc).length,
+                      }))}
+                      xKey="name"
+                      bars={[{ key: 'count', label: 'Jobs', color: '#1565c0' }]}
+                      lines={[]}
+                      height={180}
+                    />
+                  </Box>
+                </WidgetShell>
+              </Box>
+
+              {/* Target name bar chart */}
+              <Box sx={{ backgroundColor: '#fff', border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
+                <WidgetShell title="Jobs by Target Name" source={`Top ${Math.min((lineageMeta?.targetNames ?? []).length, 10)}`}>
+                  <Box sx={{ px: 1, py: 1 }}>
+                    <ComposedBarLineChart
+                      data={(lineageMeta?.targetNames ?? []).slice(0, 10).map(tn => ({
+                        name: tn.length > 14 ? tn.slice(0, 14) + '…' : tn,
+                        count: lineageJobs.filter(j => j.targetName === tn).length,
+                      }))}
+                      xKey="name"
+                      bars={[{ key: 'count', label: 'Jobs', color: '#7b1fa2' }]}
+                      lines={[]}
+                      height={180}
+                    />
+                  </Box>
+                </WidgetShell>
+              </Box>
+
             </Box>
 
             {/* Job Details table */}

@@ -17,8 +17,9 @@ import {
   AlertBanner,
 } from '../widgets'
 import { DMFPipelineWidget } from './DMFWidgets'
-import { TicketsWidget, LogStreamWidget, CostWidget, IncidentsWidget } from './DataSourceWidgets'
+import { TicketsWidget, IncidentsWidget } from './DataSourceWidgets'
 import { ESPDashboardTab } from './ESPDashboardTab'
+import { TalendDashboardTab } from './TalendDashboardTab'
 import { dmfService, servicenowService, cloudwatchService, snowflakeService, postgresService } from '../../services'
 
 // ─── Source definitions ────────────────────────────────────
@@ -671,12 +672,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onChatCl
             <IncidentsWidget />
           </Box>
         )}
-        {source === 'logs' && (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, p: 2 }}>
-            <LogStreamWidget />
-            <CostWidget />
-          </Box>
-        )}
+        {source === 'logs' && <TalendDashboardTab />}
         {source === 'pipeline' && <ESPDashboardTab />}
         </Box>
 

@@ -3,7 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { generateAWSResponse } from './awsAgent';
 import { mockKPIs, mockCostBreakdown, mockErrors, mockLogs, mockTickets, mockDMFSummary, mockDMFStages, mockDMFRunStatus, mockDMFFailedByStage, mockDMFRunsOverTime, mockDMFErrorReasons, mockDMFRecentFailures, mockDMFStatusTrend, mockDMFRowsTrend, mockDMFJobsTrend, mockDMFStepFailureTrend, mockDMFAnalytics, mockDMFLineageMeta, mockDMFLineageJobs } from './mockData';
-import { espRoutes, servicenowDbRoutes, dmfDbRoutes, postgresDbRoutes } from './routes';
+import { espRoutes, servicenowDbRoutes, dmfDbRoutes, postgresDbRoutes, talendDbRoutes } from './routes';
 
 dotenv.config();
 
@@ -19,6 +19,7 @@ app.use('/api/esp',        espRoutes);          // GET /api/esp/job-counts
 app.use('/api/servicenow', servicenowDbRoutes); // GET /api/servicenow/incidents
 app.use('/api/dmf',        dmfDbRoutes);        // GET /api/dmf/run-status
 app.use('/api/postgres',   postgresDbRoutes);   // GET /api/postgres/pipelines
+app.use('/api/talend',     talendDbRoutes);     // GET /api/talend/summary
 
 // ─── Existing chat route ───────────────────────────────────
 app.get('/api/health', (req: Request, res: Response) => {
@@ -66,19 +67,14 @@ app.get('/api/cloudwatch/logs', (_req: Request, res: Response) => {
   res.json(data);
 });
 
-// ─── SERVICENOW — Tickets ──────────────────────────────────
+// ─── SERVICENOW — Tickets (no live source; return empty so TicketsWidget
+//     only shows data in mock mode via the frontend toggle) ────────────────
 app.get('/api/servicenow/tickets', (_req: Request, res: Response) => {
-  const { status, priority } = _req.query;
-  let data = [...mockTickets];
-  if (status) data = data.filter(t => t.status === status);
-  if (priority) data = data.filter(t => t.priority === priority);
-  res.json(data);
+  res.json([]);
 });
 
-app.get('/api/servicenow/tickets/:id', (req: Request, res: Response) => {
-  const ticket = mockTickets.find(t => t.id === req.params.id);
-  if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
-  res.json(ticket);
+app.get('/api/servicenow/tickets/:id', (_req: Request, res: Response) => {
+  res.status(404).json({ error: 'Ticket not found' });
 });
 
 // ─── DMF PIPELINE ──────────────────────────────────────────

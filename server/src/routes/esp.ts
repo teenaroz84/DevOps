@@ -281,12 +281,11 @@ router.get('/job-run-trend/:appl_name', async (req: Request, res: Response) => {
       `WITH base AS (
          SELECT
            end_date,
-           end_time::time        AS et,
+           end_time::time AS et,
            jobname,
            ccfail
          FROM esp_job_stats_recent
          WHERE appl_name = $1
-           AND end_date::date >= (CURRENT_DATE - ($2::int - 1) * INTERVAL '1 day')
        )
        SELECT
          end_date                                               AS day,
@@ -296,7 +295,7 @@ router.get('/job-run-trend/:appl_name', async (req: Request, res: Response) => {
        FROM base
        GROUP BY end_date, EXTRACT(HOUR FROM et)
        ORDER BY end_date, EXTRACT(HOUR FROM et)`,
-      [appl_name, days]
+      [appl_name]
     );
 
     res.json(result.rows.map((r: any) => ({
