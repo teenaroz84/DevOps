@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Box, Typography, Chip } from '@mui/material'
+import { Box, Typography, Chip, Paper } from '@mui/material'
 import BugReportIcon from '@mui/icons-material/BugReport'
 import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber'
 import StreamIcon from '@mui/icons-material/Stream'
@@ -802,4 +802,47 @@ export const PipelinesWidget: React.FC = () => {
   )
 }
 
+// ─── ServiceNow Dashboard (full-page layout) ───────────────
 
+import SupportAgentIcon from '@mui/icons-material/SupportAgent'
+
+export const ServiceNowDashboard: React.FC = () => {
+  const { useMock } = useMockData()
+
+  return (
+    <Box sx={{ bgcolor: '#f5f6f8', minHeight: '100%', p: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+
+      {/* ── Header bar ── */}
+      <Paper elevation={0} sx={{ borderRadius: 2, border: '1px solid #e8ecf1', bgcolor: '#f8f9fb', overflow: 'hidden' }}>
+        <Box sx={{ px: 2, py: 1.25, display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+          <SupportAgentIcon sx={{ fontSize: 16, color: '#c62828' }} />
+          <Typography sx={{ fontWeight: 700, fontSize: '11px', color: '#555', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+            ServiceNow — ITSM Dashboard
+          </Typography>
+          {useMock && (
+            <Chip label="MOCK DATA" size="small" sx={{ fontSize: '9px', height: 18, bgcolor: '#fff3e0', color: '#f57c00', fontWeight: 700, border: '1px solid #f57c0040' }} />
+          )}
+          <Typography sx={{ fontSize: '11px', color: '#aaa', ml: 'auto' }}>
+            Source: PostgreSQL · edoops.service_now_prb / service_now_chg
+          </Typography>
+        </Box>
+      </Paper>
+
+      {/* ── Row 1: Problems by Priority + Emergency Changes (side by side) ── */}
+      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, alignItems: 'start' }}>
+        <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #c62828', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+          <IncidentsWidget />
+        </Paper>
+        <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #7b1fa2', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+          <EmergencyChangesWidget />
+        </Paper>
+      </Box>
+
+      {/* ── Row 2: Ageing Problems (full width) ── */}
+      <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #e65100', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+        <AgeingProblemsWidget />
+      </Paper>
+
+    </Box>
+  )
+}

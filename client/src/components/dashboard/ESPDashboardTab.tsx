@@ -100,7 +100,21 @@ export const ESPDashboardTab: React.FC = () => {
       return
     }
     espService.getAppSummary(selected)
-      .then((res: any) => setData(res))
+      .then((res: any) => {
+        if (!res || res.error) { setData(null); return }
+        setData({
+          ...res,
+          agents:           Array.isArray(res.agents)           ? res.agents           : [],
+          job_types:        Array.isArray(res.job_types)        ? res.job_types        : [],
+          completion_codes: Array.isArray(res.completion_codes) ? res.completion_codes : [],
+          user_jobs:        Array.isArray(res.user_jobs)        ? res.user_jobs        : [],
+          job_list:         Array.isArray(res.job_list)         ? res.job_list         : [],
+          job_run_trend:    Array.isArray(res.job_run_trend)    ? res.job_run_trend    : [],
+          successor_jobs:   Array.isArray(res.successor_jobs)   ? res.successor_jobs   : [],
+          predecessor_jobs: Array.isArray(res.predecessor_jobs) ? res.predecessor_jobs : [],
+          metadata:         Array.isArray(res.metadata)         ? res.metadata         : [],
+        })
+      })
       .catch(() => setData(null))
       .finally(() => setLoading(false))
   }, [selected, useMock])

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Box, Typography, Chip } from '@mui/material'
+import { Box, Typography, Chip, Paper, CircularProgress } from '@mui/material'
 import IntegrationInstructionsIcon from '@mui/icons-material/IntegrationInstructions'
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline'
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
@@ -173,93 +173,125 @@ export const TalendDashboardTab: React.FC = () => {
   ]
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, p: 2 }}>
+    <Box sx={{ bgcolor: '#f5f6f8', minHeight: '100%', p: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
 
-      {/* ── Row 1: Stat cards ── */}
-      <WidgetShell
-        title="Talend Execution Summary"
-        titleIcon={<IntegrationInstructionsIcon sx={{ color: '#e65100', fontSize: 18 }} />}
-        source="PostgreSQL · edoops.talend_logs"
-        loading={loading}
-        error={error ?? undefined}
-      >
-        <Box sx={{ px: 1.5, py: 1 }}>
-          <StatCardGrid items={statCards} columns={6} compact />
+      {/* ── Header bar ── */}
+      <Paper elevation={0} sx={{ borderRadius: 2, border: '1px solid #e8ecf1', bgcolor: '#f8f9fb', overflow: 'hidden' }}>
+        <Box sx={{ px: 2, py: 1.25, display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+          <IntegrationInstructionsIcon sx={{ fontSize: 16, color: '#e65100' }} />
+          <Typography sx={{ fontWeight: 700, fontSize: '11px', color: '#555', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+            Talend — Job Execution Logs
+          </Typography>
+          {useMock && (
+            <Chip label="MOCK DATA" size="small" sx={{ fontSize: '9px', height: 18, bgcolor: '#fff3e0', color: '#f57c00', fontWeight: 700, border: '1px solid #f57c0040' }} />
+          )}
+          <Typography sx={{ fontSize: '11px', color: '#aaa', ml: 'auto' }}>
+            Source: PostgreSQL · edoops.talend_logs
+          </Typography>
         </Box>
-      </WidgetShell>
+      </Paper>
 
-      {/* ── Row 2: Status donut + Log level bar chart ── */}
-      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1.6fr', gap: 2, alignItems: 'start' }}>
+      {/* ── Loading ── */}
+      {loading && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+          <CircularProgress sx={{ color: '#e65100' }} />
+        </Box>
+      )}
 
-        <WidgetShell
-          title="Execution Status Breakdown"
-          titleIcon={<CheckCircleOutlineIcon sx={{ color: '#2e7d32', fontSize: 18 }} />}
-          source="edoops.talend_logs"
-          loading={loading}
-        >
-          <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
-            <DonutChart
-              data={donutData}
-              centerLabel={total}
-              showLegend
-              size={150}
-            />
+      {/* ── Error ── */}
+      {error && !loading && (
+        <Paper elevation={0} sx={{ borderRadius: 2, p: 4, textAlign: 'center', border: '1px solid #fce4ec', bgcolor: '#fff8f8' }}>
+          <Typography sx={{ fontSize: '13px', color: '#c62828' }}>{error}</Typography>
+        </Paper>
+      )}
+
+      {!loading && !error && (
+        <>
+          {/* ── Row 1: Stat cards ── */}
+          <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #e65100', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+            <WidgetShell
+              title="Talend Execution Summary"
+              titleIcon={<IntegrationInstructionsIcon sx={{ color: '#e65100', fontSize: 18 }} />}
+              source="edoops.talend_logs"
+            >
+              <Box sx={{ px: 1.5, py: 1 }}>
+                <StatCardGrid items={statCards} columns={6} compact />
+              </Box>
+            </WidgetShell>
+          </Paper>
+
+          {/* ── Row 2: Status donut + Log level bar chart ── */}
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1.6fr', gap: 2, alignItems: 'start' }}>
+            <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #2e7d32', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+              <WidgetShell
+                title="Execution Status Breakdown"
+                titleIcon={<CheckCircleOutlineIcon sx={{ color: '#2e7d32', fontSize: 18 }} />}
+                source="edoops.talend_logs"
+              >
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
+                  <DonutChart data={donutData} centerLabel={total} showLegend size={150} />
+                </Box>
+              </WidgetShell>
+            </Paper>
+
+            <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #1565c0', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+              <WidgetShell
+                title="Log Level Distribution"
+                titleIcon={<ErrorOutlineIcon sx={{ color: '#c62828', fontSize: 18 }} />}
+                source="edoops.talend_logs · level_text"
+              >
+                <Box sx={{ px: 1, py: 1 }}>
+                  <ComposedBarLineChart
+                    data={levelBarData}
+                    xKey="name"
+                    bars={[{ key: 'count', label: 'Log Count', color: '#e65100' }]}
+                    lines={[]}
+                    height={180}
+                  />
+                </Box>
+              </WidgetShell>
+            </Paper>
           </Box>
-        </WidgetShell>
 
-        <WidgetShell
-          title="Log Level Distribution"
-          titleIcon={<ErrorOutlineIcon sx={{ color: '#c62828', fontSize: 18 }} />}
-          source="edoops.talend_logs · level_text"
-          loading={loading}
-        >
-          <Box sx={{ px: 1, py: 1 }}>
-            <ComposedBarLineChart
-              data={levelBarData}
-              xKey="name"
-              bars={[{ key: 'count', label: 'Log Count', color: '#e65100' }]}
-              lines={[]}
-              height={180}
-            />
-          </Box>
-        </WidgetShell>
-      </Box>
+          {/* ── Row 3: Recent task executions table ── */}
+          <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #1565c0', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+            <WidgetShell
+              title="Recent Task Executions"
+              titleIcon={<ListAltIcon sx={{ color: '#1565c0', fontSize: 18 }} />}
+              source="edoops.talend_logs · latest 50"
+            >
+              <Box sx={{ px: 1.5, pb: 1.5 }}>
+                <DataTable
+                  columns={taskCols}
+                  rows={recentTasks}
+                  rowKey="task_execution_id"
+                  compact
+                  accentColor="#e65100"
+                />
+              </Box>
+            </WidgetShell>
+          </Paper>
 
-      {/* ── Row 3: Recent task executions table ── */}
-      <WidgetShell
-        title="Recent Task Executions"
-        titleIcon={<ListAltIcon sx={{ color: '#1565c0', fontSize: 18 }} />}
-        source="edoops.talend_logs · latest 50"
-        loading={loading}
-      >
-        <Box sx={{ px: 1.5, pb: 1.5 }}>
-          <DataTable
-            columns={taskCols}
-            rows={recentTasks}
-            rowKey="task_execution_id"
-            compact
-            accentColor="#e65100"
-          />
-        </Box>
-      </WidgetShell>
-
-      {/* ── Row 4: FATAL / ERROR log entries ── */}
-      <WidgetShell
-        title="Recent Errors & Fatal Logs"
-        titleIcon={<ErrorOutlineIcon sx={{ color: '#c62828', fontSize: 18 }} />}
-        source="edoops.talend_logs · FATAL / ERROR · latest 50"
-        loading={loading}
-      >
-        <Box sx={{ px: 1.5, pb: 1.5 }}>
-          <DataTable
-            columns={errorCols}
-            rows={recentErrors}
-            rowKey="execution_timestamp"
-            compact
-            accentColor="#c62828"
-          />
-        </Box>
-      </WidgetShell>
+          {/* ── Row 4: FATAL / ERROR log entries ── */}
+          <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #c62828', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+            <WidgetShell
+              title="Recent Errors & Fatal Logs"
+              titleIcon={<ErrorOutlineIcon sx={{ color: '#c62828', fontSize: 18 }} />}
+              source="edoops.talend_logs · FATAL / ERROR · latest 50"
+            >
+              <Box sx={{ px: 1.5, pb: 1.5 }}>
+                <DataTable
+                  columns={errorCols}
+                  rows={recentErrors}
+                  rowKey="execution_timestamp"
+                  compact
+                  accentColor="#c62828"
+                />
+              </Box>
+            </WidgetShell>
+          </Paper>
+        </>
+      )}
 
     </Box>
   )

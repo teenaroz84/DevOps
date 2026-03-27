@@ -194,7 +194,7 @@ router.get('/metadata/:appl_name', async (req: Request, res: Response) => {
               argument,
               agent,
               jobtype AS job_type,
-              CAST(cmpl_cd AS TEXT) AS comp_code,
+              esp_command AS comp_code,
               runs,
               user_job
        FROM esp_job_cmnd

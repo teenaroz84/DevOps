@@ -17,7 +17,7 @@ import {
   AlertBanner,
 } from '../widgets'
 import { DMFPipelineWidget } from './DMFWidgets'
-import { IncidentsWidget, AgeingProblemsWidget, EmergencyChangesWidget } from './DataSourceWidgets'
+import { ServiceNowDashboard } from './DataSourceWidgets'
 import { ESPDashboardTab } from './ESPDashboardTab'
 import { TalendDashboardTab } from './TalendDashboardTab'
 import { dmfService, cloudwatchService, snowflakeService, postgresService } from '../../services'
@@ -626,13 +626,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onChatCl
       <Box sx={{ flex: 1, overflow: 'auto', backgroundColor: '#f5f6f8' }}>
         {source === 'overview'   && <OverviewLanding onSourceSelect={setSource} />}
         {source === 'dmf'        && <DMFPipelineWidget />}
-        {source === 'servicenow' && (
-          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, p: 2, alignItems: 'start' }}>
-            <IncidentsWidget />
-            <AgeingProblemsWidget />
-            <EmergencyChangesWidget />
-          </Box>
-        )}
+        {source === 'servicenow' && <ServiceNowDashboard />}
         {source === 'logs' && <TalendDashboardTab />}
         {source === 'pipeline' && <ESPDashboardTab />}
         </Box>
