@@ -6,12 +6,19 @@ import StreamIcon from '@mui/icons-material/Stream'
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney'
 import TrendingUpIcon from '@mui/icons-material/TrendingUp'
 import PipelineIcon from '@mui/icons-material/AccountTree'
+import HourglassTopIcon from '@mui/icons-material/HourglassTop'
+import BuildCircleIcon from '@mui/icons-material/BuildCircle'
 import { DrillDownModal, DrillDownData } from './DrillDownModal'
 import { WidgetShell, StatCardGrid, MetricBarList, DataTable, ColumnDef } from '../widgets'
 import { cloudwatchService, servicenowService, snowflakeService, postgresService, espService } from '../../services'
 import { DonutChart } from '../widgets'
 import { useMockData } from '../../context/MockDataContext'
-import { MOCK_SERVICENOW_TICKETS, MOCK_SERVICENOW_INCIDENTS } from '../../services/servicenowMockData'
+import {
+  MOCK_SERVICENOW_TICKETS,
+  MOCK_SERVICENOW_INCIDENTS,
+  MOCK_SERVICENOW_AGEING_PROBLEMS,
+  MOCK_SERVICENOW_EMERGENCY_CHANGES,
+} from '../../services/servicenowMockData'
 
 const SEV_CONFIG: Record<string, { color: string; bg: string; dot: string }> = {
   critical: { color: '#c62828', bg: '#fce4ec', dot: '#e53935' },
@@ -541,6 +548,181 @@ export const IncidentsWidget: React.FC = () => {
               <DonutChart
                 data={donutData}
                 centerLabel={totalIncidents}
+                showLegend
+                size={140}
+              />
+            </Box>
+          )}
+        </>
+      )}
+    </WidgetShell>
+  )
+}
+
+// ─── Ageing Problems Widget ────────────────────────────────
+
+export const AgeingProblemsWidget: React.FC = () => {
+  const [problems, setProblems] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const { useMock } = useMockData()
+
+  useEffect(() => {
+    setLoading(true)
+    setProblems([])
+    setError(null)
+    if (useMock) {
+      setProblems(MOCK_SERVICENOW_AGEING_PROBLEMS)
+      setLoading(false)
+      return
+    }
+    servicenowService.getAgeingProblems()
+      .then(d => { setProblems(Array.isArray(d) ? d : []); setLoading(false) })
+      .catch(err => { setError(err.message || 'Failed to fetch ageing problems'); setLoading(false) })
+  }, [useMock])
+
+  const byPriority = ['P1','P2','P3'].map(p => ({
+    p,
+    count: problems.filter(r => r.priority_field === p).length,
+  }))
+  const totalDays = problems.map(r => {
+    const opened = r.snprb_opened_at_dttm ? new Date(r.snprb_opened_at_dttm) : null
+    return opened ? Math.floor((Date.now() - opened.getTime()) / 86_400_000) : 0
+  })
+  const avgAge = totalDays.length ? Math.round(totalDays.reduce((s, d) => s + d, 0) / totalDays.length) : 0
+  const maxAge = totalDays.length ? Math.max(...totalDays) : 0
+
+  const columns: ColumnDef[] = [
+    {
+      key: 'priority_field', header: 'Priority', width: 75,
+      render: row => (
+        <Chip label={row.priority_field} size="small"
+          sx={{ height: 20, fontSize: '10px', fontWeight: 700,
+            color: PRIORITY_CONFIG[row.priority_field]?.color || '#555',
+            backgroundColor: PRIORITY_CONFIG[row.priority_field]?.bg || '#eee' }} />
+      ),
+    },
+    { key: 'snprb_pltf_nm',       header: 'Platform',   flex: 1,  render: row => <Typography sx={{ fontSize: '11px', color: '#333' }}>{row.snprb_pltf_nm || '—'}</Typography> },
+    { key: 'snprb_prb_state',     header: 'State',      width: 90, render: row => <Typography sx={{ fontSize: '11px', color: '#666', textTransform: 'capitalize' }}>{(row.snprb_prb_state || '').replace('_',' ')}</Typography> },
+    {
+      key: 'snprb_opened_at_dttm', header: 'Opened', width: 110,
+      render: row => {
+        const days = row.snprb_opened_at_dttm
+          ? Math.floor((Date.now() - new Date(row.snprb_opened_at_dttm).getTime()) / 86_400_000)
+          : null
+        return (
+          <Box>
+            <Typography sx={{ fontSize: '11px', color: days && days > 60 ? '#c62828' : '#555', fontWeight: days && days > 60 ? 700 : 400 }}>
+              {days != null ? `${days}d ago` : '—'}
+            </Typography>
+            <Typography sx={{ fontSize: '10px', color: '#bbb' }}>
+              {row.snprb_opened_at_dttm ? new Date(row.snprb_opened_at_dttm).toLocaleDateString() : ''}
+            </Typography>
+          </Box>
+        )
+      },
+    },
+  ]
+
+  return (
+    <WidgetShell
+      title="Ageing Problems (Open > 30 Days)"
+      titleIcon={<HourglassTopIcon sx={{ color: '#e65100', fontSize: 18 }} />}
+      source="PostgreSQL · edoops.service_now_prb"
+      loading={loading}
+      error={error ?? undefined}
+    >
+      {!error && (
+        <>
+          <Box sx={{ px: 1.5, py: 1 }}>
+            <StatCardGrid
+              items={[
+                ...byPriority.map(({ p, count }) => ({
+                  label: p, value: count,
+                  color: PRIORITY_CONFIG[p]?.color || '#555',
+                  bg: PRIORITY_CONFIG[p]?.bg || '#eee',
+                })),
+                { label: 'Avg Age', value: `${avgAge}d`, color: '#e65100', bg: '#fff3e0' },
+                { label: 'Max Age', value: `${maxAge}d`, color: '#c62828', bg: '#fce4ec' },
+              ]}
+              columns={5}
+              compact
+            />
+          </Box>
+          <Box sx={{ flex: 1, overflowY: 'auto', px: 1.5, pb: 1 }}>
+            <DataTable
+              columns={columns}
+              rows={problems}
+              rowKey="snprb_opened_at_dttm"
+              compact
+              accentColor="#e65100"
+            />
+          </Box>
+        </>
+      )}
+    </WidgetShell>
+  )
+}
+
+// ─── Emergency Changes Widget ──────────────────────────────
+
+export const EmergencyChangesWidget: React.FC = () => {
+  const [changes, setChanges] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const { useMock } = useMockData()
+
+  useEffect(() => {
+    setLoading(true)
+    setChanges([])
+    setError(null)
+    if (useMock) {
+      setChanges(MOCK_SERVICENOW_EMERGENCY_CHANGES)
+      setLoading(false)
+      return
+    }
+    servicenowService.getEmergencyChanges()
+      .then(d => { setChanges(Array.isArray(d) ? d : []); setLoading(false) })
+      .catch(err => { setError(err.message || 'Failed to fetch emergency changes'); setLoading(false) })
+  }, [useMock])
+
+  const total = changes.reduce((s, r) => s + (r.incident_count || 0), 0)
+  const donutData = changes.map(r => ({
+    name: r.priority_field || 'Unknown',
+    value: r.incident_count || 0,
+    color: PRIORITY_CONFIG[r.priority_field]?.color || '#757575',
+  }))
+
+  return (
+    <WidgetShell
+      title="Open Emergency Changes by Priority"
+      titleIcon={<BuildCircleIcon sx={{ color: '#7b1fa2', fontSize: 18 }} />}
+      source="PostgreSQL · edoops.service_now_chg"
+      loading={loading}
+      error={error ?? undefined}
+    >
+      {!error && (
+        <>
+          <Box sx={{ px: 1.5, py: 1 }}>
+            <StatCardGrid
+              items={[
+                ...changes.map(r => ({
+                  label: r.priority_field || 'Unknown',
+                  value: r.incident_count || 0,
+                  color: PRIORITY_CONFIG[r.priority_field]?.color || '#757575',
+                  bg: r.priority_field === 'P1' ? '#fce4ec' : r.priority_field === 'P2' ? '#fff3e0' : '#e8f5e9',
+                })),
+                { label: 'Total', value: total, color: '#7b1fa2', bg: '#f3e5f5' },
+              ]}
+              columns={Math.min(changes.length + 1, 4)}
+              compact
+            />
+          </Box>
+          {donutData.length > 0 && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
+              <DonutChart
+                data={donutData}
+                centerLabel={total}
                 showLegend
                 size={140}
               />

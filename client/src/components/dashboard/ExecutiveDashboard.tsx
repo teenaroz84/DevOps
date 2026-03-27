@@ -17,7 +17,7 @@ import {
   AlertBanner,
 } from '../widgets'
 import { DMFPipelineWidget } from './DMFWidgets'
-import { TicketsWidget, IncidentsWidget } from './DataSourceWidgets'
+import { TicketsWidget, IncidentsWidget, AgeingProblemsWidget, EmergencyChangesWidget } from './DataSourceWidgets'
 import { ESPDashboardTab } from './ESPDashboardTab'
 import { TalendDashboardTab } from './TalendDashboardTab'
 import { dmfService, servicenowService, cloudwatchService, snowflakeService, postgresService } from '../../services'
@@ -670,6 +670,8 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onChatCl
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, p: 2, alignItems: 'start' }}>
             <TicketsWidget />
             <IncidentsWidget />
+            <AgeingProblemsWidget />
+            <EmergencyChangesWidget />
           </Box>
         )}
         {source === 'logs' && <TalendDashboardTab />}

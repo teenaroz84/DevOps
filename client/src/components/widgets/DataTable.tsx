@@ -17,7 +17,7 @@
  *     maxHeight={360}
  *   />
  */
-import React from 'react'
+import React, { useState, useRef, useCallback } from 'react'
 import {
   Box,
   Table,
@@ -26,8 +26,13 @@ import {
   TableRow,
   TableCell,
   Typography,
+  InputBase,
 } from '@mui/material'
 import TableRowsIcon from '@mui/icons-material/TableRows'
+import SearchIcon from '@mui/icons-material/Search'
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward'
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward'
+import UnfoldMoreIcon from '@mui/icons-material/UnfoldMore'
 
 export interface ColumnDef<T = any> {
   /** Property name on the row object, or any unique string when using render */
@@ -42,6 +47,8 @@ export interface ColumnDef<T = any> {
   align?: 'left' | 'center' | 'right'
   /** Prevent text wrapping */
   noWrap?: boolean
+  /** Disable sort for this specific column (default: sortable) */
+  disableSort?: boolean
 }
 
 interface DataTableProps<T = any> {
@@ -84,109 +91,250 @@ export function DataTable<T = any>({
   const cellPy = compact ? 0.6 : 1
   const resolvedHeaderBg = headerBg ?? '#f0f4f8'
 
-  return (
-    <Box
-      sx={{
-        overflowX: 'auto',
-        borderRadius: 1.5,
-        border: '1px solid #e8ecf1',
-        ...(maxHeight ? { maxHeight, overflowY: 'auto' } : {}),
-      }}
-    >
-      <Table size="small" stickyHeader>
-        <TableHead>
-          <TableRow>
-            {columns.map((col, colIdx) => (
-              <TableCell
-                key={col.key}
-                align={col.align ?? 'left'}
-                sx={{
-                  fontSize: '10px',
-                  fontWeight: 700,
-                  color: '#4a5568',
-                  py: cellPy,
-                  px: 1.5,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px',
-                  whiteSpace: 'nowrap',
-                  borderBottom: `2px solid ${accentColor}33`,
-                  backgroundColor: `${resolvedHeaderBg} !important`,
-                  width: col.width,
-                  ...(col.flex ? { minWidth: 0 } : {}),
-                  // Left accent strip on first column
-                  ...(colIdx === 0 ? {
-                    borderLeft: `3px solid ${accentColor}`,
-                    pl: '10px',
-                  } : {}),
-                }}
-              >
-                {col.header}
-              </TableCell>
-            ))}
-          </TableRow>
-        </TableHead>
+  // ── Sort ─────────────────────────────────────────────────
+  const [sortKey, setSortKey] = useState<string | null>(null)
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
-        <TableBody>
-          {rows.length === 0 ? (
+  // ── Global filter ─────────────────────────────────────────
+  const [filterText, setFilterText] = useState('')
+
+  // ── Column widths (resize) ────────────────────────────────
+  const [colWidths, setColWidths] = useState<Record<string, number>>(() => {
+    const init: Record<string, number> = {}
+    columns.forEach(col => {
+      init[col.key] = typeof col.width === 'number' ? col.width : col.flex ? 160 : 110
+    })
+    return init
+  })
+  const resizingRef = useRef<{ key: string; startX: number; startWidth: number } | null>(null)
+
+  const handleResizeMouseDown = useCallback((e: React.MouseEvent, key: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    resizingRef.current = { key, startX: e.clientX, startWidth: colWidths[key] ?? 100 }
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!resizingRef.current) return
+      const newW = Math.max(40, resizingRef.current.startWidth + ev.clientX - resizingRef.current.startX)
+      setColWidths(prev => ({ ...prev, [resizingRef.current!.key]: newW }))
+    }
+    const onMouseUp = () => {
+      resizingRef.current = null
+      document.removeEventListener('mousemove', onMouseMove)
+      document.removeEventListener('mouseup', onMouseUp)
+    }
+    document.addEventListener('mousemove', onMouseMove)
+    document.addEventListener('mouseup', onMouseUp)
+  }, [colWidths])
+
+  const handleSort = (col: ColumnDef<T>) => {
+    if (col.disableSort) return
+    if (sortKey === col.key) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortKey(col.key)
+      setSortDir('asc')
+    }
+  }
+
+  // ── Filter ────────────────────────────────────────────────
+  const needle = filterText.trim().toLowerCase()
+  const filtered = needle
+    ? rows.filter(row =>
+        columns.some(col => {
+          const val = (row as any)[col.key]
+          return val != null && String(val).toLowerCase().includes(needle)
+        })
+      )
+    : rows
+
+  // ── Sort ─────────────────────────────────────────────────
+  const displayRows = sortKey
+    ? [...filtered].sort((a, b) => {
+        const av = (a as any)[sortKey]
+        const bv = (b as any)[sortKey]
+        const cmp =
+          av == null ? 1 :
+          bv == null ? -1 :
+          typeof av === 'number' && typeof bv === 'number'
+            ? av - bv
+            : String(av).localeCompare(String(bv), undefined, { numeric: true })
+        return sortDir === 'asc' ? cmp : -cmp
+      })
+    : filtered
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+
+      {/* ── Search / filter bar ── */}
+      <Box sx={{
+        display: 'flex', alignItems: 'center', gap: 1,
+        backgroundColor: '#f8f9fb', border: '1px solid #e8ecf1',
+        borderRadius: 1.5, px: 1.5, py: 0.4,
+      }}>
+        <SearchIcon sx={{ fontSize: 14, color: '#b0bec5', flexShrink: 0 }} />
+        <InputBase
+          value={filterText}
+          onChange={e => setFilterText(e.target.value)}
+          placeholder="Filter rows…"
+          sx={{ fontSize: '12px', color: '#333', flex: 1, '& input': { py: 0.2 } }}
+        />
+        {filterText && (
+          <Typography
+            onClick={() => setFilterText('')}
+            sx={{ fontSize: '11px', color: '#b0bec5', cursor: 'pointer', userSelect: 'none', flexShrink: 0, '&:hover': { color: '#78909c' } }}
+          >
+            ✕
+          </Typography>
+        )}
+        <Typography sx={{ fontSize: '10px', color: '#cfd8dc', flexShrink: 0 }}>
+          {displayRows.length}/{rows.length}
+        </Typography>
+      </Box>
+
+      {/* ── Table ── */}
+      <Box
+        sx={{
+          overflowX: 'auto',
+          borderRadius: 1.5,
+          border: '1px solid #e8ecf1',
+          ...(maxHeight ? { maxHeight, overflowY: 'auto' } : {}),
+        }}
+      >
+        <Table size="small" stickyHeader sx={{ tableLayout: 'fixed' }}>
+          <TableHead>
             <TableRow>
-              <TableCell
-                colSpan={columns.length}
-                sx={{ border: 0 }}
-              >
-                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 4, gap: 1 }}>
-                  <TableRowsIcon sx={{ fontSize: 28, color: '#d0d5dd' }} />
-                  <Typography sx={{ fontSize: '12px', color: '#aab', fontWeight: 500 }}>
-                    {emptyMessage}
-                  </Typography>
-                </Box>
-              </TableCell>
-            </TableRow>
-          ) : (
-            rows.map((row, idx) => (
-              <TableRow
-                key={getKey(row, rowKey, idx)}
-                onClick={() => onRowClick?.(row)}
-                title={rowTooltip}
-                sx={{
-                  cursor: onRowClick ? 'pointer' : 'default',
-                  transition: 'background 0.12s, border-color 0.12s',
-                  backgroundColor: idx % 2 === 0 ? '#ffffff' : '#fafbfc',
-                  '&:hover': onRowClick
-                    ? { backgroundColor: `${accentColor}0d`, '& td:first-of-type': { borderLeftColor: accentColor } }
-                    : { backgroundColor: idx % 2 === 0 ? '#f7f9fc' : '#f4f6f9' },
-                  '&:last-child td': { border: 0 },
-                }}
-              >
-                {columns.map((col, colIdx) => (
+              {columns.map((col, colIdx) => {
+                const w = colWidths[col.key]
+                const isSorted = sortKey === col.key
+                return (
                   <TableCell
                     key={col.key}
                     align={col.align ?? 'left'}
+                    onClick={() => handleSort(col)}
                     sx={{
-                      fontSize: compact ? '11px' : '12px',
-                      color: '#2d3748',
+                      fontSize: '10px',
+                      fontWeight: 700,
+                      color: isSorted ? accentColor : '#4a5568',
                       py: cellPy,
                       px: 1.5,
-                      borderBottom: '1px solid #f0f2f5',
-                      ...(col.noWrap ? { whiteSpace: 'nowrap' } : {}),
-                      ...(col.width ? { width: col.width } : {}),
-                      // Carry the left accent through body rows too
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.5px',
+                      whiteSpace: 'nowrap',
+                      borderBottom: `2px solid ${accentColor}33`,
+                      backgroundColor: `${resolvedHeaderBg} !important`,
+                      width: w,
+                      minWidth: w,
+                      maxWidth: w,
+                      cursor: col.disableSort ? 'default' : 'pointer',
+                      userSelect: 'none',
+                      position: 'relative',
+                      overflow: 'hidden',
                       ...(colIdx === 0 ? {
-                        borderLeft: `3px solid ${accentColor}22`,
+                        borderLeft: `3px solid ${accentColor}`,
                         pl: '10px',
-                        transition: 'border-color 0.12s',
                       } : {}),
+                      '&:hover': col.disableSort ? {} : { backgroundColor: `${accentColor}10 !important` },
                     }}
                   >
-                    {col.render
-                      ? col.render(row)
-                      : String((row as any)[col.key] ?? '')}
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4, overflow: 'hidden' }}>
+                      <Typography sx={{
+                        fontSize: '10px', fontWeight: 700,
+                        color: isSorted ? accentColor : '#4a5568',
+                        textTransform: 'uppercase', letterSpacing: '0.5px',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>
+                        {col.header}
+                      </Typography>
+                      {!col.disableSort && (
+                        <Box sx={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+                          {isSorted
+                            ? sortDir === 'asc'
+                              ? <ArrowUpwardIcon sx={{ fontSize: 10, color: accentColor }} />
+                              : <ArrowDownwardIcon sx={{ fontSize: 10, color: accentColor }} />
+                            : <UnfoldMoreIcon sx={{ fontSize: 10, color: '#cfd8dc' }} />
+                          }
+                        </Box>
+                      )}
+                    </Box>
+                    {/* Resize handle */}
+                    <Box
+                      onMouseDown={e => handleResizeMouseDown(e, col.key)}
+                      onClick={e => e.stopPropagation()}
+                      sx={{
+                        position: 'absolute', right: 0, top: 0, bottom: 0,
+                        width: 5, cursor: 'col-resize', zIndex: 1,
+                        backgroundColor: 'transparent',
+                        transition: 'background 0.15s',
+                        '&:hover': { backgroundColor: `${accentColor}50` },
+                      }}
+                    />
                   </TableCell>
-                ))}
+                )
+              })}
+            </TableRow>
+          </TableHead>
+
+          <TableBody>
+            {displayRows.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={columns.length} sx={{ border: 0 }}>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 4, gap: 1 }}>
+                    <TableRowsIcon sx={{ fontSize: 28, color: '#d0d5dd' }} />
+                    <Typography sx={{ fontSize: '12px', color: '#aab', fontWeight: 500 }}>
+                      {needle ? `No rows match "${filterText}"` : emptyMessage}
+                    </Typography>
+                  </Box>
+                </TableCell>
               </TableRow>
-            ))
-          )}
-        </TableBody>
-      </Table>
+            ) : (
+              displayRows.map((row, idx) => (
+                <TableRow
+                  key={getKey(row, rowKey, idx)}
+                  onClick={() => onRowClick?.(row)}
+                  title={rowTooltip}
+                  sx={{
+                    cursor: onRowClick ? 'pointer' : 'default',
+                    transition: 'background 0.12s, border-color 0.12s',
+                    backgroundColor: idx % 2 === 0 ? '#ffffff' : '#fafbfc',
+                    '&:hover': onRowClick
+                      ? { backgroundColor: `${accentColor}0d`, '& td:first-of-type': { borderLeftColor: accentColor } }
+                      : { backgroundColor: idx % 2 === 0 ? '#f7f9fc' : '#f4f6f9' },
+                    '&:last-child td': { border: 0 },
+                  }}
+                >
+                  {columns.map((col, colIdx) => (
+                    <TableCell
+                      key={col.key}
+                      align={col.align ?? 'left'}
+                      sx={{
+                        fontSize: compact ? '11px' : '12px',
+                        color: '#2d3748',
+                        py: cellPy,
+                        px: 1.5,
+                        borderBottom: '1px solid #f0f2f5',
+                        overflow: 'hidden',
+                        width: colWidths[col.key],
+                        minWidth: colWidths[col.key],
+                        maxWidth: colWidths[col.key],
+                        ...(col.noWrap ? { whiteSpace: 'nowrap' } : {}),
+                        ...(colIdx === 0 ? {
+                          borderLeft: `3px solid ${accentColor}22`,
+                          pl: '10px',
+                          transition: 'border-color 0.12s',
+                        } : {}),
+                      }}
+                    >
+                      {col.render
+                        ? col.render(row)
+                        : String((row as any)[col.key] ?? '')}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </Box>
     </Box>
   )
 }

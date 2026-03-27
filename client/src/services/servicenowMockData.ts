@@ -82,3 +82,18 @@ export const MOCK_SERVICENOW_INCIDENTS = [
   { priority_field: 'P2', incident_count: 3 },
   { priority_field: 'P3', incident_count: 4 },
 ]
+
+export const MOCK_SERVICENOW_AGEING_PROBLEMS = [
+  { priority_field: 'P1', snprb_pltf_nm: 'BI Reporting',      snprb_opened_at_dttm: '2026-01-10T09:00:00Z', snprb_prb_state: 'open'        },
+  { priority_field: 'P1', snprb_pltf_nm: 'Data Warehouse',    snprb_opened_at_dttm: '2026-01-18T14:30:00Z', snprb_prb_state: 'in_progress'  },
+  { priority_field: 'P2', snprb_pltf_nm: 'Analytics Platform',snprb_opened_at_dttm: '2026-01-22T08:00:00Z', snprb_prb_state: 'open'         },
+  { priority_field: 'P2', snprb_pltf_nm: 'CMDB Sync',         snprb_opened_at_dttm: '2026-02-01T11:00:00Z', snprb_prb_state: 'open'         },
+  { priority_field: 'P3', snprb_pltf_nm: 'DMF Orchestration', snprb_opened_at_dttm: '2026-02-05T16:00:00Z', snprb_prb_state: 'in_progress'  },
+  { priority_field: 'P3', snprb_pltf_nm: 'ESP Scheduler',     snprb_opened_at_dttm: '2026-02-10T07:45:00Z', snprb_prb_state: 'open'         },
+]
+
+export const MOCK_SERVICENOW_EMERGENCY_CHANGES = [
+  { priority_field: 'P1', incident_count: 1 },
+  { priority_field: 'P2', incident_count: 4 },
+  { priority_field: 'P3', incident_count: 2 },
+]
