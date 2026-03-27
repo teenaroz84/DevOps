@@ -488,6 +488,8 @@ const INCIDENT_COLORS: Record<string, string> = {
   P1: '#c62828',
   P2: '#e65100',
   P3: '#2e7d32',
+  P4: '#1565c0',
+  P5: '#757575',
 }
 
 export const IncidentsWidget: React.FC = () => {
@@ -520,7 +522,7 @@ export const IncidentsWidget: React.FC = () => {
 
   return (
     <WidgetShell
-      title="Open P1/P2/P3 Problems by Priority"
+      title="Open Problems by Priority"
       titleIcon={<WarningAmberIcon sx={{ color: '#c62828', fontSize: 18 }} />}
       source="PostgreSQL · edoops.service_now_prb"
       loading={loading}
@@ -535,11 +537,11 @@ export const IncidentsWidget: React.FC = () => {
                   label: i.priority_field || 'Unknown',
                   value: i.incident_count || 0,
                   color: INCIDENT_COLORS[i.priority_field] || '#757575',
-                  bg: i.priority_field === 'P1' ? '#fce4ec' : i.priority_field === 'P2' ? '#fff3e0' : '#e8f5e9',
+                  bg: ({ P1: '#fce4ec', P2: '#fff3e0', P3: '#e8f5e9', P4: '#e3f2fd', P5: '#f5f5f5' } as Record<string,string>)[i.priority_field] || '#f5f5f5',
                 })),
                 { label: 'Total', value: totalIncidents, color: '#1565c0', bg: '#e3f2fd' },
               ]}
-              columns={Math.min(incidents.length + 1, 4)}
+              columns={Math.min(incidents.length + 1, 6)}
               compact
             />
           </Box>

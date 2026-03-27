@@ -143,9 +143,9 @@ router.get('/job-types', async (_req: Request, res: Response) => {
   try {
     const pool = getPgPool();
     const result = await pool.query(`
-      SELECT job_type, COUNT(DISTINCT jobname) AS count
+      SELECT jobtype AS job_type, COUNT(DISTINCT jobname) AS count
       FROM esp_job_cmnd
-      GROUP BY job_type
+      GROUP BY jobtype
       ORDER BY count DESC
     `);
     res.json({
@@ -160,30 +160,30 @@ router.get('/job-types', async (_req: Request, res: Response) => {
   }
 });
 
-// GET /api/esp/accounts
-router.get('/accounts', async (_req: Request, res: Response) => {
+// GET /api/esp/user-jobs
+router.get('/user-jobs', async (_req: Request, res: Response) => {
   try {
     const pool = getPgPool();
     const result = await pool.query(`
-      SELECT account, COUNT(DISTINCT jobname) AS count
+      SELECT COALESCE(user_job, 'Null') AS user_job, COUNT(DISTINCT jobname) AS count
       FROM esp_job_cmnd
-      GROUP BY account
+      GROUP BY user_job
       ORDER BY count DESC
     `);
     res.json({
-      accounts: result.rows.map((row: any) => ({
-        account: row.account,
+      user_jobs: result.rows.map((row: any) => ({
+        user_job: row.user_job,
         count: row.count
       }))
     });
   } catch (err: any) {
-    console.error('ESP accounts error:', err.message);
+    console.error('ESP user-jobs error:', err.message);
     res.status(500).json({ error: 'Query failed', details: err.message });
   }
 });
 
 // GET /api/esp/metadata/:appl_name
-// Full metadata from esp_job_cmnd: jobname, command, argument, agent, job_type, account, comp_code, runs, user_job
+// Full metadata from esp_job_cmnd: jobname, command, argument, agent, jobtype, comp_code, runs, user_job
 router.get('/metadata/:appl_name', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
@@ -193,8 +193,7 @@ router.get('/metadata/:appl_name', async (req: Request, res: Response) => {
               command,
               argument,
               agent,
-              job_type,
-              account,
+              jobtype AS job_type,
               CAST(cmpl_cd AS TEXT) AS comp_code,
               runs,
               user_job
@@ -206,14 +205,13 @@ router.get('/metadata/:appl_name', async (req: Request, res: Response) => {
     );
     res.json(result.rows.map((r: any) => ({
       jobname:    r.jobname,
-      command:    r.command  ?? null,
-      argument:   r.argument ?? null,
-      agent:      r.agent    ?? null,
-      job_type:   r.job_type ?? null,
-      account:    r.account  ?? null,
+      command:    r.command   ?? null,
+      argument:   r.argument  ?? null,
+      agent:      r.agent     ?? null,
+      job_type:   r.job_type  ?? null,
       comp_code:  r.comp_code ?? null,
       runs:       r.runs != null ? parseInt(r.runs, 10) : null,
-      user_job:   r.user_job ?? null,
+      user_job:   r.user_job  ?? null,
     })));
   } catch (err: any) {
     console.error('ESP metadata error:', err.message);
@@ -369,7 +367,7 @@ router.get('/summary/:appl_name', async (req: Request, res: Response) => {
         [appl_name]).then(r => r.rows.map((x: any) => ({ name: x.name, count: parseInt(x.count) }))), []),
 
       safe(() => pool.query(
-        `SELECT COALESCE(job_type, 'Null') AS name, COUNT(*) AS count FROM esp_job_cmnd WHERE appl_name = $1 GROUP BY job_type ORDER BY count DESC`,
+        `SELECT COALESCE(jobtype, 'Null') AS name, COUNT(*) AS count FROM esp_job_cmnd WHERE appl_name = $1 GROUP BY jobtype ORDER BY count DESC`,
         [appl_name]).then(r => r.rows.map((x: any) => ({ name: x.name, count: parseInt(x.count) }))), []),
 
       safe(() => pool.query(
@@ -377,7 +375,7 @@ router.get('/summary/:appl_name', async (req: Request, res: Response) => {
         [appl_name]).then(r => r.rows.map((x: any) => ({ name: x.name, count: parseInt(x.count) }))), []),
 
       safe(() => pool.query(
-        `SELECT COALESCE(account, 'Null') AS name, COUNT(*) AS count FROM esp_job_cmnd WHERE appl_name = $1 GROUP BY account ORDER BY count DESC LIMIT 10`,
+        `SELECT COALESCE(user_job, 'Null') AS name, COUNT(*) AS count FROM esp_job_cmnd WHERE appl_name = $1 GROUP BY user_job ORDER BY count DESC LIMIT 10`,
         [appl_name]).then(r => r.rows.map((x: any) => ({ name: x.name, count: parseInt(x.count) }))), []),
 
       safe(() => pool.query(
@@ -411,7 +409,7 @@ router.get('/summary/:appl_name', async (req: Request, res: Response) => {
       agents,
       job_types: jobTypes,
       completion_codes: cmplCodes,
-      accounts,
+      user_jobs: accounts,
       job_list: jobList,
       job_run_trend: trend,
       successor_jobs: successors,

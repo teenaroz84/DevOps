@@ -18,7 +18,7 @@ export const espService = {
   getJobRunTrend: (applName: string, days: number = 2) =>
     apiClient.get(`/api/esp/job-run-trend/${encodeURIComponent(applName)}?days=${days}`),
 
-  /** Returns rich metadata from esp_job_cmnd: jobname, command, argument, agent, job_type, account, comp_code, runs, user_job */
+  /** Returns rich metadata from esp_job_cmnd: jobname, command, argument, agent, job_type, comp_code, runs, user_job */
   getMetadata: (applName: string) =>
     apiClient.get(`/api/esp/metadata/${encodeURIComponent(applName)}`),
 

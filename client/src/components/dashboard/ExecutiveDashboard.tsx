@@ -17,10 +17,10 @@ import {
   AlertBanner,
 } from '../widgets'
 import { DMFPipelineWidget } from './DMFWidgets'
-import { TicketsWidget, IncidentsWidget, AgeingProblemsWidget, EmergencyChangesWidget } from './DataSourceWidgets'
+import { IncidentsWidget, AgeingProblemsWidget, EmergencyChangesWidget } from './DataSourceWidgets'
 import { ESPDashboardTab } from './ESPDashboardTab'
 import { TalendDashboardTab } from './TalendDashboardTab'
-import { dmfService, servicenowService, cloudwatchService, snowflakeService, postgresService } from '../../services'
+import { dmfService, cloudwatchService, snowflakeService, postgresService } from '../../services'
 
 // ─── Source definitions ────────────────────────────────────
 type SourceKey = 'overview' | 'dmf' | 'servicenow' | 'logs' | 'pipeline'
@@ -81,7 +81,6 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
   const resetPrefs = () => setPrefs(DEFAULT_PREFS)
 
   const [dmfSummary,   setDmfSummary]   = useState<any>(null)
-  const [tickets,      setTickets]      = useState<any[]>([])
   const [errors,       setErrors]       = useState<any[]>([])
   const [cost,         setCost]         = useState<any>(null)
   const [runsOverTime, setRunsOverTime] = useState<any[]>([])
@@ -91,14 +90,12 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
   useEffect(() => {
     Promise.all([
       dmfService.getSummary(),
-      servicenowService.getTickets(),
       cloudwatchService.getErrors(),
       snowflakeService.getCost(),
       dmfService.getRunsOverTime(),
       postgresService.getPipelines(),
-    ]).then(([dmf, tix, err, cst, rot, pls]) => {
+    ]).then(([dmf, err, cst, rot, pls]) => {
       setDmfSummary(dmf)
-      setTickets(Array.isArray(tix) ? tix : [])
       setErrors(Array.isArray(err) ? err : [])
       setCost(cst)
       setRunsOverTime(Array.isArray(rot) ? rot : [])
@@ -116,19 +113,12 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
   }
 
   // ── Derived metrics ──────────────────────────────────────
-  const openTickets       = tickets.filter(t => t.status === 'open' || t.status === 'in_progress').length
-  const breachedSLAs      = tickets.filter(t => t.breached).length
-  const p1Tickets         = tickets.filter(t => t.priority === 'P1').length
   const criticalErrors    = errors.filter(e => e.severity === 'critical').length
   const highErrors        = errors.filter(e => e.severity === 'high').length
   const budgetPct         = cost ? Math.round((cost.total / cost.budget) * 100) : 0
   const healthyPipelines  = pipelines.filter(p => p.status === 'healthy').length
   const atRiskPipelines   = pipelines.filter(p => p.status === 'at_risk').length
   const criticalPipelines = pipelines.filter(p => p.status === 'critical').length
-  const slaPct = tickets.length > 0
-    ? Math.round(((tickets.length - breachedSLAs) / tickets.length) * 100)
-    : 100
-
   // ── Global KPI strip (one number from each source) ────────
   const globalKpis: StatCardItem[] = [
     {
@@ -140,15 +130,6 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
       trend: dmfSummary?.successRate?.trend,
       trendPositiveIsGood: true,
       description: 'DMF pipeline execution success rate across all stages',
-    },
-    {
-      label: 'Open Tickets',
-      value: openTickets,
-      color: breachedSLAs > 0 ? '#c62828' : '#1565c0',
-      bg: breachedSLAs > 0 ? '#fce4ec' : '#e3f2fd',
-      trend: breachedSLAs > 0 ? `${breachedSLAs} SLA breached` : 'No breaches',
-      trendPositiveIsGood: false,
-      description: 'Open ServiceNow incident tickets',
     },
     {
       label: 'Active Errors',
@@ -218,22 +199,10 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
       accent: '#c62828',
       source: 'ITSM',
       kpis: [
-        { label: 'Total Tickets', value: tickets.length, color: '#1565c0', bg: '#e3f2fd',
-          description: 'Total number of ServiceNow incident tickets in the system.',
-          dialogStats: [{ label: 'Open', value: openTickets }, { label: 'Resolved', value: tickets.length - openTickets }] },
-        { label: 'Open',          value: openTickets,
-          color: openTickets > 5 ? '#c62828' : '#2e7d32',  bg: openTickets > 5 ? '#fce4ec' : '#e8f5e9',
-          description: 'Tickets currently open or in progress requiring action.',
-          dialogStats: [{ label: 'P1', value: p1Tickets }, { label: 'SLA Breached', value: breachedSLAs }] },
-        { label: 'SLA Breached',  value: breachedSLAs,
-          color: breachedSLAs > 0 ? '#c62828' : '#2e7d32', bg: breachedSLAs > 0 ? '#fce4ec' : '#e8f5e9',
-          description: 'Tickets that have exceeded their SLA target time.',
-          dialogStats: [{ label: 'SLA Compliance', value: `${slaPct}%` }, { label: 'Open Tickets', value: openTickets }] },
-        { label: 'P1 Incidents',  value: p1Tickets, color: '#c62828', bg: '#fce4ec',
-          description: 'Critical Priority 1 incidents requiring immediate escalation.',
-          dialogStats: [{ label: 'Total Open', value: openTickets }, { label: 'SLA Breached', value: breachedSLAs }] },
+        { label: 'Incidents', value: '—', color: '#c62828', bg: '#fce4ec',
+          description: 'ServiceNow incidents by priority.' },
       ],
-      alert: breachedSLAs > 0 ? `⚠ ${breachedSLAs} SLA breach${breachedSLAs > 1 ? 'es' : ''} need attention` : undefined,
+      alert: undefined,
     },
     {
       key: 'logs',
@@ -440,14 +409,6 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
                         sublabel: `${healthyPipelines} of ${pipelines.length} healthy`,
                       },
                       {
-                        label: 'SLA Compliance',
-                        value: slaPct,
-                        suffix: '%',
-                        color: slaPct < 90 ? '#c62828' : slaPct < 98 ? '#f57c00' : '#2e7d32',
-                        max: 100,
-                        sublabel: `ServiceNow · ${breachedSLAs} breach${breachedSLAs !== 1 ? 'es' : ''}`,
-                      },
-                      {
                         label: 'Error Pressure',
                         value: criticalErrors + highErrors,
                         max: Math.max(errors.length, 1),
@@ -465,13 +426,12 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
                     ]}
                     barHeight={10}
                   />
-                  {(criticalErrors > 0 || breachedSLAs > 0 || criticalPipelines > 0) && (
+                  {(criticalErrors > 0 || criticalPipelines > 0) && (
                     <AlertBanner
                       severity="warning"
                       title="Action required"
                       message={[
                         criticalErrors > 0    ? `${criticalErrors} critical CloudWatch error${criticalErrors > 1 ? 's' : ''}` : null,
-                        breachedSLAs > 0      ? `${breachedSLAs} SLA breach${breachedSLAs > 1 ? 'es' : ''} in ServiceNow`    : null,
                         criticalPipelines > 0 ? `${criticalPipelines} pipeline${criticalPipelines > 1 ? 's' : ''} critical`   : null,
                       ].filter(Boolean).join(' · ')}
                     />
@@ -668,7 +628,6 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onChatCl
         {source === 'dmf'        && <DMFPipelineWidget />}
         {source === 'servicenow' && (
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, p: 2, alignItems: 'start' }}>
-            <TicketsWidget />
             <IncidentsWidget />
             <AgeingProblemsWidget />
             <EmergencyChangesWidget />

@@ -17,8 +17,8 @@ router.get('/incidents', async (_req: Request, res: Response) => {
       FROM   edoops.service_now_prb sn
       JOIN   edoops.sla_glossary    sg
         ON   sn.snprb_priority = sg.snow_priority
-      WHERE  sn.snprb_applkp_pltf_nm LIKE 'BI%'
-        AND  sg.short_priority IN ('P1','P2','P3')
+      WHERE  sn.snprb_pltf_nm LIKE 'BI%'
+        AND  sg.short_priority IN ('P1','P2','P3','P4','P5')
       GROUP BY sg.short_priority
       ORDER BY sg.short_priority
     `);
@@ -42,7 +42,7 @@ router.get('/ageing-problems', async (_req: Request, res: Response) => {
       FROM   edoops.service_now_prb sn
       JOIN   edoops.sla_glossary    sg
         ON   sn.snprb_priority = sg.snow_priority
-      WHERE  sn.snprb_applkp_pltf_nm LIKE 'BI%'
+      WHERE  sn.snprb_pltf_nm LIKE 'BI%'
         AND  sg.short_priority IN ('P1','P2','P3')
         AND  sn.snprb_prb_state NOT IN ('closed','resolved')
         AND  sn.snprb_opened_at_dttm::date < (CURRENT_DATE - INTERVAL '30 days')

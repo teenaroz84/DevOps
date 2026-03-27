@@ -81,6 +81,8 @@ export const MOCK_SERVICENOW_INCIDENTS = [
   { priority_field: 'P1', incident_count: 2 },
   { priority_field: 'P2', incident_count: 3 },
   { priority_field: 'P3', incident_count: 4 },
+  { priority_field: 'P4', incident_count: 6 },
+  { priority_field: 'P5', incident_count: 5 },
 ]
 
 export const MOCK_SERVICENOW_AGEING_PROBLEMS = [

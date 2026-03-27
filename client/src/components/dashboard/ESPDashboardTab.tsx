@@ -28,13 +28,13 @@ interface AppData {
   agents: NameCount[]
   job_types: NameCount[]
   completion_codes: NameCount[]
-  accounts: NameCount[]
+  user_jobs: NameCount[]
   job_list: Array<{ jobname: string; last_run_date: string | null }>
   job_run_trend: Array<{ day: string; hour: number; job_count: number; job_fail_count: number }>
   successor_jobs: Array<{ jobname: string; successor_job: string }>
   predecessor_jobs: Array<{ jobname: string; predecessor_job: string }>
   metadata: Array<{ jobname: string; command: string | null; argument: string | null }>
-  metadata_detail: Array<{ jobname: string; command: string | null; argument: string | null; agent: string | null; job_type: string | null; account: string | null; comp_code: string | null; runs: number | null; user_job: string | null }>
+  metadata_detail: Array<{ jobname: string; command: string | null; argument: string | null; agent: string | null; job_type: string | null; comp_code: string | null; runs: number | null; user_job: string | null }>
   job_run_table: Array<{ job_longname: string; command: string | null; argument: string | null; runs: number | null; start_date: string | null; start_time: string | null; end_date: string | null; end_time: string | null; exec_qtime: string | null; ccfail: string | null; comp_code: string | null }>
 }
 
@@ -167,7 +167,6 @@ export const ESPDashboardTab: React.FC = () => {
     { key: 'argument',  header: 'Argument',        flex: 1.5, render: r => r.argument  ?? '—' },
     { key: 'agent',     header: 'Agent',           flex: 1,   render: r => r.agent     ?? '—' },
     { key: 'job_type',  header: 'Job Type',        width: 90, render: r => r.job_type  ?? '—' },
-    { key: 'account',   header: 'Account',         flex: 1,   render: r => r.account   ?? '—' },
     { key: 'comp_code', header: 'Cmpl Code',       width: 80, render: r => r.comp_code ?? '—' },
     { key: 'runs',      header: 'Runs',            width: 60, render: r => r.runs != null ? r.runs : '—' },
     { key: 'user_job',  header: 'User Job',        width: 100, render: r => r.user_job ?? '—' },
@@ -283,12 +282,12 @@ export const ESPDashboardTab: React.FC = () => {
               <Box sx={{ p: 1.5 }}>
                 <StatCardGrid
                   items={[
-                    { label: 'Total Jobs',     value: data.job_count,       color: '#1976d2', bg: '#e3f2fd' },
-                    { label: 'Idle Jobs',      value: data.idle_job_count,  color: '#f57c00', bg: '#fff3e0' },
-                    { label: 'Special Jobs',   value: data.spl_job_count,   color: '#c62828', bg: '#fce4ec' },
-                    { label: 'Agents',         value: data.agents.length,   color: '#2e7d32', bg: '#e8f5e9' },
+                    { label: 'Total Jobs',     value: data.job_count,        color: '#1976d2', bg: '#e3f2fd' },
+                    { label: 'Idle Jobs',      value: data.idle_job_count,   color: '#f57c00', bg: '#fff3e0' },
+                    { label: 'Special Jobs',   value: data.spl_job_count,    color: '#c62828', bg: '#fce4ec' },
+                    { label: 'Agents',         value: data.agents.length,    color: '#2e7d32', bg: '#e8f5e9' },
                     { label: 'Job Types',      value: data.job_types.length, color: '#6a1b9a', bg: '#f3e5f5' },
-                    { label: 'Accounts',       value: data.accounts.length, color: '#00838f', bg: '#e0f7fa' },
+                    { label: 'User Jobs',      value: data.user_jobs.length, color: '#00838f', bg: '#e0f7fa' },
                   ]}
                   columns={6}
                 />
@@ -370,7 +369,7 @@ export const ESPDashboardTab: React.FC = () => {
             </Paper>
           </Box>
 
-          {/* ── Row 3: Agent (bar) | Job Type (donut) | Completion Code (donut) | Account (bar) ── */}
+          {/* ── Row 3: Agent (bar) | Job Type (donut) | Completion Code (donut) | User Job (bar) ── */}
           <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2 }}>
 
             {/* Agent — horizontal bar */}
@@ -437,14 +436,14 @@ export const ESPDashboardTab: React.FC = () => {
               </WidgetShell>
             </Paper>
 
-            {/* Account — horizontal bar */}
+            {/* User Job — horizontal bar */}
             <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #f57c0022', borderTop: '3px solid #f57c00', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-              <WidgetShell title="Account" source={`${data.accounts.length} entries`} titleIcon={<AccountTreeIcon sx={{ color: '#f57c00', fontSize: 18 }} />}>
+              <WidgetShell title="User Job" source={`${data.user_jobs.length} entries`} titleIcon={<PeopleIcon sx={{ color: '#f57c00', fontSize: 18 }} />}>
                 <Box sx={{ p: 1.5 }}>
-                  {data.accounts.length === 0 ? (
+                  {data.user_jobs.length === 0 ? (
                     <Typography sx={{ fontSize: '11px', color: '#bbb', textAlign: 'center', py: 2 }}>No data</Typography>
                   ) : (
-                    <MetricBarList items={toBarItems(data.accounts)} barHeight={8} compact />
+                    <MetricBarList items={toBarItems(data.user_jobs)} barHeight={8} compact />
                   )}
                 </Box>
               </WidgetShell>

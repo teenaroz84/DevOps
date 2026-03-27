@@ -12,13 +12,13 @@ export interface AppData {
   agents: NameCount[]
   job_types: NameCount[]
   completion_codes: NameCount[]
-  accounts: NameCount[]
+  user_jobs: NameCount[]
   job_list: Array<{ jobname: string; last_run_date: string | null }>
   job_run_trend: Array<{ day: string; hour: number; job_count: number; job_fail_count: number }>
   successor_jobs: Array<{ jobname: string; successor_job: string }>
   predecessor_jobs: Array<{ jobname: string; predecessor_job: string }>
   metadata: Array<{ jobname: string; command: string | null; argument: string | null }>
-  metadata_detail: Array<{ jobname: string; command: string | null; argument: string | null; agent: string | null; job_type: string | null; account: string | null; comp_code: string | null; runs: number | null; user_job: string | null }>
+  metadata_detail: Array<{ jobname: string; command: string | null; argument: string | null; agent: string | null; job_type: string | null; comp_code: string | null; runs: number | null; user_job: string | null }>
   job_run_table: Array<{ job_longname: string; command: string | null; argument: string | null; runs: number | null; start_date: string | null; start_time: string | null; end_date: string | null; end_time: string | null; exec_qtime: string | null; ccfail: string | null; comp_code: string | null }>
 }
 
@@ -41,8 +41,8 @@ const MOCK_APPS: AppData[] = [
       { name: '1', count: 72 },
       { name: '2', count: 35 },
     ],
-    accounts: [
-      { name: 'sv-edlprd1_metrics', count: 79 },
+    user_jobs: [
+      { name: 'edlprd1', count: 79 },
       { name: 'Null', count: 28 },
     ],
     job_list: [
@@ -104,14 +104,14 @@ const MOCK_APPS: AppData[] = [
       { jobname: 'FINMETRICS_LOAD_PRD',  command: '/opt/etl/load.sh', argument: '--env prod' },
     ],
     metadata_detail: [
-      { jobname: 'CD332400',          command: '/opt/etl/run.sh',  argument: '--env prod --app DTDPLMET',            agent: 'PRDEOLSPARKLB_V',  job_type: 'UNIX',      account: 'sv-edlprd1_metrics', comp_code: '1', runs: 42,  user_job: 'edlprd1' },
-      { jobname: 'CD332402',          command: '/opt/etl/run.sh',  argument: '--env prod --step 2',                  agent: 'PRDEOLSPARKLB_V',  job_type: 'UNIX',      account: 'sv-edlprd1_metrics', comp_code: '1', runs: 40,  user_job: 'edlprd1' },
-      { jobname: 'COMPRT_DTDOPSD57_PRD', command: 'spark-submit', argument: '--class com.company.Metrics --master yarn', agent: 'PRD_EDLCDDLBVIP', job_type: 'UNIX',   account: 'sv-edlprd1_metrics', comp_code: '1', runs: 38,  user_job: 'edlprd1' },
-      { jobname: 'COMPRT_DTDOPSD63_PRD', command: 'spark-submit', argument: '--class com.company.Transform --master yarn', agent: 'PRD_EDLCDDLBVIP', job_type: 'UNIX', account: 'sv-edlprd1_metrics', comp_code: '1', runs: 35,  user_job: 'edlprd1' },
-      { jobname: 'COMPRT_DTDOPSD64_PRD', command: 'spark-submit', argument: '--class com.company.Load --master yarn',    agent: 'PRD_EDLCDDLBVIP', job_type: 'UNIX',   account: 'sv-edlprd1_metrics', comp_code: '2', runs: 35,  user_job: 'edlprd1' },
-      { jobname: 'JSDELAY_DTDPLMET_001', command: 'jsddelay',     argument: '300',                                  agent: null,               job_type: 'MAINFRAME', account: null,                 comp_code: '1', runs: 100, user_job: null },
-      { jobname: 'RETRIG_DTDPLMET_001',  command: 'retrig',       argument: '--job COMPRT_DTDOPSD57_PRD',           agent: null,               job_type: 'MAINFRAME', account: null,                 comp_code: '1', runs: 5,   user_job: null },
-      { jobname: 'FINMETRICS_LOAD_PRD',  command: '/opt/etl/load.sh', argument: '--env prod',                      agent: 'PRDEOLSPARKLB_V',  job_type: 'UNIX',      account: 'sv-edlprd1_metrics', comp_code: '1', runs: 28,  user_job: 'edlprd1' },
+      { jobname: 'CD332400',          command: '/opt/etl/run.sh',  argument: '--env prod --app DTDPLMET',            agent: 'PRDEOLSPARKLB_V',  job_type: 'UNIX',      comp_code: '1', runs: 42,  user_job: 'edlprd1' },
+      { jobname: 'CD332402',          command: '/opt/etl/run.sh',  argument: '--env prod --step 2',                  agent: 'PRDEOLSPARKLB_V',  job_type: 'UNIX',      comp_code: '1', runs: 40,  user_job: 'edlprd1' },
+      { jobname: 'COMPRT_DTDOPSD57_PRD', command: 'spark-submit', argument: '--class com.company.Metrics --master yarn', agent: 'PRD_EDLCDDLBVIP', job_type: 'UNIX',   comp_code: '1', runs: 38,  user_job: 'edlprd1' },
+      { jobname: 'COMPRT_DTDOPSD63_PRD', command: 'spark-submit', argument: '--class com.company.Transform --master yarn', agent: 'PRD_EDLCDDLBVIP', job_type: 'UNIX', comp_code: '1', runs: 35,  user_job: 'edlprd1' },
+      { jobname: 'COMPRT_DTDOPSD64_PRD', command: 'spark-submit', argument: '--class com.company.Load --master yarn',    agent: 'PRD_EDLCDDLBVIP', job_type: 'UNIX',   comp_code: '2', runs: 35,  user_job: 'edlprd1' },
+      { jobname: 'JSDELAY_DTDPLMET_001', command: 'jsddelay',     argument: '300',                                  agent: null,               job_type: 'MAINFRAME', comp_code: '1', runs: 100, user_job: null },
+      { jobname: 'RETRIG_DTDPLMET_001',  command: 'retrig',       argument: '--job COMPRT_DTDOPSD57_PRD',           agent: null,               job_type: 'MAINFRAME', comp_code: '1', runs: 5,   user_job: null },
+      { jobname: 'FINMETRICS_LOAD_PRD',  command: '/opt/etl/load.sh', argument: '--env prod',                      agent: 'PRDEOLSPARKLB_V',  job_type: 'UNIX',      comp_code: '1', runs: 28,  user_job: 'edlprd1' },
     ],
     job_run_table: [
       { job_longname: 'CD332400',          command: '/opt/etl/run.sh',  argument: '--env prod --app DTDPLMET',            runs: 42, start_date: '2026-03-25', start_time: '08:01:00', end_date: '2026-03-25', end_time: '08:12:00', exec_qtime: '00:11:00', ccfail: 'NO',  comp_code: '1' },
@@ -139,8 +139,8 @@ const MOCK_APPS: AppData[] = [
       { name: '1', count: 60 },
       { name: '2', count: 28 },
     ],
-    accounts: [
-      { name: 'sv-cust360_metrics', count: 70 },
+    user_jobs: [
+      { name: 'cust360', count: 70 },
       { name: 'Null', count: 18 },
     ],
     job_list: [
@@ -178,12 +178,12 @@ const MOCK_APPS: AppData[] = [
       { jobname: 'JSDELAY_CUST360_001', command: 'jsddelay',               argument: '600' },
     ],
     metadata_detail: [
-      { jobname: 'CUST360_EXTRACT_01',   command: '/opt/cust/extract.sh',  argument: '--src crm --env prod',      agent: 'PRD_CUST360_AGENT', job_type: 'UNIX',      account: 'sv-cust360_metrics', comp_code: '1', runs: 30, user_job: 'cust360' },
-      { jobname: 'CUST360_EXTRACT_02',   command: '/opt/cust/extract.sh',  argument: '--src web --env prod',      agent: 'PRD_CUST360_AGENT', job_type: 'UNIX',      account: 'sv-cust360_metrics', comp_code: '1', runs: 28, user_job: 'cust360' },
-      { jobname: 'CUST360_TRANSFORM_01', command: 'spark-submit',          argument: '--class com.cust.Transform', agent: 'PRD_CUST360_AGENT', job_type: 'UNIX',      account: 'sv-cust360_metrics', comp_code: '1', runs: 25, user_job: 'cust360' },
-      { jobname: 'CUST360_LOAD_DW',      command: '/opt/cust/load.sh',     argument: '--target dw --env prod',    agent: 'PRD_CUST360_AGENT', job_type: 'UNIX',      account: 'sv-cust360_metrics', comp_code: '2', runs: 22, user_job: 'cust360' },
-      { jobname: 'CUST360_VALIDATE',     command: '/opt/cust/validate.sh', argument: '--env prod',                agent: null,                job_type: 'MAINFRAME', account: null,                 comp_code: '1', runs: 20, user_job: null },
-      { jobname: 'JSDELAY_CUST360_001',  command: 'jsddelay',              argument: '600',                       agent: null,                job_type: 'MAINFRAME', account: null,                 comp_code: '1', runs: 88, user_job: null },
+      { jobname: 'CUST360_EXTRACT_01',   command: '/opt/cust/extract.sh',  argument: '--src crm --env prod',      agent: 'PRD_CUST360_AGENT', job_type: 'UNIX',      comp_code: '1', runs: 30, user_job: 'cust360' },
+      { jobname: 'CUST360_EXTRACT_02',   command: '/opt/cust/extract.sh',  argument: '--src web --env prod',      agent: 'PRD_CUST360_AGENT', job_type: 'UNIX',      comp_code: '1', runs: 28, user_job: 'cust360' },
+      { jobname: 'CUST360_TRANSFORM_01', command: 'spark-submit',          argument: '--class com.cust.Transform', agent: 'PRD_CUST360_AGENT', job_type: 'UNIX',      comp_code: '1', runs: 25, user_job: 'cust360' },
+      { jobname: 'CUST360_LOAD_DW',      command: '/opt/cust/load.sh',     argument: '--target dw --env prod',    agent: 'PRD_CUST360_AGENT', job_type: 'UNIX',      comp_code: '2', runs: 22, user_job: 'cust360' },
+      { jobname: 'CUST360_VALIDATE',     command: '/opt/cust/validate.sh', argument: '--env prod',                agent: null,                job_type: 'MAINFRAME', comp_code: '1', runs: 20, user_job: null },
+      { jobname: 'JSDELAY_CUST360_001',  command: 'jsddelay',              argument: '600',                       agent: null,                job_type: 'MAINFRAME', comp_code: '1', runs: 88, user_job: null },
     ],
     job_run_table: [
       { job_longname: 'CUST360_EXTRACT_01',   command: '/opt/cust/extract.sh',  argument: '--src crm --env prod',      runs: 30, start_date: '2026-03-25', start_time: '09:00:00', end_date: '2026-03-25', end_time: '09:15:00', exec_qtime: '00:15:00', ccfail: 'NO',  comp_code: '1' },
@@ -211,8 +211,8 @@ const MOCK_APPS: AppData[] = [
       { name: '1', count: 50 },
       { name: '2', count: 13 },
     ],
-    accounts: [
-      { name: 'sv-finance_prod', count: 60 },
+    user_jobs: [
+      { name: 'finprd', count: 60 },
       { name: 'Null', count: 3 },
     ],
     job_list: [
@@ -247,12 +247,12 @@ const MOCK_APPS: AppData[] = [
       { jobname: 'JSDELAY_FIN_001', command: 'jsddelay',           argument: '120' },
     ],
     metadata_detail: [
-      { jobname: 'FIN_GL_EXTRACT',  command: '/opt/fin/extract.sh', argument: '--ledger GL --date today', agent: 'PRD_FIN_AGENT_01', job_type: 'UNIX',      account: 'sv-finance_prod', comp_code: '1', runs: 55, user_job: 'finprd' },
-      { jobname: 'FIN_AP_EXTRACT',  command: '/opt/fin/extract.sh', argument: '--ledger AP --date today', agent: 'PRD_FIN_AGENT_01', job_type: 'UNIX',      account: 'sv-finance_prod', comp_code: '1', runs: 52, user_job: 'finprd' },
-      { jobname: 'FIN_AR_EXTRACT',  command: '/opt/fin/extract.sh', argument: '--ledger AR --date today', agent: 'PRD_FIN_AGENT_02', job_type: 'UNIX',      account: 'sv-finance_prod', comp_code: '2', runs: 48, user_job: 'finprd' },
-      { jobname: 'FIN_GL_LOAD_DW',  command: '/opt/fin/load.sh',   argument: '--target finance_dw',      agent: 'PRD_FIN_AGENT_02', job_type: 'UNIX',      account: 'sv-finance_prod', comp_code: '1', runs: 45, user_job: 'finprd' },
-      { jobname: 'FIN_RECONCILE',   command: '/opt/fin/recon.sh',  argument: '--env prod',               agent: null,               job_type: 'MAINFRAME', account: null,              comp_code: '1', runs: 40, user_job: null },
-      { jobname: 'JSDELAY_FIN_001', command: 'jsddelay',           argument: '120',                      agent: null,               job_type: 'MAINFRAME', account: null,              comp_code: '1', runs: 63, user_job: null },
+      { jobname: 'FIN_GL_EXTRACT',  command: '/opt/fin/extract.sh', argument: '--ledger GL --date today', agent: 'PRD_FIN_AGENT_01', job_type: 'UNIX',      comp_code: '1', runs: 55, user_job: 'finprd' },
+      { jobname: 'FIN_AP_EXTRACT',  command: '/opt/fin/extract.sh', argument: '--ledger AP --date today', agent: 'PRD_FIN_AGENT_01', job_type: 'UNIX',      comp_code: '1', runs: 52, user_job: 'finprd' },
+      { jobname: 'FIN_AR_EXTRACT',  command: '/opt/fin/extract.sh', argument: '--ledger AR --date today', agent: 'PRD_FIN_AGENT_02', job_type: 'UNIX',      comp_code: '2', runs: 48, user_job: 'finprd' },
+      { jobname: 'FIN_GL_LOAD_DW',  command: '/opt/fin/load.sh',   argument: '--target finance_dw',      agent: 'PRD_FIN_AGENT_02', job_type: 'UNIX',      comp_code: '1', runs: 45, user_job: 'finprd' },
+      { jobname: 'FIN_RECONCILE',   command: '/opt/fin/recon.sh',  argument: '--env prod',               agent: null,               job_type: 'MAINFRAME', comp_code: '1', runs: 40, user_job: null },
+      { jobname: 'JSDELAY_FIN_001', command: 'jsddelay',           argument: '120',                      agent: null,               job_type: 'MAINFRAME', comp_code: '1', runs: 63, user_job: null },
     ],
     job_run_table: [
       { job_longname: 'FIN_GL_EXTRACT', command: '/opt/fin/extract.sh', argument: '--ledger GL --date today', runs: 55, start_date: '2026-03-25', start_time: '06:00:00', end_date: '2026-03-25', end_time: '06:20:00', exec_qtime: '00:20:00', ccfail: 'NO',  comp_code: '1' },
