@@ -33,6 +33,8 @@ import SearchIcon from '@mui/icons-material/Search'
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward'
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward'
 import UnfoldMoreIcon from '@mui/icons-material/UnfoldMore'
+import DownloadIcon from '@mui/icons-material/Download'
+import { IconButton, Tooltip } from '@mui/material'
 
 export interface ColumnDef<T = any> {
   /** Property name on the row object, or any unique string when using render */
@@ -162,6 +164,29 @@ export function DataTable<T = any>({
       })
     : filtered
 
+  // ── CSV export ────────────────────────────────────────────
+  const exportCsv = () => {
+    if (displayRows.length === 0) return
+    const headers = columns.map(c => c.header)
+    const csvRows = [
+      headers.join(','),
+      ...displayRows.map(row =>
+        columns.map(col => {
+          const val = (row as any)[col.key]
+          const str = val == null ? '' : String(val).replace(/"/g, '""')
+          return `"${str}"`
+        }).join(',')
+      ),
+    ]
+    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `export_${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
 
@@ -189,6 +214,23 @@ export function DataTable<T = any>({
         <Typography sx={{ fontSize: '10px', color: '#cfd8dc', flexShrink: 0 }}>
           {displayRows.length}/{rows.length}
         </Typography>
+        <Tooltip title={`Download ${displayRows.length} rows as CSV`} placement="top">
+          <span>
+            <IconButton
+              size="small"
+              onClick={exportCsv}
+              disabled={displayRows.length === 0}
+              sx={{
+                p: 0.4,
+                color: '#90a4ae',
+                '&:hover': { color: accentColor, backgroundColor: `${accentColor}12` },
+                '&.Mui-disabled': { color: '#dde' },
+              }}
+            >
+              <DownloadIcon sx={{ fontSize: 14 }} />
+            </IconButton>
+          </span>
+        </Tooltip>
       </Box>
 
       {/* ── Table ── */}

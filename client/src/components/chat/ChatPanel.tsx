@@ -16,9 +16,11 @@ import {
 } from '@mui/material'
 import SendIcon from '@mui/icons-material/Send'
 import CloseIcon from '@mui/icons-material/Close'
+import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import SmartToyIcon from '@mui/icons-material/SmartToy'
 import FileDownloadIcon from '@mui/icons-material/FileDownload'
 import { chatService } from '../../services'
+import { FormattedMessage } from './FormattedMessage'
 
 function exportDataAsCsv(data: any[]) {
   if (!data || data.length === 0) return
@@ -64,20 +66,21 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false }: ChatPanelProp
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'agent',
-      content: '� Executive DataOps Health Assistant! I can help you analyze KPIs, monitor pipeline health, review SLA compliance, and assess business impact.',
+      content: '👋 Hi! I\'m your DataOps Knowledge Assistant. Ask me about DMF ingestion, enrichment standards, ESP scheduling, Talend development, or any other platform guidelines.',
       type: 'info'
     }
   ])
   const [loading, setLoading] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
+  const HEALTH_CHECK_QUERY = '__health_check__'
+
   const quickActions = [
-    { label: 'Show KPI Summary', query: 'Show current KPI metrics including success rate, SLA breaches, and MTTR' },
-    { label: 'Pipeline Health Status', query: 'Display pipeline health heatmap and status overview' },
-    { label: 'At-Risk Pipelines', query: 'What pipelines are currently at risk and why?' },
-    { label: 'Cost Analysis', query: 'Show cost vs budget and spending analysis' },
-    { label: 'Auto-Recovery Trends', query: 'Display failures vs auto-recovery trend' },
-    { label: 'Business Impact Report', query: 'What data products are affected and what is the business impact?' },
+    { label: '🩺 Agent Health Check', query: HEALTH_CHECK_QUERY },
+    { label: '📁 DMF Ingestion Directory Structure', query: 'What is the DMF ingestion directory structure?' },
+    { label: '🔧 DMF Enrichment Standards', query: 'What are the DMF enrichment standards?' },
+    { label: '⏱ DMF ESP Scheduling Standards', query: 'What are the DMF ESP scheduling standards?' },
+    { label: '📘 Talend Dev Guide', query: 'Provide the Talend development guide and best practices.' },
   ]
 
   useEffect(() => {
@@ -88,185 +91,53 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false }: ChatPanelProp
     const textToSend = messageText || input
     if (!textToSend.trim()) return
 
-    const userMessage: Message = { role: 'user', content: textToSend }
+    const isHealthCheck = textToSend === HEALTH_CHECK_QUERY
+    const userMessage: Message = { role: 'user', content: isHealthCheck ? '🩺 Agent Health Check' : textToSend }
     setMessages(prev => [...prev, userMessage])
     setInput('')
     setLoading(true)
 
     try {
-      const data = await chatService.sendMessage(textToSend)
-      
-      const agentResponse: Message = {
-        role: 'agent',
-        content: data.text,
-        type: data.type as Message['type'],
-        data: data.data,
-        suggestedActions: (data as any).suggestedActions
+      if (isHealthCheck) {
+        const health = await chatService.checkHealth()
+        const status = health.status ?? 'unknown'
+        const isOk = /^(ok|healthy|up|running)$/i.test(status)
+        // Build a readable summary from whatever the server returns
+        const details = Object.entries(health)
+          .filter(([k]) => k !== 'status')
+          .map(([k, v]) => `• ${k}: ${JSON.stringify(v)}`)
+          .join('\n')
+        setMessages(prev => [...prev, {
+          role: 'agent',
+          content: `${isOk ? '✅' : '⚠️'} Agent status: **${status}**${details ? `\n${details}` : ''}`,
+          type: isOk ? 'success' : 'error',
+        }])
+      } else {
+        const data = await chatService.sendMessage(textToSend)
+        const agentResponse: Message = {
+          role: 'agent',
+          content: data.text || '(No response)',
+          type: data.type as Message['type'],
+          data: data.data,
+          suggestedActions: (data as any).suggestedActions,
+        }
+        setMessages(prev => [...prev, agentResponse])
       }
-      setMessages(prev => [...prev, agentResponse])
     } catch (error) {
       console.error('API Error:', error)
-      
-      // Fallback to local mock data if API fails
-      let mockResponse: Message | null = null
-      const lower = textToSend.toLowerCase()
-
-      if (lower.includes('kpi') || lower.includes('metrics')) {
-        mockResponse = {
-          role: 'agent',
-          content: '📊 Current KPI Summary - Last 7 Days',
-          type: 'table',
-          data: [
-            { Metric: 'Success Rate', Value: '98%', Trend: '↑ +2%', Status: '✓ Excellent', Target: '≥95%' },
-            { Metric: 'SLA Breaches', Value: '5', Trend: '↑ +3', Status: '⚠ Monitor', Target: '<3' },
-            { Metric: 'MTTR (Mean Time to Recovery)', Value: '1.4 hrs', Trend: '↓ -0.3', Status: '✓ Good', Target: '<2 hrs' },
-            { Metric: 'Auto-Resolved %', Value: '75%', Trend: '↑ +8%', Status: '✓ Strong', Target: '≥70%' },
-            { Metric: 'Cost vs Budget', Value: '110%', Trend: '↑ +5%', Status: '🔴 Over', Target: '≤100%' },
-          ],
-          suggestedActions: [
-            { label: 'Investigate SLA Breaches', action: 'Detail analysis of the 5 SLA breaches' },
-            { label: 'Review Cost Overruns', action: 'Analyze why we are at 110% of budget' },
-            { label: 'Optimize Auto-Recovery', action: 'Improve auto-recovery rate from 75% to 85%' },
-            { label: 'View Historical Trends', action: 'Show KPI trends over the last 30 days' },
-          ]
-        }
-      } else if (lower.includes('pipeline') && lower.includes('health')) {
-        mockResponse = {
-          role: 'agent',
-          content: '🏥 Pipeline Health Overview',
-          type: 'table',
-          data: [
-            { Pipeline: 'Finance ETL', Status: '✓ Healthy', Health: '95%', LastRun: '2 hrs ago', Records: '2.5M', AvgTime: '45 min' },
-            { Pipeline: 'Customer 360', Status: '✓ Healthy', Health: '92%', LastRun: '1 hr ago', Records: '1.8M', AvgTime: '38 min' },
-            { Pipeline: 'Inventory Sync', Status: '⚠ At-Risk', Health: '68%', LastRun: '4 hrs ago', Records: '523K', AvgTime: '72 min' },
-            { Pipeline: 'Sales Feed', Status: '✓ Healthy', Health: '89%', LastRun: '30 min ago', Records: '3.2M', AvgTime: '52 min' },
-            { Pipeline: 'HR Data', Status: '✓ Healthy', Health: '91%', LastRun: '3 hrs ago', Records: '456K', AvgTime: '28 min' },
-          ],
-          suggestedActions: [
-            { label: 'Address Inventory Sync Issues', action: 'Detailed diagnostics for Inventory Sync pipeline' },
-            { label: 'Optimize Slow Pipelines', action: 'Show optimization recommendations' },
-            { label: 'Schedule Maintenance', action: 'Plan maintenance windows' },
-          ]
-        }
-      } else if (lower.includes('at-risk') || (lower.includes('risk') && lower.includes('pipeline'))) {
-        mockResponse = {
-          role: 'agent',
-          content: '⚠️ Pipelines at Risk - Immediate Action Required',
-          type: 'table',
-          data: [
-            { Pipeline: 'Inventory Sync', RiskLevel: 'HIGH', Issue: 'Upstream Talend retry storm', Impact: 'Delayed inventory updates', Resolution: 'Escalate to Talend team' },
-            { Pipeline: 'Finance D+1 Feed', RiskLevel: 'CRITICAL', Issue: 'Data quality checks failing', Impact: 'Critical finance reporting delay', Resolution: 'Investigate data source' },
-            { Pipeline: 'Customer 360', RiskLevel: 'MEDIUM', Issue: 'Occasional timeouts', Impact: 'Slow customer 360 enrichment', Resolution: 'Increase timeout limits' },
-          ],
-          suggestedActions: [
-            { label: 'Escalate Finance D+1', action: 'Create critical incident for Finance D+1' },
-            { label: 'Contact Talend Support', action: 'Open support ticket for retry storm' },
-            { label: 'View Detailed Logs', action: 'Show detailed error logs and traces' },
-            { label: 'Auto-remediate', action: 'Trigger auto-remediation for at-risk pipelines' },
-          ]
-        }
-      } else if (lower.includes('cost') || lower.includes('budget') || lower.includes('spending')) {
-        mockResponse = {
-          role: 'agent',
-          content: '💰 Cost Analysis & Budget Report',
-          type: 'table',
-          data: [
-            { Category: 'Compute Costs', Current: '$28,500', Budget: '$25,000', Variance: '+14%', Trend: 'Increasing' },
-            { Category: 'Storage Costs', Current: '$12,300', Budget: '$12,000', Variance: '+2.5%', Trend: 'Stable' },
-            { Category: 'Data Transfer', Current: '$8,700', Budget: '$8,000', Variance: '+8.75%', Trend: 'Increasing' },
-            { Category: 'Licensing', Current: '$15,000', Budget: '$15,000', Variance: '0%', Trend: 'Stable' },
-            { Category: 'TOTAL', Current: '$64,500', Budget: '$60,000', Variance: '+7.5%', Trend: 'Increasing' },
-          ],
-          suggestedActions: [
-            { label: 'Optimize Compute Usage', action: 'Identify idle resources and cost optimization opportunities' },
-            { label: 'Review Data Transfer', action: 'Analyze data transfer patterns and CDN usage' },
-            { label: 'Set Budget Alerts', action: 'Configure automated alerts for budget thresholds' },
-            { label: 'Cost Forecast', action: 'Predict end-of-month costs based on current trends' },
-          ]
-        }
-      } else if (lower.includes('recovery') || lower.includes('trend')) {
-        mockResponse = {
-          role: 'agent',
-          content: '📈 Failures vs Auto-Recovery Trend (Last 6 Months)',
-          type: 'table',
-          data: [
-            { Month: 'January', Failures: '80', AutoRecovered: '40', FailureRate: '50%', MTTR: '3.2 hrs' },
-            { Month: 'February', Failures: '120', AutoRecovered: '70', FailureRate: '58%', MTTR: '2.8 hrs' },
-            { Month: 'March', Failures: '150', AutoRecovered: '95', FailureRate: '63%', MTTR: '2.4 hrs' },
-            { Month: 'April', Failures: '180', AutoRecovered: '125', FailureRate: '69%', MTTR: '2.1 hrs' },
-            { Month: 'May', Failures: '210', AutoRecovered: '155', FailureRate: '74%', MTTR: '1.8 hrs' },
-            { Month: 'June (Current)', Failures: '240', AutoRecovered: '190', FailureRate: '79%', MTTR: '1.4 hrs' },
-          ],
-          suggestedActions: [
-            { label: 'Boost Auto-Recovery to 85%', action: 'Analyze remaining 50 failures for automation patterns' },
-            { label: 'Additional Recovery Strategies', action: 'Implement intelligent retry mechanisms' },
-            { label: 'View Recovery Metrics', action: 'Detailed breakdown by pipeline type' },
-          ]
-        }
-      } else if (lower.includes('business impact') || lower.includes('affected')) {
-        mockResponse = {
-          role: 'agent',
-          content: '📊 Business Impact Analysis - Affected Data Products',
-          type: 'table',
-          data: [
-            { DataProduct: 'Affected Data Products', Count: '85', Impact: 'HIGH', Status: 'At-Risk' },
-            { DataProduct: 'Retail Sales & Failure', Count: '45', Impact: 'CRITICAL', Status: 'Delayed' },
-            { DataProduct: 'Frontier Wireless Drops', Count: '25', Impact: 'MEDIUM', Status: 'Degraded' },
-            { DataProduct: 'Customer Churn Prediction', Count: '12', Impact: 'LOW', Status: 'Delayed' },
-            { DataProduct: 'Finance Reporting', Count: '8', Impact: 'CRITICAL', Status: 'Blocked' },
-          ],
-          suggestedActions: [
-            { label: 'Prioritize Critical Products', action: 'Focus on Retail Sales and Finance Reporting issues' },
-            { label: 'Notify Stakeholders', action: 'Send updates to affected business unit leads' },
-            { label: 'Recovery Timeline', action: 'Show estimated recovery timeline for each product' },
-            { label: 'Workaround Options', action: 'Provide interim data sources until full recovery' },
-          ]
-        }
-      } else if (lower.includes('sla')) {
-        mockResponse = {
-          role: 'agent',
-          content: '⚖️ SLA Compliance & Breaches',
-          type: 'table',
-          data: [
-            { Pipeline: 'Finance ETL', SLA: '4 hrs', ActualTime: '3.5 hrs', Status: '✓ Met', Breaches: '0' },
-            { Pipeline: 'Inventory Sync', SLA: '6 hrs', ActualTime: '7.2 hrs', Status: '✗ Breach', Breaches: '2' },
-            { Pipeline: 'Sales Feed', SLA: '2 hrs', ActualTime: '1.8 hrs', Status: '✓ Met', Breaches: '0' },
-            { Pipeline: 'Customer 360', SLA: '3 hrs', ActualTime: '3.8 hrs', Status: '✗ Breach', Breaches: '2' },
-            { Pipeline: 'HR Data', SLA: '8 hrs', ActualTime: '6.5 hrs', Status: '✓ Met', Breaches: '1' },
-          ],
-          suggestedActions: [
-            { label: 'Urgent: Fix Inventory Sync', action: 'Address root cause of Inventory Sync breaches' },
-            { label: 'Optimize Customer 360', action: 'Improve performance to meet 3-hour SLA' },
-            { label: 'Review SLA Terms', action: 'Evaluate if SLAs are realistic' },
-            { label: 'Alert Configuration', action: 'Set up proactive alerts for SLA violations' },
-          ]
-        }
+      const errorMessage: Message = {
+        role: 'agent',
+        content: `❌ Error: ${error instanceof Error ? error.message : 'Failed to connect to the assistant service'}`,
+        type: 'error',
+        suggestedActions: [{ label: '🔄 Retry', action: textToSend }],
       }
-
-      if (mockResponse) {
-        // API failed but using cached mock data
-        const fallbackMsg: Message = {
-          role: 'agent',
-          content: '⚠️ Using cached data (server not available)',
-          type: 'info'
-        }
-        setMessages(prev => [...prev, fallbackMsg, mockResponse!])
-      } else {
-        // No mock data available
-        const errorMessage: Message = {
-          role: 'agent',
-          content: `❌ Error: ${error instanceof Error ? error.message : 'Failed to connect to DataOps service'}\n\n(Make sure to run: npm run dev:server)`,
-          type: 'error',
-          suggestedActions: [
-            { label: '🔄 Retry', action: textToSend },
-          ]
-        }
-        setMessages(prev => [...prev, errorMessage])
-      }
+      setMessages(prev => [...prev, errorMessage])
     } finally {
       setLoading(false)
     }
   }
+
+  
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -279,7 +150,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false }: ChatPanelProp
     setMessages([
       {
         role: 'agent',
-        content: '🤖 Executive DataOps Health Assistant! I can help you analyze KPIs, monitor pipeline health, review SLA compliance, and assess business impact.',
+        content: '👋 Hi! I\'m your DataOps Knowledge Assistant. Ask me about DMF ingestion, enrichment standards, ESP scheduling, Talend development, or any other platform guidelines.',
         type: 'info'
       }
     ])
@@ -336,9 +207,23 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false }: ChatPanelProp
                   ↺ Main Menu
                 </Button>
               )}
-              <IconButton size="small" onClick={onClose} sx={{ color: '#fff' }}>
-                <CloseIcon />
-              </IconButton>
+               <Button
+                size="small"
+                startIcon={<ArrowBackIcon sx={{ fontSize: 16 }} />}
+                onClick={onClose}
+                sx={{
+                  color: '#fff',
+                  textTransform: 'none',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  border: '1px solid rgba(255,255,255,0.4)',
+                  borderRadius: 1.5,
+                  px: 1.5,
+                  '&:hover': { backgroundColor: 'rgba(255,255,255,0.15)', borderColor: '#fff' },
+                }}
+              >
+                Back to Dashboard
+              </Button>
             </Box>
           </Box>
 
@@ -415,6 +300,11 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false }: ChatPanelProp
                         <FileDownloadIcon sx={{ fontSize: 18 }} />
                       </IconButton>
                     </Box>
+                  ) : msg.role === 'agent' ? (
+                    <FormattedMessage
+                      text={msg.content}
+                      color={msg.type === 'error' ? '#c62828' : msg.type === 'success' ? '#2e7d32' : '#333'}
+                    />
                   ) : (
                     <Typography variant="body2" sx={{ fontSize: '13px', lineHeight: 1.4 }}>
                       {msg.content}
@@ -501,7 +391,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false }: ChatPanelProp
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder="Ask about KPIs, pipeline health, SLAs, costs..."
+              placeholder="Ask about DMF, ESP, Talend, ingestion standards..."
               disabled={loading}
               size="small"
               variant="outlined"
@@ -516,12 +406,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false }: ChatPanelProp
               variant="contained"
               onClick={() => sendMessage()}
               disabled={loading || !input.trim()}
-              sx={{
-                backgroundColor: '#1976d2',
-                minWidth: '44px',
-                height: '44px',
-                p: 1,
-              }}
+              sx={{ backgroundColor: '#1976d2', minWidth: '44px', height: '44px', p: 1 }}
             >
               <SendIcon sx={{ fontSize: '18px' }} />
             </Button>
@@ -759,6 +644,11 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false }: ChatPanelProp
                     </TableBody>
                   </Table>
                 </Box>
+              ) : msg.role === 'agent' ? (
+                <FormattedMessage
+                  text={msg.content}
+                  color={msg.type === 'error' ? '#c62828' : msg.type === 'success' ? '#2e7d32' : '#333'}
+                />
               ) : (
                 <Typography variant="body2" sx={{ fontSize: '13px', lineHeight: 1.4 }}>
                   {msg.content}
@@ -845,7 +735,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false }: ChatPanelProp
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyPress={handleKeyPress}
-          placeholder="Ask about KPIs, pipeline health, SLAs, costs..."
+          placeholder="Ask about DMF, ESP, Talend, ingestion standards..."
           disabled={loading}
           size="small"
           variant="outlined"
