@@ -99,7 +99,7 @@ async function streamRequest(
 
 export const chatService = {
   sendMessage: async (message: string) => {
-    const raw = await chatRequest<ChatApiResponse>('/api/v1/chat', { session_id: message })
+    const raw = await chatRequest<ChatApiResponse>('/api/v1/chat', { session_id: "test_123", message: message, conversation_histoiry: [] })
     return normaliseResponse(raw)
   },
 
