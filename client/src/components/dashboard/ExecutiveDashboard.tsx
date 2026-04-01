@@ -8,6 +8,7 @@ import DashboardIcon from '@mui/icons-material/Dashboard'
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
 import SmartToyIcon from '@mui/icons-material/SmartToy'
 import TuneIcon from '@mui/icons-material/Tune'
+import AcUnitIcon from '@mui/icons-material/AcUnit'
 import {
   WidgetShell,
   StatCardGrid,
@@ -20,10 +21,12 @@ import { DMFPipelineWidget } from './DMFWidgets'
 import { ServiceNowDashboard } from './DataSourceWidgets'
 import { ESPDashboardTab } from './ESPDashboardTab'
 import { TalendDashboardTab } from './TalendDashboardTab'
+import { SnowflakeDashboardTab } from './SnowflakeDashboardTab'
 import { dmfService, cloudwatchService, snowflakeService, postgresService } from '../../services'
+import { useMockData } from '../../context/MockDataContext'
 
 // ─── Source definitions ────────────────────────────────────
-type SourceKey = 'overview' | 'dmf' | 'servicenow' | 'logs' | 'pipeline'
+type SourceKey = 'overview' | 'dmf' | 'servicenow' | 'logs' | 'pipeline' | 'snowflake'
 
 const SOURCES: {
   key: SourceKey
@@ -31,11 +34,13 @@ const SOURCES: {
   icon: React.ReactElement
   accent: string
   sub: string
+  mockOnly?: boolean
 }[] = [
   { key: 'pipeline',   label: 'ESP',             icon: <CloudIcon />,        accent: '#2e7d32', sub: 'Enterprise Data Platform' },
   { key: 'dmf',        label: 'DMF',             icon: <StorageIcon />,      accent: '#1565c0', sub: 'PostgreSQL'              },
   { key: 'servicenow', label: 'ServiceNow',      icon: <SupportAgentIcon />, accent: '#c62828', sub: 'ITSM'                    },
   { key: 'logs',       label: 'Talend',          icon: <AccountTreeIcon />,  accent: '#e65100', sub: 'Data Integration'        },
+  { key: 'snowflake',  label: 'Snowflake',       icon: <AcUnitIcon />,       accent: '#29b6f6', sub: 'Cloud Data Platform',     mockOnly: true },
 ]
 
 // ─── Overview widget preferences ─────────────────────────────
@@ -563,8 +568,10 @@ interface ExecutiveDashboardProps {
 }
 
 export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onChatClick }) => {
+  const { useMock } = useMockData()
   const [source, setSource] = useState<SourceKey>('pipeline')
-  const active = SOURCES.find(s => s.key === source)!
+  const visibleSources = SOURCES.filter(s => !s.mockOnly || useMock)
+  const active = visibleSources.find(s => s.key === source) ?? visibleSources[0]!
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
@@ -592,7 +599,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onChatCl
 
       {/* ── Source selector tabs ── */}
       <Box sx={{ display: 'flex', backgroundColor: '#263548', px: 2, flexShrink: 0, borderBottom: '1px solid #1a2535' }}>
-        {SOURCES.map(src => {
+        {visibleSources.map(src => {
           const isActive = source === src.key
           return (
             <Box
@@ -627,8 +634,9 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onChatCl
         {source === 'overview'   && <OverviewLanding onSourceSelect={setSource} />}
         {source === 'dmf'        && <DMFPipelineWidget />}
         {source === 'servicenow' && <ServiceNowDashboard />}
-        {source === 'logs' && <TalendDashboardTab />}
-        {source === 'pipeline' && <ESPDashboardTab />}
+        {source === 'logs'      && <TalendDashboardTab />}
+        {source === 'pipeline'   && <ESPDashboardTab />}
+        {source === 'snowflake'  && <SnowflakeDashboardTab />}
         </Box>
 
 s

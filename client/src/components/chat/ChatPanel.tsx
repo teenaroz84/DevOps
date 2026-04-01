@@ -20,6 +20,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import SmartToyIcon from '@mui/icons-material/SmartToy'
 import FileDownloadIcon from '@mui/icons-material/FileDownload'
 import { chatService } from '../../services'
+import { sessionStore } from '../../services/sessionStore'
 import { FormattedMessage } from './FormattedMessage'
 
 function exportDataAsCsv(data: any[]) {
@@ -61,17 +62,32 @@ interface ChatPanelProps {
   fullScreen?: boolean
 }
 
+const WELCOME_MESSAGE: Message = {
+  role: 'agent',
+  content: '👋 Hi! I\'m your DataOps Knowledge Assistant. Ask me about DMF ingestion, enrichment standards, ESP scheduling, Talend development, or any other platform guidelines.',
+  type: 'info',
+}
+
 export function ChatPanel({ isOpen, onClose, fullScreen = false }: ChatPanelProps) {
   const [input, setInput] = useState('')
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: 'agent',
-      content: '👋 Hi! I\'m your DataOps Knowledge Assistant. Ask me about DMF ingestion, enrichment standards, ESP scheduling, Talend development, or any other platform guidelines.',
-      type: 'info'
-    }
-  ])
+
+  // Restore chat history from localStorage on first mount
+  const [messages, setMessages] = useState<Message[]>(() => {
+    const saved = sessionStore.getChat().history
+    return saved && saved.length > 0 ? (saved as Message[]) : [WELCOME_MESSAGE]
+  })
+
   const [loading, setLoading] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  // Persist history whenever messages change (skip welcome-only state)
+  useEffect(() => {
+    if (messages.length > 1 || messages[0]?.content !== WELCOME_MESSAGE.content) {
+      sessionStore.setChat({
+        history: messages.map(({ role, content }) => ({ role, content })),
+      })
+    }
+  }, [messages])
 
   const HEALTH_CHECK_QUERY = '__health_check__'
 
@@ -114,6 +130,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false }: ChatPanelProp
         }])
       } else {
         const data = await chatService.sendMessage(textToSend)
+        sessionStore.setChat({ lastAgentId: 'default' })
         const agentResponse: Message = {
           role: 'agent',
           content: data.text || '(No response)',
@@ -147,13 +164,8 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false }: ChatPanelProp
   }
 
   const resetToMainMenu = () => {
-    setMessages([
-      {
-        role: 'agent',
-        content: '👋 Hi! I\'m your DataOps Knowledge Assistant. Ask me about DMF ingestion, enrichment standards, ESP scheduling, Talend development, or any other platform guidelines.',
-        type: 'info'
-      }
-    ])
+    sessionStore.clearChatHistory()
+    setMessages([WELCOME_MESSAGE])
     setInput('')
   }
 
