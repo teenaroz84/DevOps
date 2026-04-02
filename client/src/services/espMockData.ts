@@ -266,6 +266,9 @@ const MOCK_APPS: AppData[] = [
 
 export const MOCK_ESP_APPLICATIONS = MOCK_APPS.map(a => ({ appl_name: a.appl_name }))
 
+/** Mirrors the /api/esp/job-counts response shape: [{appl_name, total_jobs}] */
+export const MOCK_ESP_JOB_COUNTS = MOCK_APPS.map(a => ({ appl_name: a.appl_name, total_jobs: a.job_count }))
+
 export function getMockAppData(applName: string): AppData | null {
   return MOCK_APPS.find(a => a.appl_name === applName) ?? null
 }

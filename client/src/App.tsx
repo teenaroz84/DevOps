@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { SESSION_ID } from './services/session'
 import { ThemeProvider, createTheme, CssBaseline } from '@mui/material'
 import { Box } from '@mui/material'
 import { Navigation } from './components/layout/Navigation'
@@ -67,7 +68,7 @@ function App() {
 
   // Load preferences and widget order from localStorage on mount
   useEffect(() => {
-    const savedPreferences = localStorage.getItem('dashboardPreferences')
+    const savedPreferences = localStorage.getItem(`dashboardPreferences:${SESSION_ID}`)
     if (savedPreferences) {
       try {
         const parsed = JSON.parse(savedPreferences)
@@ -77,7 +78,7 @@ function App() {
       }
     }
 
-    const savedWidgetOrder = localStorage.getItem('dashboardWidgetOrder')
+    const savedWidgetOrder = localStorage.getItem(`dashboardWidgetOrder:${SESSION_ID}`)
     if (savedWidgetOrder) {
       try {
         const parsed = JSON.parse(savedWidgetOrder)
@@ -90,12 +91,12 @@ function App() {
 
   // Save preferences to localStorage whenever they change
   useEffect(() => {
-    localStorage.setItem('dashboardPreferences', JSON.stringify(preferences))
+    localStorage.setItem(`dashboardPreferences:${SESSION_ID}`, JSON.stringify(preferences))
   }, [preferences])
 
   // Save widget order to localStorage whenever it changes
   useEffect(() => {
-    localStorage.setItem('dashboardWidgetOrder', JSON.stringify(widgetOrder))
+    localStorage.setItem(`dashboardWidgetOrder:${SESSION_ID}`, JSON.stringify(widgetOrder))
   }, [widgetOrder])
 
   return (

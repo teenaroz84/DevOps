@@ -22,8 +22,14 @@ import { ServiceNowDashboard } from './DataSourceWidgets'
 import { ESPDashboardTab } from './ESPDashboardTab'
 import { TalendDashboardTab } from './TalendDashboardTab'
 import { SnowflakeDashboardTab } from './SnowflakeDashboardTab'
-import { dmfService, cloudwatchService, snowflakeService, postgresService } from '../../services'
+import { dmfService, snowflakeService, talendService, servicenowService, espService } from '../../services'
+import { MOCK_DMF_SUMMARY, MOCK_DMF_RUNS_OVER_TIME } from '../../services/dmfMockData'
+import { MOCK_TALEND_SUMMARY } from '../../services/talendMockData'
+import { MOCK_SERVICENOW_INCIDENTS, MOCK_SERVICENOW_TICKETS } from '../../services/servicenowMockData'
+import { MOCK_ESP_JOB_COUNTS } from '../../services/espMockData'
+import { MOCK_SF_COST_SUMMARY, MOCK_SF_PLATFORM_SUMMARY } from '../../services/snowflakeMockData'
 import { useMockData } from '../../context/MockDataContext'
+import { SESSION_ID } from '../../services/session'
 
 // ─── Source definitions ────────────────────────────────────
 type SourceKey = 'overview' | 'dmf' | 'servicenow' | 'logs' | 'pipeline' | 'snowflake'
@@ -36,6 +42,7 @@ const SOURCES: {
   sub: string
   mockOnly?: boolean
 }[] = [
+  { key: 'overview',   label: 'Overview',        icon: <DashboardIcon />,    accent: '#1976d2', sub: 'Executive Summary'       },
   { key: 'pipeline',   label: 'ESP',             icon: <CloudIcon />,        accent: '#2e7d32', sub: 'Enterprise Data Platform' },
   { key: 'dmf',        label: 'DMF',             icon: <StorageIcon />,      accent: '#1565c0', sub: 'PostgreSQL'              },
   { key: 'servicenow', label: 'ServiceNow',      icon: <SupportAgentIcon />, accent: '#c62828', sub: 'ITSM'                    },
@@ -52,6 +59,7 @@ type OverviewPrefs = {
   snapServiceNow: boolean
   snapLogs: boolean
   snapPipeline: boolean
+  snapInsights: boolean
 }
 
 const DEFAULT_PREFS: OverviewPrefs = {
@@ -62,12 +70,14 @@ const DEFAULT_PREFS: OverviewPrefs = {
   snapServiceNow: true,
   snapLogs: true,
   snapPipeline: true,
+  snapInsights: true,
 }
 
-const PREFS_STORAGE_KEY = 'executive-overview-prefs'
+const PREFS_STORAGE_KEY = `executive-overview-prefs:${SESSION_ID}`
 
 // ─── Overview / Landing page ───────────────────────────────
 const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({ onSourceSelect }) => {
+  const { useMock, toggleMock } = useMockData()
   // ── Widget visibility preferences ──────────────────────
   const [prefs, setPrefs] = useState<OverviewPrefs>(() => {
     try {
@@ -85,29 +95,50 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
     setPrefs(p => ({ ...p, [key]: !p[key] }))
   const resetPrefs = () => setPrefs(DEFAULT_PREFS)
 
-  const [dmfSummary,   setDmfSummary]   = useState<any>(null)
-  const [errors,       setErrors]       = useState<any[]>([])
-  const [cost,         setCost]         = useState<any>(null)
-  const [runsOverTime, setRunsOverTime] = useState<any[]>([])
-  const [pipelines,    setPipelines]    = useState<any[]>([])
-  const [loading,      setLoading]      = useState(true)
+  const [dmfSummary,    setDmfSummary]    = useState<any>(null)
+  const [cost,          setCost]          = useState<any>(null)
+  const [runsOverTime,  setRunsOverTime]  = useState<any[]>([])
+  const [talendSummary, setTalendSummary] = useState<any>(null)
+  const [incidents,     setIncidents]     = useState<any[]>([])
+  const [tickets,       setTickets]       = useState<any[]>([])
+  const [espJobCounts,     setEspJobCounts]     = useState<any[]>([])
+  const [snowflakePlatform, setSnowflakePlatform] = useState<any>(null)
+  const [loading,           setLoading]           = useState(true)
 
   useEffect(() => {
+    setLoading(true)
+    if (useMock) {
+      setDmfSummary(MOCK_DMF_SUMMARY)
+      setRunsOverTime(MOCK_DMF_RUNS_OVER_TIME)
+      setTalendSummary(MOCK_TALEND_SUMMARY)
+      setIncidents(MOCK_SERVICENOW_INCIDENTS)
+      setTickets(MOCK_SERVICENOW_TICKETS)
+      setEspJobCounts(MOCK_ESP_JOB_COUNTS)
+      setCost({ total: MOCK_SF_COST_SUMMARY.monthly_cost, budget: MOCK_SF_COST_SUMMARY.budget, overage: Math.max(0, MOCK_SF_COST_SUMMARY.monthly_cost - MOCK_SF_COST_SUMMARY.budget), efficient_pct: MOCK_SF_COST_SUMMARY.efficient_pct, wasted_spend: MOCK_SF_COST_SUMMARY.wasted_spend })
+      setSnowflakePlatform(MOCK_SF_PLATFORM_SUMMARY)
+      setLoading(false)
+      return
+    }
     Promise.all([
       dmfService.getSummary(),
-      cloudwatchService.getErrors(),
       snowflakeService.getCost(),
       dmfService.getRunsOverTime(),
-      postgresService.getPipelines(),
-    ]).then(([dmf, err, cst, rot, pls]) => {
+      talendService.getSummary(),
+      servicenowService.getIncidents(),
+      servicenowService.getTickets(),
+      espService.getJobCounts(),
+    ]).then(([dmf, cst, rot, tln, inc, tkt, esp]) => {
       setDmfSummary(dmf)
-      setErrors(Array.isArray(err) ? err : [])
       setCost(cst)
       setRunsOverTime(Array.isArray(rot) ? rot : [])
-      setPipelines(Array.isArray(pls) ? pls : [])
+      setTalendSummary(tln)
+      setIncidents(Array.isArray(inc) ? inc : [])
+      setTickets(Array.isArray(tkt) ? tkt : [])
+      setEspJobCounts(Array.isArray(esp) ? esp : [])
+      setSnowflakePlatform(null)
       setLoading(false)
     }).catch(() => setLoading(false))
-  }, [])
+  }, [useMock])
 
   if (loading) {
     return (
@@ -118,12 +149,75 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
   }
 
   // ── Derived metrics ──────────────────────────────────────
-  const criticalErrors    = errors.filter(e => e.severity === 'critical').length
-  const highErrors        = errors.filter(e => e.severity === 'high').length
-  const budgetPct         = cost ? Math.round((cost.total / cost.budget) * 100) : 0
-  const healthyPipelines  = pipelines.filter(p => p.status === 'healthy').length
-  const atRiskPipelines   = pipelines.filter(p => p.status === 'at_risk').length
-  const criticalPipelines = pipelines.filter(p => p.status === 'critical').length
+  const budgetPct = cost ? Math.round((cost.total / cost.budget) * 100) : 0
+
+  // Talend derived
+  const talendBreakdown: any[] = talendSummary?.statusBreakdown ?? []
+  const talendTotal   = talendBreakdown.reduce((s: number, r: any) => s + r.count, 0)
+  const talendSuccess = talendBreakdown.find((r: any) => r.status?.includes('SUCCESS'))?.count ?? 0
+  const talendFailed  = talendBreakdown.find((r: any) => r.status?.includes('FAILED'))?.count  ?? 0
+  const talendRunning = talendBreakdown.find((r: any) => r.status?.includes('RUNNING'))?.count ?? 0
+  const talendFailPct = talendTotal > 0 ? Math.round((talendFailed / talendTotal) * 100) : 0
+
+  // ServiceNow derived
+  const p1Incidents = incidents.find((i: any) => i.priority_field === 'P1')?.incident_count ?? 0
+  const p2Incidents = incidents.find((i: any) => i.priority_field === 'P2')?.incident_count ?? 0
+  const p3Incidents = incidents.find((i: any) => i.priority_field === 'P3')?.incident_count ?? 0
+  const slaBreached = tickets.filter((t: any) => t.sla?.breached).length
+  const openTickets = tickets.filter((t: any) => t.status !== 'resolved' && t.status !== 'closed').length
+
+  // ESP derived
+  const totalEspApps = espJobCounts.length
+  const totalEspJobs = espJobCounts.reduce((s: number, a: any) => s + (a.total_jobs ?? 0), 0)
+  const topEspApp    = espJobCounts.reduce((top: any, a: any) => (!top || a.total_jobs > top.total_jobs ? a : top), null as any)
+
+  // ── Cross-system correlation data ─────────────────────────
+  // Map ServiceNow ticket affectedService → source system
+  const TICKET_SOURCE_MAP: Record<string, string> = {
+    'BI Reporting':       'DMF',
+    'Data Warehouse':     'DMF',
+    'Analytics Platform': 'Snowflake',
+    'CMDB Sync':          'ServiceNow',
+    'Database Layer':     'Database',
+    'DMF Orchestration':  'DMF',
+    'ESP Scheduler':      'ESP',
+    'Monitoring':         'CloudWatch',
+  }
+  const ticketsBySource = tickets.reduce((acc: Record<string, number>, t: any) => {
+    const src = TICKET_SOURCE_MAP[t.affectedService] ?? 'Other'
+    acc[src] = (acc[src] ?? 0) + 1
+    return acc
+  }, {})
+  const SOURCE_COLORS: Record<string, string> = {
+    'DMF': '#1565c0', 'ESP': '#2e7d32', 'Snowflake': '#0277bd',
+    'ServiceNow': '#c62828', 'Database': '#546e7a', 'CloudWatch': '#e65100', 'Other': '#9e9e9e',
+  }
+  const incidentAttributionItems = Object.entries(ticketsBySource)
+    .sort(([, a], [, b]) => (b as number) - (a as number))
+    .map(([label, value]) => ({
+      label,
+      value: value as number,
+      max:   tickets.length || 1,
+      color: SOURCE_COLORS[label] ?? '#9e9e9e',
+      sublabel: `${value} ticket${(value as number) > 1 ? 's' : ''}`,
+    }))
+
+  // Platform health bars (normalised %)
+  const talendSuccessPct = talendTotal > 0 ? Math.round(talendSuccess / talendTotal * 100) : 0
+  const snSlaCompliancePct = tickets.length > 0 ? Math.round((tickets.length - slaBreached) / tickets.length * 100) : 100
+  const sfEfficiencyPct = cost?.efficient_pct ?? 0
+  const platformHealthItems = [
+    { label: 'DMF',         value: dmfSummary?.successRate?.value ?? 0, suffix: '%', max: 100, sublabel: `${dmfSummary?.failedRuns?.value ?? '—'} failed / ${dmfSummary?.totalRuns?.value ?? '—'} runs` },
+    { label: 'Talend',      value: talendSuccessPct,                    suffix: '%', max: 100, sublabel: `${talendFailed} failed · ${talendRunning} running` },
+    { label: 'Snowflake',   value: sfEfficiencyPct,                     suffix: '%', max: 100, sublabel: `$${cost ? (cost.wasted_spend / 1000).toFixed(1) : '—'}K wasted spend` },
+    { label: 'ServiceNow',  value: snSlaCompliancePct,                  suffix: '%', max: 100, sublabel: `${slaBreached} SLA breached / ${tickets.length} tickets` },
+  ]
+
+  // Failure volume comparison
+  const sfTaskFailures = snowflakePlatform?.task_failures ?? 0
+  const sfQueryErrors  = snowflakePlatform?.query_errors  ?? 0
+  const combinedFailures = (dmfSummary?.failedRuns?.value ?? 0) + talendFailed + sfTaskFailures
+  const dmfTicketCount   = ticketsBySource['DMF'] ?? 0
   // ── Global KPI strip (one number from each source) ────────
   const globalKpis: StatCardItem[] = [
     {
@@ -137,21 +231,30 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
       description: 'DMF pipeline execution success rate across all stages',
     },
     {
-      label: 'Active Errors',
-      value: criticalErrors + highErrors,
-      color: criticalErrors > 0 ? '#c62828' : '#f57c00',
-      bg: criticalErrors > 0 ? '#fce4ec' : '#fff3e0',
-      trend: `${criticalErrors} critical · ${highErrors} high`,
+      label: 'P1 Incidents',
+      value: p1Incidents,
+      color: p1Incidents > 0 ? '#c62828' : '#2e7d32',
+      bg: p1Incidents > 0 ? '#fce4ec' : '#e8f5e9',
+      trend: `${openTickets} open · ${slaBreached} SLA breached`,
       trendPositiveIsGood: false,
-      description: 'CloudWatch critical and high severity errors',
+      description: 'ServiceNow critical P1 incidents currently active',
+    },
+    {
+      label: 'Talend Failed',
+      value: talendFailed,
+      color: talendFailed > 0 ? '#c62828' : '#2e7d32',
+      bg: talendFailed > 0 ? '#fce4ec' : '#e8f5e9',
+      trend: `${talendFailPct}% fail rate · ${talendRunning} running`,
+      trendPositiveIsGood: false,
+      description: 'Talend task executions that reached a failed state',
     },
     {
       label: 'Budget Usage',
-      value: budgetPct,
-      unit: '%',
+      value: budgetPct || '—',
+      unit: budgetPct ? '%' : '',
       color: budgetPct > 110 ? '#c62828' : budgetPct > 100 ? '#f57c00' : '#2e7d32',
       bg: budgetPct > 110 ? '#fce4ec' : budgetPct > 100 ? '#fff3e0' : '#e8f5e9',
-      trend: cost ? `$${(cost.overage / 1000).toFixed(0)}K over budget` : '',
+      trend: cost ? `$${(cost.total / 1000).toFixed(0)}K of $${(cost.budget / 1000).toFixed(0)}K` : 'Snowflake (mock mode)',
       trendPositiveIsGood: false,
       description: 'Snowflake compute + infrastructure budget utilisation',
     },
@@ -204,10 +307,24 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
       accent: '#c62828',
       source: 'ITSM',
       kpis: [
-        { label: 'Incidents', value: '—', color: '#c62828', bg: '#fce4ec',
-          description: 'ServiceNow incidents by priority.' },
+        { label: 'P1 Incidents', value: p1Incidents,
+          color: p1Incidents > 0 ? '#c62828' : '#2e7d32', bg: p1Incidents > 0 ? '#fce4ec' : '#e8f5e9',
+          description: 'Critical P1 incidents currently open.',
+          dialogStats: [{ label: 'P2', value: p2Incidents }, { label: 'P3', value: p3Incidents }] },
+        { label: 'P2 Incidents', value: p2Incidents,
+          color: p2Incidents > 0 ? '#f57c00' : '#2e7d32', bg: p2Incidents > 0 ? '#fff3e0' : '#e8f5e9',
+          description: 'High priority P2 incidents.',
+          dialogStats: [{ label: 'P1', value: p1Incidents }, { label: 'P3', value: p3Incidents }] },
+        { label: 'Open Tickets', value: openTickets,
+          color: '#1565c0', bg: '#e3f2fd',
+          description: 'Total unresolved tickets across all priorities.',
+          dialogStats: [{ label: 'SLA Breached', value: slaBreached }] },
+        { label: 'SLA Breached', value: slaBreached,
+          color: slaBreached > 0 ? '#c62828' : '#2e7d32', bg: slaBreached > 0 ? '#fce4ec' : '#e8f5e9',
+          description: 'Tickets that have violated their SLA commitment.',
+          dialogStats: [{ label: 'Open', value: openTickets }, { label: 'P1', value: p1Incidents }] },
       ],
-      alert: undefined,
+      alert: p1Incidents > 0 ? `⚠ ${p1Incidents} P1 incident${p1Incidents > 1 ? 's' : ''} active` : undefined,
     },
     {
       key: 'logs',
@@ -216,24 +333,24 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
       accent: '#e65100',
       source: 'Data Integration',
       kpis: [
-        { label: 'Critical',    value: criticalErrors,
-          color: criticalErrors > 0 ? '#c62828' : '#2e7d32', bg: criticalErrors > 0 ? '#fce4ec' : '#e8f5e9',
-          description: 'CloudWatch critical severity errors active in the current window.',
-          dialogStats: [{ label: 'High', value: highErrors }, { label: 'Total Errors', value: errors.length }] },
-        { label: 'High Errors', value: highErrors,
-          color: highErrors > 0 ? '#f57c00' : '#2e7d32',     bg: highErrors > 0 ? '#fff3e0' : '#e8f5e9',
-          description: 'CloudWatch high severity errors that need investigation.',
-          dialogStats: [{ label: 'Critical', value: criticalErrors }, { label: 'Total Errors', value: errors.length }] },
-        { label: 'Budget Used', value: `${budgetPct}%`,
-          color: budgetPct > 100 ? '#c62828' : '#2e7d32',  bg: budgetPct > 100 ? '#fce4ec' : '#e8f5e9',
-          description: 'Snowflake and infrastructure cost as a percentage of budget.',
-          dialogStats: [{ label: 'Total Spend', value: cost ? `$${(cost.total / 1000).toFixed(0)}K` : '—' }, { label: 'Budget', value: cost ? `$${(cost.budget / 1000).toFixed(0)}K` : '—' }] },
-        { label: 'Total Spend', value: cost ? `$${(cost.total / 1000).toFixed(0)}K` : '—',
+        { label: 'Total Runs',  value: talendTotal,
           color: '#1565c0', bg: '#e3f2fd',
-          description: 'Total Snowflake compute and infrastructure spend this period.',
-          dialogStats: [{ label: 'Budget', value: cost ? `$${(cost.budget / 1000).toFixed(0)}K` : '—' }, { label: 'Overage', value: cost ? `$${(cost.overage / 1000).toFixed(0)}K` : '—' }] },
+          description: 'Total Talend task executions in the current period.',
+          dialogStats: [{ label: 'Success', value: talendSuccess }, { label: 'Failed', value: talendFailed }] },
+        { label: 'Successful',  value: talendSuccess,
+          color: '#2e7d32', bg: '#e8f5e9',
+          description: 'Tasks that completed successfully.',
+          dialogStats: [{ label: 'Total', value: talendTotal }, { label: 'Failed', value: talendFailed }] },
+        { label: 'Failed',      value: talendFailed,
+          color: talendFailed > 0 ? '#c62828' : '#2e7d32', bg: talendFailed > 0 ? '#fce4ec' : '#e8f5e9',
+          description: 'Tasks that reached a failed state.',
+          dialogStats: [{ label: 'Fail Rate', value: `${talendFailPct}%` }, { label: 'Total', value: talendTotal }] },
+        { label: 'Running',     value: talendRunning,
+          color: '#f57c00', bg: '#fff3e0',
+          description: 'Tasks currently executing.',
+          dialogStats: [{ label: 'Total', value: talendTotal }, { label: 'Success', value: talendSuccess }] },
       ],
-      alert: criticalErrors > 0 ? `⚠ ${criticalErrors} critical error${criticalErrors > 1 ? 's' : ''} active` : undefined,
+      alert: talendFailed > 10 ? `⚠ ${talendFailed} failed execution${talendFailed > 1 ? 's' : ''} this period` : undefined,
     },
     {
       key: 'pipeline',
@@ -242,20 +359,24 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
       accent: '#2e7d32',
       source: 'Enterprise Data Platform',
       kpis: [
-        { label: 'Total',    value: pipelines.length,  color: '#1565c0', bg: '#e3f2fd',
-          description: 'Total number of data pipelines tracked in PostgreSQL.',
-          dialogStats: [{ label: 'Healthy', value: healthyPipelines }, { label: 'At Risk', value: atRiskPipelines }] },
-        { label: 'Healthy',  value: healthyPipelines,  color: '#2e7d32', bg: '#e8f5e9',
-          description: 'Pipelines running within normal parameters with high success rates.',
-          dialogStats: [{ label: 'Total', value: pipelines.length }, { label: 'At Risk', value: atRiskPipelines }] },
-        { label: 'At Risk',  value: atRiskPipelines,   color: '#f57c00', bg: '#fff3e0',
-          description: 'Pipelines showing degraded performance or elevated failure rates.',
-          dialogStats: [{ label: 'Critical', value: criticalPipelines }, { label: 'Healthy', value: healthyPipelines }] },
-        { label: 'Critical', value: criticalPipelines, color: '#c62828', bg: '#fce4ec',
-          description: 'Pipelines in a critical state requiring immediate intervention.',
-          dialogStats: [{ label: 'At Risk', value: atRiskPipelines }, { label: 'Total', value: pipelines.length }] },
+        { label: 'Applications', value: totalEspApps,
+          color: '#2e7d32', bg: '#e8f5e9',
+          description: 'Number of distinct ESP scheduler applications.',
+          dialogStats: [{ label: 'Total Jobs', value: totalEspJobs }] },
+        { label: 'Total Jobs',   value: totalEspJobs,
+          color: '#1565c0', bg: '#e3f2fd',
+          description: 'Total job definitions across all ESP applications.',
+          dialogStats: [{ label: 'Applications', value: totalEspApps }, { label: 'Avg / App', value: totalEspApps > 0 ? Math.round(totalEspJobs / totalEspApps) : 0 }] },
+        { label: 'Largest App',  value: topEspApp?.total_jobs ?? '—',
+          color: '#546e7a', bg: '#eceff1',
+          description: `Application with the most job definitions${topEspApp ? ` (${topEspApp.appl_name})` : ''}.`,
+          dialogStats: topEspApp ? [{ label: 'App', value: topEspApp.appl_name }] : [] },
+        { label: 'Avg Jobs / App', value: totalEspApps > 0 ? Math.round(totalEspJobs / totalEspApps) : '—',
+          color: '#7b1fa2', bg: '#f3e5f5',
+          description: 'Average number of job definitions per ESP application.',
+          dialogStats: [{ label: 'Applications', value: totalEspApps }, { label: 'Total Jobs', value: totalEspJobs }] },
       ],
-      alert: criticalPipelines > 0 ? `⚠ ${criticalPipelines} pipeline${criticalPipelines > 1 ? 's' : ''} in critical state` : undefined,
+      alert: undefined,
     },
   ]
 
@@ -264,10 +385,11 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
     { key: 'kpiStrip',            label: 'KPI Strip'            },
     { key: 'operationalSnapshot', label: 'Operational Snapshot' },
     { key: 'dmfTrend',            label: 'DMF Trend'            },
-    { key: 'snapDmf',             label: 'DMF'        },
-    { key: 'snapServiceNow',      label: 'ServiceNow' },
-    { key: 'snapLogs',            label: 'Talend'     },
-    { key: 'snapPipeline',        label: 'ESP'        },
+    { key: 'snapDmf',             label: 'DMF'          },
+    { key: 'snapServiceNow',      label: 'ServiceNow'   },
+    { key: 'snapLogs',            label: 'Talend'       },
+    { key: 'snapPipeline',        label: 'ESP'          },
+    { key: 'snapInsights',        label: 'Correlations' },
   ]
 
   const visibleSnapshots = snapshots.filter(s => prefs[s.prefKey])
@@ -305,9 +427,26 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
             {showPrefs ? '▲ hide' : '▼ expand'}
           </Typography>
           {!showPrefs && (
-            <Typography sx={{ fontSize: '10px', color: '#bbb', ml: 'auto' }}>
-              {prefChips.filter(c => prefs[c.key]).length}/{prefChips.length} widgets visible
-            </Typography>
+            <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography sx={{ fontSize: '10px', color: '#bbb' }}>
+                {prefChips.filter(c => prefs[c.key]).length}/{prefChips.length} widgets visible
+              </Typography>
+              <Chip
+                label={useMock ? 'Mock Data' : 'Live Data'}
+                size="small"
+                onClick={e => { e.stopPropagation(); toggleMock(); }}
+                sx={{
+                  height: 20,
+                  fontSize: '10px',
+                  fontWeight: 700,
+                  backgroundColor: useMock ? '#fff3e0' : '#e8f5e9',
+                  color: useMock ? '#e65100' : '#2e7d32',
+                  border: `1px solid ${useMock ? '#ffcc80' : '#a5d6a7'}`,
+                  cursor: 'pointer',
+                  '& .MuiChip-label': { px: 1 },
+                }}
+              />
+            </Box>
           )}
         </Box>
 
@@ -407,18 +546,19 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
                         sublabel: 'PostgreSQL · DMF Pipeline',
                       },
                       {
-                        label: 'Pipeline Health',
-                        value: healthyPipelines,
-                        max: Math.max(pipelines.length, 1),
-                        color: criticalPipelines > 0 ? '#c62828' : atRiskPipelines > 0 ? '#f57c00' : '#2e7d32',
-                        sublabel: `${healthyPipelines} of ${pipelines.length} healthy`,
+                        label: 'Talend Success Rate',
+                        value: talendTotal > 0 ? Math.round((talendSuccess / talendTotal) * 100) : 0,
+                        suffix: '%',
+                        max: 100,
+                        color: talendFailed > 10 ? '#c62828' : talendFailed > 0 ? '#f57c00' : '#2e7d32',
+                        sublabel: `${talendSuccess} success · ${talendFailed} failed · ${talendRunning} running`,
                       },
                       {
-                        label: 'Error Pressure',
-                        value: criticalErrors + highErrors,
-                        max: Math.max(errors.length, 1),
-                        color: criticalErrors > 0 ? '#c62828' : highErrors > 0 ? '#f57c00' : '#2e7d32',
-                        sublabel: `CloudWatch · ${criticalErrors} critical, ${highErrors} high`,
+                        label: 'ServiceNow P1 Incidents',
+                        value: p1Incidents,
+                        max: Math.max(p1Incidents + p2Incidents + p3Incidents, 1),
+                        color: p1Incidents > 0 ? '#c62828' : '#2e7d32',
+                        sublabel: `${openTickets} open tickets · ${slaBreached} SLA breached`,
                       },
                       {
                         label: 'Budget Usage',
@@ -431,13 +571,13 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
                     ]}
                     barHeight={10}
                   />
-                  {(criticalErrors > 0 || criticalPipelines > 0) && (
+                  {(p1Incidents > 0 || talendFailed > 10) && (
                     <AlertBanner
                       severity="warning"
                       title="Action required"
                       message={[
-                        criticalErrors > 0    ? `${criticalErrors} critical CloudWatch error${criticalErrors > 1 ? 's' : ''}` : null,
-                        criticalPipelines > 0 ? `${criticalPipelines} pipeline${criticalPipelines > 1 ? 's' : ''} critical`   : null,
+                        p1Incidents > 0    ? `${p1Incidents} P1 incident${p1Incidents > 1 ? 's' : ''} active` : null,
+                        talendFailed > 10  ? `${talendFailed} Talend task${talendFailed > 1 ? 's' : ''} failed`  : null,
                       ].filter(Boolean).join(' · ')}
                     />
                   )}
@@ -543,8 +683,145 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
         </Box>
       )}
 
+      {/* ── Cross-System Intelligence ── */}
+      {prefs.snapInsights && (
+        <Box>
+          <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#999', textTransform: 'uppercase', letterSpacing: '0.8px', mb: 1 }}>
+            Cross-System Intelligence
+          </Typography>
+
+          {/* Pipeline cascade flow */}
+          <Paper elevation={0} sx={{ borderRadius: 2, border: '1px solid #e8ecf1', overflow: 'hidden', mb: 2, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+            <Box sx={{ px: 2, py: 1.25, borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography sx={{ fontWeight: 700, fontSize: '12px', color: '#37474f' }}>Data Pipeline Cascade</Typography>
+              <Typography sx={{ fontSize: '10px', color: '#aaa' }}>· end-to-end system health</Typography>
+            </Box>
+            <Box sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'stretch', gap: 0 }}>
+              {[
+                {
+                  key: 'ESP', color: '#2e7d32', bg: '#f1f8f1',
+                  lines: [`${totalEspApps} applications`, `${totalEspJobs} jobs scheduled`],
+                  health: 'ok' as const,
+                },
+                {
+                  key: 'DMF', color: '#1565c0', bg: '#f0f4ff',
+                  lines: [`${dmfSummary?.totalRuns?.value ?? '—'} runs`, `${dmfSummary?.failedRuns?.value ?? 0} failed`],
+                  health: ((dmfSummary?.failedRuns?.value ?? 0) > 50 ? 'warn' : 'ok') as 'ok' | 'warn' | 'alert',
+                },
+                {
+                  key: 'Talend', color: '#e65100', bg: '#fff8f5',
+                  lines: [`${talendTotal} executions`, `${talendFailed} failed`],
+                  health: (talendFailed > 10 ? 'warn' : 'ok') as 'ok' | 'warn' | 'alert',
+                },
+                {
+                  key: 'Snowflake', color: '#0277bd', bg: '#f0f8ff',
+                  lines: [`${sfEfficiencyPct}% efficient`, `$${cost ? (cost.total / 1000).toFixed(0) : '—'}K spend`],
+                  health: (sfEfficiencyPct > 0 && sfEfficiencyPct < 80 ? 'warn' : 'ok') as 'ok' | 'warn' | 'alert',
+                },
+                {
+                  key: 'ServiceNow', color: '#c62828', bg: '#fff5f5',
+                  lines: [`P1: ${p1Incidents} · P2: ${p2Incidents}`, `${slaBreached} SLA breached`],
+                  health: (p1Incidents > 0 ? 'alert' : slaBreached > 0 ? 'warn' : 'ok') as 'ok' | 'warn' | 'alert',
+                },
+              ].map((stage, i, arr) => (
+                <React.Fragment key={stage.key}>
+                  <Box sx={{
+                    flex: 1, bgcolor: stage.bg, textAlign: 'center', py: 1.25, px: 1,
+                    border: `1px solid ${stage.health === 'alert' ? '#ef9a9a' : stage.health === 'warn' ? '#ffcc80' : '#e0e0e0'}`,
+                    borderRadius: i === 0 ? '8px 0 0 8px' : i === arr.length - 1 ? '0 8px 8px 0' : 0,
+                    borderLeft: i > 0 ? 'none' : undefined,
+                  }}>
+                    <Box sx={{ width: 8, height: 8, borderRadius: '50%', mx: 'auto', mb: 0.5,
+                      bgcolor: stage.health === 'alert' ? '#c62828' : stage.health === 'warn' ? '#f57c00' : '#43a047' }} />
+                    <Typography sx={{ fontSize: '11px', fontWeight: 700, color: stage.color, lineHeight: 1.3 }}>{stage.key}</Typography>
+                    {stage.lines.map((l, li) => (
+                      <Typography key={li} sx={{ fontSize: '10px', color: '#777', mt: 0.25, lineHeight: 1.4 }}>{l}</Typography>
+                    ))}
+                  </Box>
+                  {i < arr.length - 1 && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', flexShrink: 0, color: '#bdbdbd', fontSize: '18px', zIndex: 1 }}>›</Box>
+                  )}
+                </React.Fragment>
+              ))}
+            </Box>
+          </Paper>
+
+          {/* Attribution + Health + Failure volume */}
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 2 }}>
+
+            {/* Platform health bars */}
+            <Paper elevation={0} sx={{ borderRadius: 2, border: '1px solid #e8ecf1', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+              <WidgetShell
+                title="Platform Health Scores"
+                source="Cross-system · success / efficiency rates"
+                titleIcon={<DashboardIcon sx={{ color: '#1976d2', fontSize: 18 }} />}
+              >
+                <Box sx={{ px: 2, pb: 2, pt: 0.5 }}>
+                  <MetricBarList
+                    items={platformHealthItems}
+                    barHeight={8}
+                    colorByValue={(v) => v >= 90 ? '#2e7d32' : v >= 75 ? '#f57c00' : '#c62828'}
+                  />
+                </Box>
+              </WidgetShell>
+            </Paper>
+
+            {/* Incident attribution */}
+            <Paper elevation={0} sx={{ borderRadius: 2, border: '1px solid #e8ecf1', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+              <WidgetShell
+                title="Incident Attribution by System"
+                source="ServiceNow tickets → source system"
+                titleIcon={<SupportAgentIcon sx={{ color: '#c62828', fontSize: 18 }} />}
+              >
+                <Box sx={{ px: 2, pb: 2, pt: 0.5 }}>
+                  {incidentAttributionItems.length > 0
+                    ? <MetricBarList items={incidentAttributionItems} barHeight={8} />
+                    : <Typography sx={{ fontSize: '12px', color: '#aaa', py: 2, textAlign: 'center' }}>No ticket data available</Typography>
+                  }
+                  {dmfTicketCount > 0 && (
+                    <Typography sx={{ fontSize: '10px', color: '#1565c0', mt: 0.5, fontStyle: 'italic' }}>
+                      DMF accounts for {Math.round(dmfTicketCount / tickets.length * 100)}% of open tickets
+                    </Typography>
+                  )}
+                </Box>
+              </WidgetShell>
+            </Paper>
+
+            {/* Failure volume comparison */}
+            <Paper elevation={0} sx={{ borderRadius: 2, border: '1px solid #e8ecf1', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+              <WidgetShell
+                title="Failure Volume by System"
+                source="DMF · Talend · Snowflake · combined"
+                titleIcon={<StorageIcon sx={{ color: '#1565c0', fontSize: 18 }} />}
+              >
+                <Box sx={{ p: 1.5 }}>
+                  <StatCardGrid
+                    items={[
+                      { label: 'DMF Failures',    value: dmfSummary?.failedRuns?.value ?? '—', color: '#1565c0', bg: '#e3f2fd',
+                        description: 'DMF pipeline runs that failed this period.' },
+                      { label: 'Talend Failures',  value: talendFailed,   color: '#e65100', bg: '#fff3e0',
+                        description: 'Talend task executions that reached a failed state.' },
+                      { label: 'SF Task Failures', value: sfTaskFailures || '—', color: '#0277bd', bg: '#e1f5fe',
+                        description: 'Snowflake scheduled task failures (mock only).' },
+                      { label: 'SF Query Errors',  value: sfQueryErrors  || '—', color: '#0277bd', bg: '#e1f5fe',
+                        description: 'Snowflake query errors in the current window (mock only).' },
+                      { label: 'Combined ETL',     value: combinedFailures, color: '#c62828', bg: '#fce4ec',
+                        description: 'Total failures across DMF + Talend + Snowflake tasks.' },
+                    ]}
+                    columns={2}
+                    compact
+                    withDialog
+                  />
+                </Box>
+              </WidgetShell>
+            </Paper>
+
+          </Box>
+        </Box>
+      )}
+
       {/* ── Empty state when all widgets hidden ── */}
-      {!prefs.kpiStrip && !prefs.operationalSnapshot && !prefs.dmfTrend && visibleSnapshots.length === 0 && (
+      {!prefs.kpiStrip && !prefs.operationalSnapshot && !prefs.dmfTrend && visibleSnapshots.length === 0 && !prefs.snapInsights && (
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 8, gap: 2 }}>
           <TuneIcon sx={{ fontSize: 40, color: '#ccc' }} />
           <Typography sx={{ color: '#aaa', fontSize: '14px' }}>All widgets are hidden.</Typography>

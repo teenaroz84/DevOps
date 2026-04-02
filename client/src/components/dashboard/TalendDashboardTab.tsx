@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react'
-import { Box, Typography, Chip, Paper, CircularProgress } from '@mui/material'
+import React, { useState, useEffect, useMemo } from 'react'
+import { Box, Typography, Chip, Paper, CircularProgress, TextField, InputAdornment } from '@mui/material'
 import IntegrationInstructionsIcon from '@mui/icons-material/IntegrationInstructions'
+import SearchIcon from '@mui/icons-material/Search'
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline'
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
 import ListAltIcon from '@mui/icons-material/ListAlt'
@@ -48,6 +49,9 @@ export const TalendDashboardTab: React.FC = () => {
   const [recentErrors, setRecentErrors] = useState<any[]>([])
   const [loading,      setLoading]      = useState(true)
   const [error,        setError]        = useState<string | null>(null)
+  const [taskSearch,   setTaskSearch]   = useState('')
+  const [statusFilter, setStatusFilter] = useState('All')
+  const [levelFilter,  setLevelFilter]  = useState('All')
 
   useEffect(() => {
     setLoading(true)
@@ -79,6 +83,19 @@ export const TalendDashboardTab: React.FC = () => {
       })
       .catch(err => { setError(err.message || 'Failed to load Talend data'); setLoading(false) })
   }, [useMock])
+
+  // ── Filtered rows ──────────────────────────────────────────
+  const filteredTasks = useMemo(() =>
+    recentTasks
+      .filter(t => statusFilter === 'All' || String(t.execution_status || '').toUpperCase().includes(statusFilter))
+      .filter(t => !taskSearch || (t.task_name || '').toLowerCase().includes(taskSearch.toLowerCase())),
+  [recentTasks, statusFilter, taskSearch])
+
+  const filteredErrors = useMemo(() =>
+    recentErrors
+      .filter(e => levelFilter === 'All' || String(e.level_text || '').toUpperCase() === levelFilter)
+      .filter(e => !taskSearch || (e.task_name || '').toLowerCase().includes(taskSearch.toLowerCase())),
+  [recentErrors, levelFilter, taskSearch])
 
   // ── Derived summary stats ─────────────────────────────────
   const statusBreakdown: any[] = summary?.statusBreakdown ?? []
@@ -260,10 +277,37 @@ export const TalendDashboardTab: React.FC = () => {
               titleIcon={<ListAltIcon sx={{ color: '#1565c0', fontSize: 18 }} />}
               source="edoops.talend_logs · latest 50"
             >
+              <Box sx={{ px: 1.5, pt: 1, pb: 0, display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+                <TextField
+                  size="small"
+                  placeholder="Search task name…"
+                  value={taskSearch}
+                  onChange={e => setTaskSearch(e.target.value)}
+                  InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 15, color: '#aaa' }} /></InputAdornment> }}
+                  sx={{ minWidth: 200, '& .MuiOutlinedInput-root': { fontSize: '11px', borderRadius: 2 } }}
+                />
+                {['All', 'SUCCESS', 'FAILED', 'RUNNING'].map(s => (
+                  <Chip
+                    key={s}
+                    label={s}
+                    size="small"
+                    onClick={() => setStatusFilter(s)}
+                    sx={{
+                      fontSize: '10px', height: 22, cursor: 'pointer',
+                      fontWeight: statusFilter === s ? 700 : 400,
+                      backgroundColor: statusFilter === s ? (STATUS_COLOR[s]?.bg ?? '#e3f2fd') : '#f5f5f5',
+                      color: statusFilter === s ? (STATUS_COLOR[s]?.color ?? '#1565c0') : '#aaa',
+                      border: statusFilter === s ? `1px solid ${STATUS_COLOR[s]?.color ?? '#1565c0'}40` : '1px solid transparent',
+                      '& .MuiChip-label': { px: 1 },
+                    }}
+                  />
+                ))}
+                <Typography sx={{ fontSize: '10px', color: '#aaa', ml: 'auto' }}>{filteredTasks.length} tasks</Typography>
+              </Box>
               <Box sx={{ px: 1.5, pb: 1.5 }}>
                 <DataTable
                   columns={taskCols}
-                  rows={recentTasks}
+                  rows={filteredTasks}
                   rowKey="task_execution_id"
                   compact
                   accentColor="#e65100"
@@ -279,10 +323,29 @@ export const TalendDashboardTab: React.FC = () => {
               titleIcon={<ErrorOutlineIcon sx={{ color: '#c62828', fontSize: 18 }} />}
               source="edoops.talend_logs · FATAL / ERROR · latest 50"
             >
+              <Box sx={{ px: 1.5, pt: 1, pb: 0, display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+                {['All', 'FATAL', 'ERROR', 'WARN', 'INFO'].map(l => (
+                  <Chip
+                    key={l}
+                    label={l}
+                    size="small"
+                    onClick={() => setLevelFilter(l)}
+                    sx={{
+                      fontSize: '10px', height: 22, cursor: 'pointer',
+                      fontWeight: levelFilter === l ? 700 : 400,
+                      backgroundColor: levelFilter === l ? (LEVEL_COLOR[l]?.bg ?? '#eceff1') : '#f5f5f5',
+                      color: levelFilter === l ? (LEVEL_COLOR[l]?.color ?? '#546e7a') : '#aaa',
+                      border: levelFilter === l ? `1px solid ${LEVEL_COLOR[l]?.color ?? '#546e7a'}40` : '1px solid transparent',
+                      '& .MuiChip-label': { px: 1 },
+                    }}
+                  />
+                ))}
+                <Typography sx={{ fontSize: '10px', color: '#aaa', ml: 'auto' }}>{filteredErrors.length} entries</Typography>
+              </Box>
               <Box sx={{ px: 1.5, pb: 1.5 }}>
                 <DataTable
                   columns={errorCols}
-                  rows={recentErrors}
+                  rows={filteredErrors}
                   rowKey="execution_timestamp"
                   compact
                   accentColor="#c62828"

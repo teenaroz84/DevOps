@@ -4,6 +4,7 @@
  * into { text, type, data, suggestedActions } for ChatPanel.
  */
 import { config } from '../config'
+import { SESSION_ID } from './session'
 
 async function chatRequest<T>(path: string, body: unknown): Promise<T> {
   const url = `${config.chatApiBaseUrl}${path}`
@@ -99,7 +100,7 @@ async function streamRequest(
 
 export const chatService = {
   sendMessage: async (message: string) => {
-    const raw = await chatRequest<ChatApiResponse>('/api/v1/chat', { session_id: "test_123", message: message, conversation_histoiry: [] })
+    const raw = await chatRequest<ChatApiResponse>('/api/v1/chat', { session_id: SESSION_ID, message: message, conversation_histoiry: [] })
     return normaliseResponse(raw)
   },
 
@@ -109,7 +110,7 @@ export const chatService = {
     onChunk: (chunk: string) => void,
     signal?: AbortSignal,
   ): Promise<void> => {
-    return streamRequest('/api/v1/chat/stream', { session_id: message }, onChunk, signal)
+    return streamRequest('/api/v1/chat/stream', { session_id: SESSION_ID, message }, onChunk, signal)
   },
 
   /** Check health of the chat agent service. */

@@ -43,7 +43,9 @@ export interface DashboardLayout {
 
 type Namespace = 'user' | 'chat' | 'dashboard'
 
-const PREFIX = 'dataops:'
+import { SESSION_ID } from './session'
+
+const PREFIX = `dataops:${SESSION_ID}:`
 
 // ── Core helpers ─────────────────────────────────────────────────────────────
 

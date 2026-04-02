@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react'
-import { Box, Typography, Chip, Paper } from '@mui/material'
+import React, { useState, useEffect, useMemo } from 'react'
+import { Box, Typography, Chip, Paper, TextField, InputAdornment } from '@mui/material'
 import BugReportIcon from '@mui/icons-material/BugReport'
+import SearchIcon from '@mui/icons-material/Search'
 import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber'
 import StreamIcon from '@mui/icons-material/Stream'
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney'
@@ -567,6 +568,8 @@ export const AgeingProblemsWidget: React.FC = () => {
   const [problems, setProblems] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [priorityFilter, setPriorityFilter] = useState('All')
+  const [platformSearch, setPlatformSearch] = useState('')
   const { useMock } = useMockData()
 
   useEffect(() => {
@@ -582,6 +585,12 @@ export const AgeingProblemsWidget: React.FC = () => {
       .then(d => { setProblems(Array.isArray(d) ? d : []); setLoading(false) })
       .catch(err => { setError(err.message || 'Failed to fetch ageing problems'); setLoading(false) })
   }, [useMock])
+
+  const filteredProblems = useMemo(() =>
+    problems
+      .filter(r => priorityFilter === 'All' || r.priority_field === priorityFilter)
+      .filter(r => !platformSearch || (r.snprb_pltf_nm || '').toLowerCase().includes(platformSearch.toLowerCase())),
+  [problems, priorityFilter, platformSearch])
 
   const byPriority = ['P1','P2','P3'].map(p => ({
     p,
@@ -651,10 +660,37 @@ export const AgeingProblemsWidget: React.FC = () => {
               compact
             />
           </Box>
+          <Box sx={{ px: 1.5, pt: 0.5, pb: 0.5, display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap', borderBottom: '1px solid #f0f0f0' }}>
+            <TextField
+              size="small"
+              placeholder="Filter by platform…"
+              value={platformSearch}
+              onChange={e => setPlatformSearch(e.target.value)}
+              InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 14, color: '#aaa' }} /></InputAdornment> }}
+              sx={{ minWidth: 180, '& .MuiOutlinedInput-root': { fontSize: '11px', borderRadius: 2, height: 28 } }}
+            />
+            {['All', 'P1', 'P2', 'P3'].map(p => (
+              <Chip
+                key={p}
+                label={p}
+                size="small"
+                onClick={() => setPriorityFilter(p)}
+                sx={{
+                  fontSize: '10px', height: 22, cursor: 'pointer',
+                  fontWeight: priorityFilter === p ? 700 : 400,
+                  backgroundColor: priorityFilter === p ? (PRIORITY_CONFIG[p]?.bg ?? '#e3f2fd') : '#f5f5f5',
+                  color: priorityFilter === p ? (PRIORITY_CONFIG[p]?.color ?? '#1565c0') : '#aaa',
+                  border: priorityFilter === p ? `1px solid ${PRIORITY_CONFIG[p]?.color ?? '#1565c0'}40` : '1px solid transparent',
+                  '& .MuiChip-label': { px: 1 },
+                }}
+              />
+            ))}
+            <Typography sx={{ fontSize: '10px', color: '#aaa', ml: 'auto' }}>{filteredProblems.length} records</Typography>
+          </Box>
           <Box sx={{ flex: 1, overflowY: 'auto', px: 1.5, pb: 1 }}>
             <DataTable
               columns={columns}
-              rows={problems}
+              rows={filteredProblems}
               rowKey="snprb_opened_at_dttm"
               compact
               accentColor="#e65100"

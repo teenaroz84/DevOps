@@ -1,5 +1,5 @@
 import React from 'react'
-import { Box, Typography, Select, MenuItem, CircularProgress, Paper, Chip } from '@mui/material'
+import { Box, Typography, CircularProgress, Paper, Chip, Autocomplete, TextField, InputAdornment } from '@mui/material'
 import WorkIcon from '@mui/icons-material/Work'
 import ScheduleIcon from '@mui/icons-material/Schedule'
 import AccountTreeIcon from '@mui/icons-material/AccountTree'
@@ -8,7 +8,7 @@ import TrendingUpIcon from '@mui/icons-material/TrendingUp'
 import TableChartIcon from '@mui/icons-material/TableChart'
 import PeopleIcon from '@mui/icons-material/People'
 import AppsIcon from '@mui/icons-material/Apps'
-import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown'
+import SearchIcon from '@mui/icons-material/Search'
 import {
   WidgetShell, StatCardGrid, MetricBarList, DataTable, TrendLineChart, DonutChart, ComposedBarLineChart,
 } from '../widgets'
@@ -38,7 +38,8 @@ interface AppData {
   job_run_table: Array<{ job_longname: string; command: string | null; argument: string | null; runs: number | null; start_date: string | null; start_time: string | null; end_date: string | null; end_time: string | null; exec_qtime: string | null; ccfail: string | null; comp_code: string | null }>
 }
 
-const TREND_LINE_COLORS = ['#1565c0', '#2e7d32', '#c62828', '#f57c00']
+const TREND_RUN_COLORS  = ['#1565c0', '#2e7d32', '#6a1b9a', '#00838f']
+const TREND_FAIL_COLORS = ['#e53935', '#f57c00', '#d81b60', '#ff6f00']
 
 // Helper: turn NameCount[] → MetricBarItem[] with alternating bar colors
 const BAR_COLORS = ['#1976d2', '#f57c00', '#c62828', '#2e7d32', '#6a1b9a', '#00838f']
@@ -66,6 +67,10 @@ export const ESPDashboardTab: React.FC = () => {
   const [metadataDetail, setMetadataDetail] = React.useState<AppData['metadata_detail']>([])
   const [jobRunTable, setJobRunTable] = React.useState<AppData['job_run_table']>([])
   const [tableLoading, setTableLoading] = React.useState(false)
+  const [jobSearch,    setJobSearch]    = React.useState('')
+
+  // Reset job filter when application changes
+  React.useEffect(() => { setJobSearch('') }, [selected])
 
   // Load application list on mount or when mock mode changes
   React.useEffect(() => {
@@ -174,6 +179,14 @@ export const ESPDashboardTab: React.FC = () => {
     return { rows, days }
   }, [trendData])
 
+  // Filtered rows — driven by jobSearch text
+  const filteredJobList     = React.useMemo(() => (data?.job_list ?? []).filter(r           => !jobSearch || r.jobname.toLowerCase().includes(jobSearch.toLowerCase())),       [data, jobSearch])
+  const filteredMeta        = React.useMemo(() => (data?.metadata ?? []).filter(r           => !jobSearch || r.jobname.toLowerCase().includes(jobSearch.toLowerCase())),       [data, jobSearch])
+  const filteredPred        = React.useMemo(() => (data?.predecessor_jobs ?? []).filter(r   => !jobSearch || r.jobname.toLowerCase().includes(jobSearch.toLowerCase())),       [data, jobSearch])
+  const filteredSucc        = React.useMemo(() => (data?.successor_jobs ?? []).filter(r     => !jobSearch || r.jobname.toLowerCase().includes(jobSearch.toLowerCase())),       [data, jobSearch])
+  const filteredMetaDetail  = React.useMemo(() => metadataDetail.filter(r                  => !jobSearch || r.jobname.toLowerCase().includes(jobSearch.toLowerCase())),       [metadataDetail, jobSearch])
+  const filteredJobRunTable = React.useMemo(() => jobRunTable.filter(r                     => !jobSearch || r.job_longname.toLowerCase().includes(jobSearch.toLowerCase())),    [jobRunTable, jobSearch])
+
   // Metadata detail columns (full esp_job_cmnd data)
   const metaCols: ColumnDef[] = [
     { key: 'jobname',   header: 'Job Name',       flex: 1,   noWrap: true },
@@ -206,11 +219,35 @@ export const ESPDashboardTab: React.FC = () => {
   ]
 
   const jobListCols: ColumnDef[] = [
-    { key: 'jobname',       header: 'Job Name',      flex: 1, noWrap: true },
-    { key: 'last_run_date', header: 'Last Run',       width: 120,
-      render: r => r.last_run_date
-        ? new Date(r.last_run_date).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-        : <Typography component="span" sx={{ fontSize: '10px', color: '#bbb' }}>Never run</Typography> },
+    { key: 'jobname', header: 'Job Name', flex: 1, noWrap: true },
+    {
+      key: 'last_run_date',
+      header: 'Last Run',
+      width: 130,
+      render: r => {
+        if (!r.last_run_date) {
+          return (
+            <Chip label="Never run" size="small" sx={{ height: 18, fontSize: '10px', fontWeight: 600, bgcolor: '#fffbeb', color: '#b45309', border: '1px solid #fde68a' }} />
+          )
+        }
+        const daysSince = (Date.now() - new Date(r.last_run_date).getTime()) / 86_400_000
+        const stale = daysSince > 3
+        return (
+          <Chip
+            label={new Date(r.last_run_date).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+            size="small"
+            sx={{
+              height: 18,
+              fontSize: '10px',
+              fontWeight: 600,
+              bgcolor: stale ? '#fce4ec' : '#e8f5e9',
+              color:   stale ? '#c62828' : '#2e7d32',
+              border:  stale ? '1px solid #ef9a9a' : '1px solid #a5d6a7',
+            }}
+          />
+        )
+      },
+    },
   ]
 
   const depCols: ColumnDef[] = [
@@ -240,28 +277,31 @@ export const ESPDashboardTab: React.FC = () => {
             {appsLoading ? (
               <CircularProgress size={14} sx={{ color: '#2e7d32' }} />
             ) : (
-              <Select
+              <Autocomplete
+                options={applications}
                 value={selected}
-                onChange={e => setSelected(e.target.value)}
+                onChange={(_, val) => { if (val) setSelected(val) }}
+                disableClearable
                 size="small"
-                IconComponent={KeyboardArrowDownIcon}
-                disabled={applications.length === 0}
-                sx={{
-                  fontSize: '12px',
-                  minWidth: 180,
-                  bgcolor: '#fff',
-                  borderRadius: 1,
-                  fontWeight: 600,
-                  '& .MuiSelect-select': { py: '5px', px: '10px' },
-                  '& .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d3240' },
-                  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
-                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
-                }}
-              >
-                {applications.map(app => (
-                  <MenuItem key={app} value={app} sx={{ fontSize: '12px' }}>{app}</MenuItem>
-                ))}
-              </Select>
+                sx={{ minWidth: 260 }}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    placeholder="Search application…"
+                    sx={{
+                      '& .MuiOutlinedInput-root': {
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        borderRadius: 1,
+                        bgcolor: '#fff',
+                        '& .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d3240' },
+                        '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
+                        '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
+                      },
+                    }}
+                  />
+                )}
+              />
             )}
           </Box>
         </Box>
@@ -309,6 +349,32 @@ export const ESPDashboardTab: React.FC = () => {
             </WidgetShell>
           </Paper>
 
+          {/* ── Job filter bar ── */}
+          <Paper elevation={0} sx={{ borderRadius: 2, border: '1px solid #e8ecf1', bgcolor: '#f8f9fb' }}>
+            <Box sx={{ px: 2, py: 1, display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+              <SearchIcon sx={{ fontSize: 16, color: '#90a4ae' }} />
+              <TextField
+                size="small"
+                placeholder="Filter jobs by name…"
+                value={jobSearch}
+                onChange={e => setJobSearch(e.target.value)}
+                InputProps={{ startAdornment: <InputAdornment position="start" /> }}
+                sx={{ minWidth: 260, '& .MuiOutlinedInput-root': { fontSize: '12px', borderRadius: 2 } }}
+              />
+              {jobSearch && (
+                <Chip
+                  label={`"${jobSearch}"`}
+                  size="small"
+                  onDelete={() => setJobSearch('')}
+                  sx={{ fontSize: '10px', color: '#2e7d32', backgroundColor: '#e8f5e9', border: '1px solid #2e7d3230' }}
+                />
+              )}
+              <Typography sx={{ fontSize: '11px', color: '#aaa', ml: 'auto' }}>
+                {filteredJobList.length} / {data.job_list.length} jobs
+              </Typography>
+            </Box>
+          </Paper>
+
           {/* ── Row 2: Job List + Trend ── */}
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: 2 }}>
 
@@ -321,7 +387,7 @@ export const ESPDashboardTab: React.FC = () => {
                 <Box sx={{ flex: 1, overflowY: 'auto', px: 1.5, pb: 1 }}>
                   <DataTable
                     columns={jobListCols}
-                    rows={data.job_list}
+                    rows={filteredJobList}
                     rowKey="jobname"
                     compact
                     maxHeight={280}
@@ -367,8 +433,8 @@ export const ESPDashboardTab: React.FC = () => {
                       data={trendChart.rows}
                       xKey="hour"
                       lines={trendChart.days.flatMap((day, i) => [
-                        { key: `${day}_count`, label: `${day} Runs`, color: TREND_LINE_COLORS[i % TREND_LINE_COLORS.length], strokeWidth: 2 },
-                        { key: `${day}_fail`,  label: `${day} Fail`, color: TREND_LINE_COLORS[i % TREND_LINE_COLORS.length], dashed: true, strokeWidth: 1.5 },
+                        { key: `${day}_count`, label: `${day} Runs`, color: TREND_RUN_COLORS[i % TREND_RUN_COLORS.length], strokeWidth: 2 },
+                        { key: `${day}_fail`,  label: `${day} Fail`, color: TREND_FAIL_COLORS[i % TREND_FAIL_COLORS.length], dashed: true, strokeWidth: 1.5 },
                       ])}
                       height={260}
                       margin={{ top: 8, right: 16, left: -10, bottom: 4 }}
@@ -476,7 +542,7 @@ export const ESPDashboardTab: React.FC = () => {
                 <Box sx={{ flex: 1, overflowY: 'auto', px: 1.5, pb: 1 }}>
                   <DataTable
                     columns={[depCols[0], { ...depCols[1], header: 'Predecessor' }]}
-                    rows={data.predecessor_jobs}
+                    rows={filteredPred}
                     rowKey="jobname"
                     compact
                     maxHeight={220}
@@ -496,7 +562,7 @@ export const ESPDashboardTab: React.FC = () => {
                 <Box sx={{ flex: 1, overflowY: 'auto', px: 1.5, pb: 1 }}>
                   <DataTable
                     columns={[depCols[0], { ...depCols[1], header: 'Successor' }]}
-                    rows={data.successor_jobs}
+                    rows={filteredSucc}
                     rowKey="jobname"
                     compact
                     maxHeight={220}
@@ -520,7 +586,7 @@ export const ESPDashboardTab: React.FC = () => {
                       { key: 'command',  header: 'Command',   flex: 1, render: r => r.command  ?? '—' },
                       { key: 'argument', header: 'Argument', flex: 1.5, render: r => r.argument ?? '—' },
                     ]}
-                    rows={data.metadata}
+                    rows={filteredMeta}
                     rowKey="jobname"
                     compact
                     maxHeight={220}
@@ -545,7 +611,7 @@ export const ESPDashboardTab: React.FC = () => {
                 <Box sx={{ px: 1.5, pb: 1 }}>
                   <DataTable
                     columns={metaCols}
-                    rows={metadataDetail}
+                    rows={filteredMetaDetail}
                     rowKey="jobname"
                     compact
                     maxHeight={280}
@@ -570,7 +636,7 @@ export const ESPDashboardTab: React.FC = () => {
                 <Box sx={{ px: 1.5, pb: 1 }}>
                   <DataTable
                     columns={jobRunTableCols}
-                    rows={jobRunTable}
+                    rows={filteredJobRunTable}
                     rowKey={(r) => `${r.job_longname}-${r.start_date}-${r.start_time}`}
                     compact
                     maxHeight={320}
