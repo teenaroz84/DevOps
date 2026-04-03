@@ -7,9 +7,8 @@ import StreamIcon from '@mui/icons-material/Stream'
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney'
 import TrendingUpIcon from '@mui/icons-material/TrendingUp'
 import PipelineIcon from '@mui/icons-material/AccountTree'
-import HourglassTopIcon from '@mui/icons-material/HourglassTop'
-import SmartToyIcon from '@mui/icons-material/SmartToy'
 import BuildCircleIcon from '@mui/icons-material/BuildCircle'
+import SmartToyIcon from '@mui/icons-material/SmartToy'
 import { DrillDownModal, DrillDownData } from './DrillDownModal'
 import { WidgetShell, StatCardGrid, MetricBarList, DataTable, ColumnDef } from '../widgets'
 import { cloudwatchService, servicenowService, snowflakeService, postgresService, espService } from '../../services'
@@ -18,7 +17,8 @@ import { useMockData } from '../../context/MockDataContext'
 import {
   MOCK_SERVICENOW_TICKETS,
   MOCK_SERVICENOW_INCIDENTS,
-  MOCK_SERVICENOW_AGEING_PROBLEMS,
+  MOCK_SERVICENOW_MISSED_INCIDENTS,
+  MOCK_SERVICENOW_INCIDENT_LIST,
   MOCK_SERVICENOW_EMERGENCY_CHANGES,
 } from '../../services/servicenowMockData'
 
@@ -498,6 +498,7 @@ export const IncidentsWidget: React.FC = () => {
   const [incidents, setIncidents] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [drillDown, setDrillDown] = useState<DrillDownData | null>(null)
   const { useMock } = useMockData()
 
   useEffect(() => {
@@ -523,179 +524,230 @@ export const IncidentsWidget: React.FC = () => {
   }))
 
   return (
-    <WidgetShell
-      title="Open Problems by Priority"
-      titleIcon={<WarningAmberIcon sx={{ color: '#c62828', fontSize: 18 }} />}
-      source="PostgreSQL · edoops.service_now_prb"
-      loading={loading}
-      error={error ?? undefined}
-    >
-      {!error && (
-        <>
-          <Box sx={{ px: 1.5, py: 1 }}>
-            <StatCardGrid
-              items={[
-                ...incidents.map(i => ({
-                  label: i.priority_field || 'Unknown',
-                  value: i.incident_count || 0,
-                  color: INCIDENT_COLORS[i.priority_field] || '#757575',
-                  bg: ({ P1: '#fce4ec', P2: '#fff3e0', P3: '#e8f5e9', P4: '#e3f2fd', P5: '#f5f5f5' } as Record<string,string>)[i.priority_field] || '#f5f5f5',
-                })),
-                { label: 'Total', value: totalIncidents, color: '#1565c0', bg: '#e3f2fd' },
-              ]}
-              columns={Math.min(incidents.length + 1, 6)}
-              compact
-            />
-          </Box>
-          {donutData.length > 0 && (
-            <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
-              <DonutChart
-                data={donutData}
-                centerLabel={totalIncidents}
-                showLegend
-                size={140}
+    <>
+      <WidgetShell
+        title="Open Incidents by Priority (P1 / P2 / P3)"
+        titleIcon={<WarningAmberIcon sx={{ color: '#c62828', fontSize: 18 }} />}
+        source="PostgreSQL · edoops.service_now_inc"
+        loading={loading}
+        error={error ?? undefined}
+      >
+        {!error && (
+          <>
+            <Box sx={{ px: 1.5, py: 1 }}>
+              <StatCardGrid
+                items={[
+                  ...incidents.map(i => ({
+                    label: i.priority_field || 'Unknown',
+                    value: i.incident_count || 0,
+                    color: INCIDENT_COLORS[i.priority_field] || '#757575',
+                    bg: ({ P1: '#fce4ec', P2: '#fff3e0', P3: '#e8f5e9', P4: '#e3f2fd', P5: '#f5f5f5' } as Record<string,string>)[i.priority_field] || '#f5f5f5',
+                  })),
+                  { label: 'Total', value: totalIncidents, color: '#1565c0', bg: '#e3f2fd' },
+                ]}
+                columns={Math.min(incidents.length + 1, 6)}
+                compact
+                onCardClick={(item, idx) => {
+                  if (idx < incidents.length) {
+                    setDrillDown({
+                      type: 'sn_priority',
+                      data: { priority: item.label, count: item.value as number, source: 'Open Incidents' },
+                    })
+                  }
+                }}
               />
             </Box>
-          )}
-        </>
-      )}
-    </WidgetShell>
+            {donutData.length > 0 && (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
+                <DonutChart
+                  data={donutData}
+                  centerLabel={totalIncidents}
+                  showLegend
+                  size={140}
+                />
+              </Box>
+            )}
+          </>
+        )}
+      </WidgetShell>
+      <DrillDownModal open={!!drillDown} onClose={() => setDrillDown(null)} drillDown={drillDown} />
+    </>
   )
 }
 
-// ─── Ageing Problems Widget ────────────────────────────────
+// ─── Missed / Open P3+P4 Incidents Widget (bar chart) ────
 
-export const AgeingProblemsWidget: React.FC = () => {
-  const [problems, setProblems] = useState<any[]>([])
+export const MissedIncidentsWidget: React.FC = () => {
+  const [data, setData] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [priorityFilter, setPriorityFilter] = useState('All')
-  const [platformSearch, setPlatformSearch] = useState('')
+  const [drillDown, setDrillDown] = useState<DrillDownData | null>(null)
   const { useMock } = useMockData()
 
   useEffect(() => {
-    setLoading(true)
-    setProblems([])
-    setError(null)
+    setLoading(true); setData([]); setError(null)
     if (useMock) {
-      setProblems(MOCK_SERVICENOW_AGEING_PROBLEMS)
+      setData(MOCK_SERVICENOW_MISSED_INCIDENTS)
       setLoading(false)
       return
     }
-    servicenowService.getAgeingProblems()
-      .then(d => { setProblems(Array.isArray(d) ? d : []); setLoading(false) })
-      .catch(err => { setError(err.message || 'Failed to fetch ageing problems'); setLoading(false) })
+    servicenowService.getMissedIncidents()
+      .then(d => { setData(Array.isArray(d) ? d : []); setLoading(false) })
+      .catch(err => { setError(err.message || 'Failed to fetch'); setLoading(false) })
   }, [useMock])
 
-  const filteredProblems = useMemo(() =>
-    problems
+  const total = data.reduce((s, r) => s + (r.incident_count || 0), 0)
+  const maxCount = Math.max(...data.map(r => r.incident_count || 0), 1)
+
+  return (
+    <>
+      <WidgetShell
+        title="Open Incidents Missed SLA (P3 / P4)"
+        titleIcon={<WarningAmberIcon sx={{ color: '#e65100', fontSize: 18 }} />}
+        source="PostgreSQL · edoops.service_now_inc"
+        loading={loading}
+        error={error ?? undefined}
+      >
+        {!error && (
+          <>
+            <Box sx={{ px: 1.5, py: 1 }}>
+              <StatCardGrid
+                items={[
+                  ...data.map(r => ({
+                    label: r.priority_field || 'Unknown',
+                    value: r.incident_count || 0,
+                    color: INCIDENT_COLORS[r.priority_field] || '#757575',
+                    bg: ({ P3: '#e8f5e9', P4: '#e3f2fd' } as Record<string,string>)[r.priority_field] || '#f5f5f5',
+                  })),
+                  { label: 'Total', value: total, color: '#e65100', bg: '#fff3e0' },
+                ]}
+                columns={3}
+                compact
+                onCardClick={(item, idx) => {
+                  if (idx < data.length) {
+                    setDrillDown({
+                      type: 'sn_priority',
+                      data: { priority: item.label, count: item.value as number, source: 'Missed SLA' },
+                    })
+                  }
+                }}
+              />
+            </Box>
+            <Box sx={{ px: 2, pb: 1.5, display: 'flex', flexDirection: 'column', gap: 1 }}>
+              {data.map(r => {
+                const pct = Math.round(((r.incident_count || 0) / maxCount) * 100)
+                const color = INCIDENT_COLORS[r.priority_field] || '#757575'
+                return (
+                  <Box key={r.priority_field}
+                    onClick={() => setDrillDown({
+                      type: 'sn_priority',
+                      data: { priority: r.priority_field, count: r.incident_count, source: 'Missed SLA' },
+                    })}
+                    sx={{ cursor: 'pointer', borderRadius: 1, p: 0.5, '&:hover': { backgroundColor: '#f5f5f5' } }}
+                  >
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.4 }}>
+                      <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#333' }}>{r.priority_field}</Typography>
+                      <Typography sx={{ fontSize: '12px', color: '#666' }}>{r.incident_count} incidents</Typography>
+                    </Box>
+                    <Box sx={{ height: 8, backgroundColor: '#f0f0f0', borderRadius: 4, overflow: 'hidden' }}>
+                      <Box sx={{ height: '100%', width: `${pct}%`, backgroundColor: color, borderRadius: 4, transition: 'width 0.4s ease' }} />
+                    </Box>
+                  </Box>
+                )
+              })}
+            </Box>
+          </>
+        )}
+      </WidgetShell>
+      <DrillDownModal open={!!drillDown} onClose={() => setDrillDown(null)} drillDown={drillDown} />
+    </>
+  )
+}
+
+// ─── Incident List Widget (P3/P4 detailed records) ────────
+
+export const IncidentListWidget: React.FC = () => {
+  const [data, setData] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [priorityFilter, setPriorityFilter] = useState('All')
+  const [search, setSearch] = useState('')
+  const { useMock } = useMockData()
+
+  useEffect(() => {
+    setLoading(true); setData([]); setError(null)
+    if (useMock) {
+      setData(MOCK_SERVICENOW_INCIDENT_LIST)
+      setLoading(false)
+      return
+    }
+    servicenowService.getIncidentList()
+      .then(d => { setData(Array.isArray(d) ? d : []); setLoading(false) })
+      .catch(err => { setError(err.message || 'Failed to fetch'); setLoading(false) })
+  }, [useMock])
+
+  const filtered = useMemo(() =>
+    data
       .filter(r => priorityFilter === 'All' || r.priority_field === priorityFilter)
-      .filter(r => !platformSearch || (r.snprb_pltf_nm || '').toLowerCase().includes(platformSearch.toLowerCase())),
-  [problems, priorityFilter, platformSearch])
+      .filter(r => !search || [
+        r.sninc_inc_num, r.sninc_capability, r.sninc_short_desc, r.sninc_assignment_grp
+      ].some(v => (v || '').toLowerCase().includes(search.toLowerCase()))),
+  [data, priorityFilter, search])
 
-  const byPriority = ['P1','P2','P3'].map(p => ({
-    p,
-    count: problems.filter(r => r.priority_field === p).length,
-  }))
-  const totalDays = problems.map(r => {
-    const opened = r.snprb_opened_at_dttm ? new Date(r.snprb_opened_at_dttm) : null
-    return opened ? Math.floor((Date.now() - opened.getTime()) / 86_400_000) : 0
-  })
-  const avgAge = totalDays.length ? Math.round(totalDays.reduce((s, d) => s + d, 0) / totalDays.length) : 0
-  const maxAge = totalDays.length ? Math.max(...totalDays) : 0
-
-  const columns: ColumnDef[] = [
+  const incidentColumns: ColumnDef[] = [
+    {
+      key: 'sninc_inc_num', header: 'Incident #', width: 100,
+      render: row => <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#1976d2', fontFamily: 'monospace' }}>{row.sninc_inc_num || '—'}</Typography>,
+    },
     {
       key: 'priority_field', header: 'Priority', width: 75,
       render: row => (
         <Chip label={row.priority_field} size="small"
           sx={{ height: 20, fontSize: '10px', fontWeight: 700,
-            color: PRIORITY_CONFIG[row.priority_field]?.color || '#555',
-            backgroundColor: PRIORITY_CONFIG[row.priority_field]?.bg || '#eee' }} />
+            color: INCIDENT_COLORS[row.priority_field] || '#555',
+            backgroundColor: ({ P3: '#e8f5e9', P4: '#e3f2fd' } as Record<string,string>)[row.priority_field] || '#eee' }} />
       ),
     },
-    { key: 'snprb_pltf_nm',       header: 'Platform',   flex: 1,  render: row => <Typography sx={{ fontSize: '11px', color: '#333' }}>{row.snprb_pltf_nm || '—'}</Typography> },
-    { key: 'snprb_prb_state',     header: 'State',      width: 90, render: row => <Typography sx={{ fontSize: '11px', color: '#666', textTransform: 'capitalize' }}>{(row.snprb_prb_state || '').replace('_',' ')}</Typography> },
-    {
-      key: 'snprb_opened_at_dttm', header: 'Opened', width: 110,
-      render: row => {
-        const days = row.snprb_opened_at_dttm
-          ? Math.floor((Date.now() - new Date(row.snprb_opened_at_dttm).getTime()) / 86_400_000)
-          : null
-        return (
-          <Box>
-            <Typography sx={{ fontSize: '11px', color: days && days > 60 ? '#c62828' : '#555', fontWeight: days && days > 60 ? 700 : 400 }}>
-              {days != null ? `${days}d ago` : '—'}
-            </Typography>
-            <Typography sx={{ fontSize: '10px', color: '#bbb' }}>
-              {row.snprb_opened_at_dttm ? new Date(row.snprb_opened_at_dttm).toLocaleDateString() : ''}
-            </Typography>
-          </Box>
-        )
-      },
-    },
+    { key: 'sninc_capability',     header: 'Capability',        width: 140, render: row => <Typography sx={{ fontSize: '11px', color: '#555' }}>{row.sninc_capability || '—'}</Typography> },
+    { key: 'sninc_short_desc',     header: 'Description',       flex: 1,    render: row => <Typography sx={{ fontSize: '11px', color: '#333' }}>{row.sninc_short_desc || '—'}</Typography> },
+    { key: 'sninc_assignment_grp', header: 'Assignment Group',  width: 150, render: row => <Typography sx={{ fontSize: '11px', color: '#666' }}>{row.sninc_assignment_grp || '—'}</Typography> },
   ]
 
   return (
     <WidgetShell
-      title="Ageing Problems (Open > 30 Days)"
-      titleIcon={<HourglassTopIcon sx={{ color: '#e65100', fontSize: 18 }} />}
-      source="PostgreSQL · edoops.service_now_prb"
+      title="Incident List — P3 / P4 Open"
+      titleIcon={<WarningAmberIcon sx={{ color: '#1565c0', fontSize: 18 }} />}
+      source="PostgreSQL · edoops.service_now_inc"
       loading={loading}
       error={error ?? undefined}
     >
       {!error && (
         <>
-          <Box sx={{ px: 1.5, py: 1 }}>
-            <StatCardGrid
-              items={[
-                ...byPriority.map(({ p, count }) => ({
-                  label: p, value: count,
-                  color: PRIORITY_CONFIG[p]?.color || '#555',
-                  bg: PRIORITY_CONFIG[p]?.bg || '#eee',
-                })),
-                { label: 'Avg Age', value: `${avgAge}d`, color: '#e65100', bg: '#fff3e0' },
-                { label: 'Max Age', value: `${maxAge}d`, color: '#c62828', bg: '#fce4ec' },
-              ]}
-              columns={5}
-              compact
-            />
-          </Box>
           <Box sx={{ px: 1.5, pt: 0.5, pb: 0.5, display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap', borderBottom: '1px solid #f0f0f0' }}>
             <TextField
               size="small"
-              placeholder="Filter by platform…"
-              value={platformSearch}
-              onChange={e => setPlatformSearch(e.target.value)}
+              placeholder="Search incidents…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
               InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 14, color: '#aaa' }} /></InputAdornment> }}
-              sx={{ minWidth: 180, '& .MuiOutlinedInput-root': { fontSize: '11px', borderRadius: 2, height: 28 } }}
+              sx={{ minWidth: 200, '& .MuiOutlinedInput-root': { fontSize: '11px', borderRadius: 2, height: 28 } }}
             />
-            {['All', 'P1', 'P2', 'P3'].map(p => (
-              <Chip
-                key={p}
-                label={p}
-                size="small"
-                onClick={() => setPriorityFilter(p)}
+            {['All', 'P3', 'P4'].map(p => (
+              <Chip key={p} label={p} size="small" onClick={() => setPriorityFilter(p)}
                 sx={{
                   fontSize: '10px', height: 22, cursor: 'pointer',
                   fontWeight: priorityFilter === p ? 700 : 400,
-                  backgroundColor: priorityFilter === p ? (PRIORITY_CONFIG[p]?.bg ?? '#e3f2fd') : '#f5f5f5',
-                  color: priorityFilter === p ? (PRIORITY_CONFIG[p]?.color ?? '#1565c0') : '#aaa',
-                  border: priorityFilter === p ? `1px solid ${PRIORITY_CONFIG[p]?.color ?? '#1565c0'}40` : '1px solid transparent',
+                  backgroundColor: priorityFilter === p ? (({ P3: '#e8f5e9', P4: '#e3f2fd' } as Record<string,string>)[p] ?? '#e3f2fd') : '#f5f5f5',
+                  color: priorityFilter === p ? (INCIDENT_COLORS[p] ?? '#1565c0') : '#aaa',
+                  border: priorityFilter === p ? `1px solid ${INCIDENT_COLORS[p] ?? '#1565c0'}40` : '1px solid transparent',
                   '& .MuiChip-label': { px: 1 },
                 }}
               />
             ))}
-            <Typography sx={{ fontSize: '10px', color: '#aaa', ml: 'auto' }}>{filteredProblems.length} records</Typography>
+            <Typography sx={{ fontSize: '10px', color: '#aaa', ml: 'auto' }}>{filtered.length} records</Typography>
           </Box>
           <Box sx={{ flex: 1, overflowY: 'auto', px: 1.5, pb: 1 }}>
-            <DataTable
-              columns={columns}
-              rows={filteredProblems}
-              rowKey="snprb_opened_at_dttm"
-              compact
-              accentColor="#e65100"
-            />
+            <DataTable columns={incidentColumns} rows={filtered} rowKey="sninc_inc_num" compact accentColor="#1565c0" />
           </Box>
         </>
       )}
@@ -860,7 +912,7 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
             <Chip label="MOCK DATA" size="small" sx={{ fontSize: '9px', height: 18, bgcolor: '#fff3e0', color: '#f57c00', fontWeight: 700, border: '1px solid #f57c0040' }} />
           )}
           <Typography sx={{ fontSize: '11px', color: '#aaa', ml: 'auto' }}>
-            Source: PostgreSQL · edoops.service_now_prb / service_now_chg
+            Source: PostgreSQL · edoops.service_now_inc / service_now_chg
           </Typography>
           {onOpenAgent && (
             <Button
@@ -884,19 +936,24 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
         </Box>
       </Paper>
 
-      {/* ── Row 1: Problems by Priority + Emergency Changes (side by side) ── */}
+      {/* ── Row 1: Open P1/P2/P3 counts + Missed P3/P4 bar chart ── */}
       <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, alignItems: 'start' }}>
         <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #c62828', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
           <IncidentsWidget />
         </Paper>
-        <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #7b1fa2', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-          <EmergencyChangesWidget />
+        <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #e65100', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+          <MissedIncidentsWidget />
         </Paper>
       </Box>
 
-      {/* ── Row 2: Ageing Problems (full width) ── */}
-      <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #e65100', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-        <AgeingProblemsWidget />
+      {/* ── Row 2: Incident list P3/P4 (full width) ── */}
+      <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #1565c0', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+        <IncidentListWidget />
+      </Paper>
+
+      {/* ── Row 3: Emergency Changes ── */}
+      <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #7b1fa2', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+        <EmergencyChangesWidget />
       </Paper>
 
     </Box>

@@ -2,15 +2,20 @@ import React from 'react'
 import {
   Dialog, DialogTitle, DialogContent, DialogActions,
   Button, Box, Typography, Chip, Divider, IconButton,
-  Tab, Tabs,
+  Tab, Tabs, Table, TableHead, TableBody, TableRow, TableCell,
+  CircularProgress, Tooltip,
 } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline'
 import BugReportIcon from '@mui/icons-material/BugReport'
 import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber'
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline'
+import AssignmentIcon from '@mui/icons-material/Assignment'
+import { useMockData } from '../../context/MockDataContext'
+import { servicenowService } from '../../services'
+import { MOCK_SN_INCIDENT_DETAIL } from '../../services/servicenowMockData'
 
-export type DrillDownType = 'pipeline' | 'error' | 'ticket' | 'run'
+export type DrillDownType = 'pipeline' | 'error' | 'ticket' | 'run' | 'sn_priority'
 
 export interface DrillDownData {
   type: DrillDownType
@@ -223,17 +228,124 @@ const TicketDetail: React.FC<{ data: any }> = ({ data }) => (
   </Box>
 )
 
+// ─── ServiceNow Priority Drill-Down ───────────────────────
+const PRIORITY_COLORS: Record<string, { bg: string; color: string; border: string }> = {
+  P1: { bg: '#fce4ec', color: '#c62828', border: '#ef9a9a' },
+  P2: { bg: '#fff3e0', color: '#e65100', border: '#ffcc80' },
+  P3: { bg: '#e8f5e9', color: '#2e7d32', border: '#a5d6a7' },
+  P4: { bg: '#f3e5f5', color: '#6a1b9a', border: '#ce93d8' },
+}
+
+const SnIncidentDetail: React.FC<{ data: { priority: string; count: number; source?: string } }> = ({ data }) => {
+  const { useMock: isMock } = useMockData()
+  const [rows, setRows] = React.useState<any[]>([])
+  const [loading, setLoading] = React.useState(true)
+
+  React.useEffect(() => {
+    setLoading(true)
+    if (isMock) {
+      const filtered = MOCK_SN_INCIDENT_DETAIL.filter(r => r.priority_field === data.priority)
+      setRows(filtered)
+      setLoading(false)
+    } else {
+      servicenowService.getIncidentDetail(data.priority)
+        .then((res: any) => setRows(Array.isArray(res) ? res : res?.data ?? []))
+        .catch(() => setRows([]))
+        .finally(() => setLoading(false))
+    }
+  }, [data.priority, isMock])
+
+  const pc = PRIORITY_COLORS[data.priority] ?? { bg: '#f5f5f5', color: '#555', border: '#ccc' }
+
+  return (
+    <Box>
+      {/* Summary header */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2, p: 1.5,
+        backgroundColor: pc.bg, border: `1px solid ${pc.border}`, borderRadius: 2 }}>
+        <Chip label={data.priority} size="small"
+          sx={{ backgroundColor: pc.color, color: '#fff', fontWeight: 700, fontSize: '13px', px: 0.5 }} />
+        <Typography sx={{ fontSize: '14px', fontWeight: 600, color: pc.color }}>
+          {data.count} Open Incident{data.count !== 1 ? 's' : ''}
+          {data.source ? ` — ${data.source}` : ''}
+        </Typography>
+      </Box>
+
+      {/* Incident table */}
+      {loading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+          <CircularProgress size={32} />
+        </Box>
+      ) : rows.length === 0 ? (
+        <Typography sx={{ textAlign: 'center', color: '#aaa', fontSize: '13px', py: 3 }}>
+          No incidents found for {data.priority}.
+        </Typography>
+      ) : (
+        <Box sx={{ overflowX: 'auto', border: '1px solid #e0e0e0', borderRadius: 2 }}>
+          <Table size="small" sx={{ minWidth: 580 }}>
+            <TableHead>
+              <TableRow sx={{ backgroundColor: '#f5f5f5' }}>
+                {['Incident #', 'Priority', 'Capability', 'Description', 'Assignment Group'].map(h => (
+                  <TableCell key={h} sx={{ fontWeight: 700, fontSize: '12px', color: '#555', whiteSpace: 'nowrap' }}>{h}</TableCell>
+                ))}
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {rows.map((r, i) => (
+                <TableRow key={r.sninc_inc_num ?? i}
+                  sx={{ '&:hover': { backgroundColor: '#fafafa' }, verticalAlign: 'top' }}>
+                  <TableCell sx={{ fontSize: '12px', fontWeight: 600, color: '#1565c0', whiteSpace: 'nowrap' }}>
+                    {r.sninc_inc_num}
+                  </TableCell>
+                  <TableCell>
+                    <Chip label={r.priority_field} size="small"
+                      sx={{ ...(PRIORITY_COLORS[r.priority_field] ?? {}), fontWeight: 700, fontSize: '11px' }} />
+                  </TableCell>
+                  <TableCell sx={{ fontSize: '12px', whiteSpace: 'nowrap', color: '#444' }}>{r.sninc_capability}</TableCell>
+                  <TableCell sx={{ fontSize: '12px', color: '#333', maxWidth: 260 }}>
+                    <Tooltip title={r.sninc_short_desc} placement="top" arrow>
+                      <Typography noWrap sx={{ fontSize: '12px', maxWidth: 240 }}>{r.sninc_short_desc}</Typography>
+                    </Tooltip>
+                  </TableCell>
+                  <TableCell sx={{ fontSize: '12px', color: '#555', whiteSpace: 'nowrap' }}>{r.sninc_assignment_grp}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Box>
+      )}
+
+      {/* Action row */}
+      <Box sx={{ display: 'flex', gap: 1, mt: 2.5, flexWrap: 'wrap' }}>
+        <Button size="small" variant="contained"
+          sx={{ backgroundColor: '#c62828', '&:hover': { backgroundColor: '#b71c1c' }, textTransform: 'none', fontSize: '12px' }}>
+          Escalate Priority
+        </Button>
+        <Button size="small" variant="outlined" color="primary"
+          sx={{ textTransform: 'none', fontSize: '12px' }}>
+          Mark In Progress
+        </Button>
+        <Button size="small" variant="outlined"
+          sx={{ textTransform: 'none', fontSize: '12px', color: '#555', borderColor: '#bbb' }}>
+          Add Comment
+        </Button>
+      </Box>
+    </Box>
+  )
+}
+
 // ─── Main Modal ────────────────────────────────────────────
 const iconFor = (type: DrillDownType) => {
-  if (type === 'error') return <BugReportIcon />
-  if (type === 'ticket') return <ConfirmationNumberIcon />
+  if (type === 'error')       return <BugReportIcon />
+  if (type === 'ticket')      return <ConfirmationNumberIcon />
+  if (type === 'sn_priority') return <AssignmentIcon />
   return <ErrorOutlineIcon />
 }
 
 const titleFor = (dd: DrillDownData) => {
-  if (dd.type === 'pipeline') return `Pipeline: ${dd.data.name}`
-  if (dd.type === 'error') return `Error: ${dd.data.id}`
-  if (dd.type === 'ticket') return `Ticket: ${dd.data.id}`
+  if (dd.type === 'pipeline')    return `Pipeline: ${dd.data.name}`
+  if (dd.type === 'error')       return `Error: ${dd.data.id}`
+  if (dd.type === 'ticket')      return `Ticket: ${dd.data.id}`
+  if (dd.type === 'sn_priority') return `${dd.data.priority} — ${dd.data.count} Open Incident${dd.data.count !== 1 ? 's' : ''}`
   return 'Details'
 }
 
@@ -255,9 +367,10 @@ export const DrillDownModal: React.FC<DrillDownModalProps> = ({ open, onClose, d
       </DialogTitle>
 
       <DialogContent sx={{ p: 3, backgroundColor: '#fdfdfd' }}>
-        {drillDown.type === 'pipeline' && <PipelineDetail data={drillDown.data} />}
-        {drillDown.type === 'error'    && <ErrorDetail    data={drillDown.data} />}
-        {drillDown.type === 'ticket'   && <TicketDetail   data={drillDown.data} />}
+        {drillDown.type === 'pipeline'    && <PipelineDetail    data={drillDown.data} />}
+        {drillDown.type === 'error'       && <ErrorDetail       data={drillDown.data} />}
+        {drillDown.type === 'ticket'      && <TicketDetail      data={drillDown.data} />}
+        {drillDown.type === 'sn_priority' && <SnIncidentDetail  data={drillDown.data} />}
       </DialogContent>
 
       <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid #e0e0e0' }}>
