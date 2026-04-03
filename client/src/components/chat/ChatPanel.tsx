@@ -23,6 +23,8 @@ import FileDownloadIcon from '@mui/icons-material/FileDownload'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import PersonIcon from '@mui/icons-material/Person'
 import { chatService } from '../../services'
+import { AGENTS } from '../../config/agentConfig'
+import type { AgentConfig } from '../../config/agentConfig'
 // import { sessionStore } from '../../services/sessionStore'
 import { FormattedMessage } from './FormattedMessage'
 
@@ -88,21 +90,39 @@ interface ChatPanelProps {
   isOpen: boolean
   onClose: () => void
   fullScreen?: boolean
+  /** When provided, the panel operates as a dashboard-specific agent */
+  agentConfig?: AgentConfig
 }
 
-const WELCOME_MESSAGE: Message = {
+const DEFAULT_WELCOME: Message = {
   role: 'agent',
   content: '👋 Hi! I\'m your DataOps Knowledge Assistant. Ask me about DMF ingestion, enrichment standards, ESP scheduling, Talend development, or any other platform guidelines.',
   type: 'info',
 }
 
-export function ChatPanel({ isOpen, onClose, fullScreen = false }: ChatPanelProps) {
+export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: ChatPanelProps) {
+  // Resolved config — fall back to global knowledge agent
+  const agent: AgentConfig = agentConfig ?? AGENTS.knowledge
   const [input, setInput] = useState('')
+
+  const WELCOME_MESSAGE: Message = React.useMemo(() => ({
+    role: 'agent',
+    content: agentConfig
+      ? `👋 Hi! I'm the **${agentConfig.name}**. ${agentConfig.subtitle}. Ask me anything about this platform.`
+      : DEFAULT_WELCOME.content,
+    type: 'info',
+  }), [agentConfig])
+
+  const STORAGE_KEY = `chat_history_${agent.id}`
 
   // Restore chat history from localStorage on first mount
   const [messages, setMessages] = useState<Message[]>(() => {
-    // const saved = sessionStore.getChat().history
-    // return saved && saved.length > 0 ? (saved as Message[]) : [WELCOME_MESSAGE]
+    try {
+      const saved = localStorage.getItem(`chat_history_${agent.id}`)
+      if (saved) return JSON.parse(saved) as Message[]
+    } catch {
+      // corrupted data — fall through
+    }
     return [WELCOME_MESSAGE]
   })
 
@@ -112,24 +132,18 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false }: ChatPanelProp
   const [historyIdx, setHistoryIdx] = useState(-1)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  // Persist history whenever messages change (skip welcome-only state)
-  // useEffect(() => {
-  //   if (messages.length > 1 || messages[0]?.content !== WELCOME_MESSAGE.content) {
-  //     sessionStore.setChat({
-  //       history: messages.map(({ role, content }) => ({ role, content })),
-  //     })
-  //   }
-  // }, [messages])
+  // Persist history to localStorage whenever messages change
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(messages))
+    } catch {
+      // storage quota exceeded — ignore
+    }
+  }, [messages, STORAGE_KEY])
 
   const HEALTH_CHECK_QUERY = '__health_check__'
 
-  const quickActions = [
-   // { label: '🩺 Agent Health Check', query: HEALTH_CHECK_QUERY },
-    { label: '📁 DMF Ingestion Directory Structure', query: 'What is the DMF ingestion directory structure?' },
-    { label: '🔧 DMF Enrichment Standards', query: 'What are the DMF enrichment standards?' },
-    { label: '⏱ DMF ESP Scheduling Standards', query: 'What are the DMF ESP scheduling standards?' },
-    { label: '📘 Talend Dev Guide', query: 'Provide the Talend development guide and best practices.' },
-  ]
+  const quickActions = agent.quickActions
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -166,8 +180,8 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false }: ChatPanelProp
           timestamp: Date.now(),
         }])
       } else {
-        const data = await chatService.sendMessage(textToSend)
-        // sessionStore.setChat({ lastAgentId: 'default' })
+        const data = await chatService.sendMessage(textToSend, agent.endpoint)
+        // sessionStore.setChat({ lastAgentId: agent.id })
         const agentResponse: Message = {
           role: 'agent',
           content: data.text || '(No response)',
@@ -213,7 +227,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false }: ChatPanelProp
   }
 
   const resetToMainMenu = () => {
-    // sessionStore.clearChatHistory()
+    localStorage.removeItem(STORAGE_KEY)
     setMessages([WELCOME_MESSAGE])
     setInput('')
   }
@@ -239,7 +253,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false }: ChatPanelProp
           {/* Header */}
           <Box
             sx={{
-              backgroundColor: '#1976d2',
+              backgroundColor: agent.color,
               color: '#fff',
               p: 2.5,
               display: 'flex',
@@ -249,9 +263,14 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false }: ChatPanelProp
           >
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
               <SmartToyIcon />
-              <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                DataOps Assistant
-              </Typography>
+              <Box>
+                <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
+                  {agent.name}
+                </Typography>
+                <Typography sx={{ fontSize: '11px', opacity: 0.8, lineHeight: 1 }}>
+                  {agent.subtitle}
+                </Typography>
+              </Box>
             </Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
               {messages.length > 1 && (
@@ -265,7 +284,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false }: ChatPanelProp
                     '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' },
                   }}
                 >
-                  ↺ Main Menu
+                  ↺ Clear History
                 </Button>
               )}
                <Button
@@ -459,7 +478,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false }: ChatPanelProp
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Ask about DMF, ESP, Talend, ingestion standards..."
+              placeholder={agent.placeholder}
               disabled={loading}
               size="small"
               variant="outlined"
@@ -474,7 +493,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false }: ChatPanelProp
               variant="contained"
               onClick={() => sendMessage()}
               disabled={loading || !input.trim()}
-              sx={{ backgroundColor: '#1976d2', minWidth: '44px', height: '44px', p: 1 }}
+              sx={{ backgroundColor: agent.color, minWidth: '44px', height: '44px', p: 1 }}
             >
               <SendIcon sx={{ fontSize: '18px' }} />
             </Button>
@@ -583,7 +602,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false }: ChatPanelProp
       {/* Header */}
       <Box
         sx={{
-          backgroundColor: '#1976d2',
+          backgroundColor: agent.color,
           color: '#fff',
           p: 2,
           display: 'flex',
@@ -592,10 +611,15 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false }: ChatPanelProp
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <SmartToyIcon />
-          <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-            DataOps Assistant
-          </Typography>
+          <SmartToyIcon sx={{ flexShrink: 0 }} />
+          <Box>
+            <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
+              {agent.name}
+            </Typography>
+            <Typography sx={{ fontSize: '10px', opacity: 0.8, lineHeight: 1 }}>
+              {agent.subtitle}
+            </Typography>
+          </Box>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0 }}>
           {messages.length > 1 && (
@@ -611,7 +635,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false }: ChatPanelProp
                 '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' },
               }}
             >
-              ↺ Menu
+              ↺ Clear
             </Button>
           )}
           <IconButton size="small" onClick={onClose} sx={{ color: '#fff' }}>
@@ -665,7 +689,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false }: ChatPanelProp
         {messages.map((msg, idx) => (
           <Box key={idx} sx={{ display: 'flex', alignItems: 'flex-end', gap: 0.75, justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
             {msg.role === 'agent' && (
-              <Box sx={{ width: 26, height: 26, borderRadius: '50%', backgroundColor: '#1976d2', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, mb: 0.5 }}>
+              <Box sx={{ width: 26, height: 26, borderRadius: '50%', backgroundColor: agent.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, mb: 0.5 }}>
                 <SmartToyIcon sx={{ fontSize: 14, color: '#fff' }} />
               </Box>
             )}
@@ -676,7 +700,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false }: ChatPanelProp
                     p: 1.5,
                     backgroundColor:
                       msg.role === 'user'
-                        ? '#1976d2'
+                        ? agent.color
                         : msg.type === 'error'
                           ? '#ffebee'
                           : msg.type === 'success'
@@ -822,7 +846,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false }: ChatPanelProp
 
         {loading && (
           <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 0.75 }}>
-            <Box sx={{ width: 26, height: 26, borderRadius: '50%', backgroundColor: '#1976d2', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Box sx={{ width: 26, height: 26, borderRadius: '50%', backgroundColor: agent.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               <SmartToyIcon sx={{ fontSize: 14, color: '#fff' }} />
             </Box>
             <Paper sx={{ p: 1.5, backgroundColor: '#f0f4f8', boxShadow: 'none', borderRadius: '16px 16px 16px 4px', border: '1px solid transparent' }}>
@@ -848,7 +872,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false }: ChatPanelProp
               value={input}
               onChange={(e) => { setInput(e.target.value); setHistoryIdx(-1) }}
               onKeyDown={handleKeyDown}
-              placeholder="Ask about DMF, ESP, Talend... (↑ history)"
+              placeholder={agent.placeholder}
               disabled={loading}
               size="small"
               variant="outlined"
@@ -872,12 +896,12 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false }: ChatPanelProp
                 onClick={() => sendMessage()}
                 disabled={loading || !input.trim()}
                 sx={{
-                  backgroundColor: '#1976d2',
+                  backgroundColor: agent.color,
                   minWidth: '40px',
                   height: '40px',
                   p: 0.75,
                   borderRadius: 2.5,
-                  '&:hover': { backgroundColor: '#1565c0' },
+                  '&:hover': { backgroundColor: agent.color, filter: 'brightness(0.9)' },
                 }}
               >
                 <SendIcon sx={{ fontSize: '18px' }} />

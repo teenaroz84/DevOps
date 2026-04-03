@@ -13,6 +13,7 @@ import FilterListIcon from '@mui/icons-material/FilterList'
 import AccountTreeIcon from '@mui/icons-material/AccountTree'
 import AnalyticsIcon from '@mui/icons-material/Analytics'
 import TrendingUpIcon from '@mui/icons-material/TrendingUp'
+import SmartToyIcon from '@mui/icons-material/SmartToy'
 import {
   StatCardGrid,
   DonutChart,
@@ -65,7 +66,7 @@ const DMF_TABS = [
 type DMFTab = typeof DMF_TABS[number]['key']
 
 
-export const DMFPipelineWidget: React.FC = () => {
+export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => void }> = ({ onOpenAgent }) => {
   const { useMock } = useMockData()
   const [activeTab, setActiveTab] = useState<DMFTab>('lineage')
 
@@ -206,7 +207,7 @@ export const DMFPipelineWidget: React.FC = () => {
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0, height: '100%' }}>
 
       {/* ── Sub-tab bar (dark themed like Tableau screenshots) ── */}
-      <Box sx={{ display: 'flex', backgroundColor: '#1a2535', px: 2, flexShrink: 0 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', backgroundColor: '#1a2535', px: 2, flexShrink: 0 }}>
         {DMF_TABS.map(tab => {
           const isActive = activeTab === tab.key
           return (
@@ -228,6 +229,29 @@ export const DMFPipelineWidget: React.FC = () => {
           )
         })}
       </Box>
+
+      {/* ── Agent button strip ── */}
+      {onOpenAgent && (
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', px: 2, py: 0.75, backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', flexShrink: 0 }}>
+          <Button
+            size="small"
+            variant="contained"
+            startIcon={<SmartToyIcon sx={{ fontSize: 13 }} />}
+            onClick={() => onOpenAgent('dmf')}
+            sx={{
+              backgroundColor: '#0288d1',
+              textTransform: 'none',
+              fontSize: '11px',
+              fontWeight: 700,
+              height: 28,
+              px: 1.5,
+              '&:hover': { backgroundColor: '#0277bd' },
+            }}
+          >
+            Ask DMF Agent
+          </Button>
+        </Box>
+      )}
 
       {/* ── Tab content ── */}
       <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>

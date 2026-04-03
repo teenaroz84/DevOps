@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { Box, Typography, Chip, Paper, CircularProgress, TextField, InputAdornment } from '@mui/material'
+import { Box, Typography, Chip, Paper, CircularProgress, TextField, InputAdornment, Button } from '@mui/material'
 import IntegrationInstructionsIcon from '@mui/icons-material/IntegrationInstructions'
 import SearchIcon from '@mui/icons-material/Search'
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline'
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
 import ListAltIcon from '@mui/icons-material/ListAlt'
+import SmartToyIcon from '@mui/icons-material/SmartToy'
 import { WidgetShell, StatCardGrid, DonutChart, DataTable, ColumnDef, ComposedBarLineChart } from '../widgets'
 import { talendService } from '../../services'
 import { useMockData } from '../../context/MockDataContext'
@@ -40,7 +41,7 @@ const fmtTs = (ts: string | null) => {
   catch { return ts }
 }
 
-export const TalendDashboardTab: React.FC = () => {
+export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void }> = ({ onOpenAgent }) => {
   const { useMock } = useMockData()
 
   const [summary,      setSummary]      = useState<any>(null)
@@ -205,6 +206,25 @@ export const TalendDashboardTab: React.FC = () => {
           <Typography sx={{ fontSize: '11px', color: '#aaa', ml: 'auto' }}>
             Source: PostgreSQL · edoops.talend_logs
           </Typography>
+          {onOpenAgent && (
+            <Button
+              size="small"
+              variant="contained"
+              startIcon={<SmartToyIcon sx={{ fontSize: 14 }} />}
+              onClick={() => onOpenAgent('talend')}
+              sx={{
+                backgroundColor: '#e65100',
+                textTransform: 'none',
+                fontSize: '11px',
+                fontWeight: 700,
+                height: 28,
+                px: 1.5,
+                '&:hover': { backgroundColor: '#e65100', filter: 'brightness(0.9)' },
+              }}
+            >
+              Ask Talend Agent
+            </Button>
+          )}
         </Box>
       </Paper>
 

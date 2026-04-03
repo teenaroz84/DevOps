@@ -7,13 +7,14 @@
  * Visible in MOCK mode only (enforced in ExecutiveDashboard).
  */
 import React, { useState } from 'react'
-import { Box, Typography, Paper, Chip, Tooltip } from '@mui/material'
+import { Box, Typography, Paper, Chip, Tooltip, Button } from '@mui/material'
 import AcUnitIcon from '@mui/icons-material/AcUnit'
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney'
 import QueryStatsIcon from '@mui/icons-material/QueryStats'
 import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import CancelIcon from '@mui/icons-material/Cancel'
+import SmartToyIcon from '@mui/icons-material/SmartToy'
 import {
   StatCardGrid,
   HeatmapGrid,
@@ -292,7 +293,7 @@ const PlatformIntelligenceScreen: React.FC = () => {
 
 type SubTab = 'cost' | 'platform'
 
-export const SnowflakeDashboardTab: React.FC = () => {
+export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void }> = ({ onOpenAgent }) => {
   const [subTab, setSubTab] = useState<SubTab>('cost')
 
   const SUB_TABS: { key: SubTab; label: string; icon: React.ReactElement; accent: string }[] = [
@@ -315,6 +316,25 @@ export const SnowflakeDashboardTab: React.FC = () => {
             </Typography>
             <Chip label="MOCK DATA" size="small" sx={{ fontSize: '9px', height: 16, backgroundColor: '#fff3e0', color: '#e65100', fontWeight: 700 }} />
           </Box>
+          {onOpenAgent && (
+            <Button
+              size="small"
+              variant="contained"
+              startIcon={<SmartToyIcon sx={{ fontSize: 13 }} />}
+              onClick={() => onOpenAgent('snowflake')}
+              sx={{
+                backgroundColor: '#0277bd',
+                textTransform: 'none',
+                fontSize: '11px',
+                fontWeight: 700,
+                height: 26,
+                px: 1.5,
+                '&:hover': { backgroundColor: '#0277bd', filter: 'brightness(0.9)' },
+              }}
+            >
+              Ask Snowflake Agent
+            </Button>
+          )}
         </Box>
 
         {/* Sub-tabs */}

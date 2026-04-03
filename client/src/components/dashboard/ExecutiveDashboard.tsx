@@ -30,6 +30,7 @@ import { MOCK_ESP_JOB_COUNTS } from '../../services/espMockData'
 import { MOCK_SF_COST_SUMMARY, MOCK_SF_PLATFORM_SUMMARY } from '../../services/snowflakeMockData'
 import { useMockData } from '../../context/MockDataContext'
 import { SESSION_ID } from '../../services/session'
+import { AGENTS } from '../../config/agentConfig'
 
 // ─── Source definitions ────────────────────────────────────
 type SourceKey = 'overview' | 'dmf' | 'servicenow' | 'logs' | 'pipeline' | 'snowflake'
@@ -856,13 +857,18 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
 // ─── Executive Dashboard shell ─────────────────────────────
 interface ExecutiveDashboardProps {
   onChatClick: () => void
+  /** Opens a dashboard-specific agent panel by agent ID */
+  onOpenAgent?: (agentId: string) => void
 }
 
-export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onChatClick }) => {
+export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onChatClick, onOpenAgent }) => {
   const { useMock } = useMockData()
   const [source, setSource] = useState<SourceKey>('pipeline')
   const visibleSources = SOURCES.filter(s => !s.mockOnly || useMock)
   const active = visibleSources.find(s => s.key === source) ?? visibleSources[0]!
+
+  // The agent relevant to the current tab (falls back to 'knowledge')
+  // contextAgentId kept for potential future per-tab agent buttons on individual dashboard components
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
@@ -882,9 +888,15 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onChatCl
           variant="contained"
           size="small"
           startIcon={<SmartToyIcon />}
-          sx={{ backgroundColor: '#1976d2', textTransform: 'none', '&:hover': { backgroundColor: '#1565c0' } }}
+          sx={{
+            backgroundColor: AGENTS.knowledge.color,
+            textTransform: 'none',
+            fontSize: '12px',
+            fontWeight: 700,
+            '&:hover': { backgroundColor: AGENTS.knowledge.color, filter: 'brightness(0.9)' },
+          }}
         >
-          Ask DataOps Agent
+          Ask DataOps Knowledge Assist
         </Button>
       </Box>
 
@@ -923,11 +935,11 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onChatCl
       {/* ── Scrollable content ── */}
       <Box sx={{ flex: 1, overflow: 'auto', backgroundColor: '#f5f6f8' }}>
         {source === 'overview'   && <OverviewLanding onSourceSelect={setSource} />}
-        {source === 'dmf'        && <DMFPipelineWidget />}
-        {source === 'servicenow' && <ServiceNowDashboard />}
-        {source === 'logs'      && <TalendDashboardTab />}
-        {source === 'pipeline'   && <ESPDashboardTab />}
-        {source === 'snowflake'  && <SnowflakeDashboardTab />}
+        {source === 'dmf'        && <DMFPipelineWidget onOpenAgent={onOpenAgent} />}
+        {source === 'servicenow' && <ServiceNowDashboard onOpenAgent={onOpenAgent} />}
+        {source === 'logs'       && <TalendDashboardTab onOpenAgent={onOpenAgent} />}
+        {source === 'pipeline'   && <ESPDashboardTab onOpenAgent={onOpenAgent} />}
+        {source === 'snowflake'  && <SnowflakeDashboardTab onOpenAgent={onOpenAgent} />}
         </Box>
 
 s

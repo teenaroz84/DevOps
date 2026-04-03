@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { Box, Typography, Chip, Paper, TextField, InputAdornment } from '@mui/material'
+import { Box, Typography, Chip, Paper, TextField, InputAdornment, Button } from '@mui/material'
 import BugReportIcon from '@mui/icons-material/BugReport'
 import SearchIcon from '@mui/icons-material/Search'
 import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber'
@@ -8,6 +8,7 @@ import AttachMoneyIcon from '@mui/icons-material/AttachMoney'
 import TrendingUpIcon from '@mui/icons-material/TrendingUp'
 import PipelineIcon from '@mui/icons-material/AccountTree'
 import HourglassTopIcon from '@mui/icons-material/HourglassTop'
+import SmartToyIcon from '@mui/icons-material/SmartToy'
 import BuildCircleIcon from '@mui/icons-material/BuildCircle'
 import { DrillDownModal, DrillDownData } from './DrillDownModal'
 import { WidgetShell, StatCardGrid, MetricBarList, DataTable, ColumnDef } from '../widgets'
@@ -842,7 +843,7 @@ export const PipelinesWidget: React.FC = () => {
 
 import SupportAgentIcon from '@mui/icons-material/SupportAgent'
 
-export const ServiceNowDashboard: React.FC = () => {
+export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => void }> = ({ onOpenAgent }) => {
   const { useMock } = useMockData()
 
   return (
@@ -861,6 +862,25 @@ export const ServiceNowDashboard: React.FC = () => {
           <Typography sx={{ fontSize: '11px', color: '#aaa', ml: 'auto' }}>
             Source: PostgreSQL · edoops.service_now_prb / service_now_chg
           </Typography>
+          {onOpenAgent && (
+            <Button
+              size="small"
+              variant="contained"
+              startIcon={<SmartToyIcon sx={{ fontSize: 14 }} />}
+              onClick={() => onOpenAgent('servicenow')}
+              sx={{
+                backgroundColor: '#5c6bc0',
+                textTransform: 'none',
+                fontSize: '11px',
+                fontWeight: 700,
+                height: 28,
+                px: 1.5,
+                '&:hover': { backgroundColor: '#3949ab', filter: 'brightness(0.9)' },
+              }}
+            >
+              Ask ServiceNow Agent
+            </Button>
+          )}
         </Box>
       </Paper>
 

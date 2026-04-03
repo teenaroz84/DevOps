@@ -1,5 +1,5 @@
 import React from 'react'
-import { Box, Typography, CircularProgress, Paper, Chip, Autocomplete, TextField, InputAdornment } from '@mui/material'
+import { Box, Typography, CircularProgress, Paper, Chip, Autocomplete, TextField, InputAdornment, Button } from '@mui/material'
 import WorkIcon from '@mui/icons-material/Work'
 import ScheduleIcon from '@mui/icons-material/Schedule'
 import AccountTreeIcon from '@mui/icons-material/AccountTree'
@@ -9,6 +9,7 @@ import TableChartIcon from '@mui/icons-material/TableChart'
 import PeopleIcon from '@mui/icons-material/People'
 import AppsIcon from '@mui/icons-material/Apps'
 import SearchIcon from '@mui/icons-material/Search'
+import SmartToyIcon from '@mui/icons-material/SmartToy'
 import {
   WidgetShell, StatCardGrid, MetricBarList, DataTable, TrendLineChart, DonutChart, ComposedBarLineChart,
 } from '../widgets'
@@ -54,7 +55,7 @@ const toBarItems = (items: NameCount[]) => {
 }
 
 // ─── Main Component ───────────────────────────────────────
-export const ESPDashboardTab: React.FC = () => {
+export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void }> = ({ onOpenAgent }) => {
   const { useMock } = useMockData()
   const [applications, setApplications] = React.useState<string[]>([])
   const [selected, setSelected] = React.useState<string>('')
@@ -302,6 +303,25 @@ export const ESPDashboardTab: React.FC = () => {
                   />
                 )}
               />
+            )}
+            {onOpenAgent && (
+              <Button
+                size="small"
+                variant="contained"
+                startIcon={<SmartToyIcon sx={{ fontSize: 14 }} />}
+                onClick={() => onOpenAgent('esp')}
+                sx={{
+                  backgroundColor: '#2e7d32',
+                  textTransform: 'none',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  height: 28,
+                  px: 1.5,
+                  '&:hover': { backgroundColor: '#2e7d32', filter: 'brightness(0.9)' },
+                }}
+              >
+                Ask ESP Agent
+              </Button>
             )}
           </Box>
         </Box>

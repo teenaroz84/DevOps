@@ -9,6 +9,7 @@ import { UserPreferences, WidgetPreferences } from './components/settings/UserPr
 import { ExecutiveDashboard } from './components/dashboard/ExecutiveDashboard'
 import ExecutiveDashboardEnhanced from './components/dashboard/ExecutiveDashboardEnhanced'
 import { MockDataProvider } from './context/MockDataContext'
+import { AGENTS } from './config/agentConfig'
 
 // Default preferences
 const DEFAULT_PREFERENCES: WidgetPreferences = {
@@ -62,7 +63,8 @@ const theme = createTheme({
 
 function App() {
   const [activeMenu, setActiveMenu] = useState<'dashboard' | 'chat' | 'preferences' | 'executive' | 'quicksight-demo'>('executive')
-  const [chatPanelOpen, setChatPanelOpen] = useState(false)
+  // null = closed; 'knowledge' | 'esp' | 'dmf' | etc = open panel for that agent
+  const [openAgentId, setOpenAgentId] = useState<string | null>(null)
   const [preferences, setPreferences] = useState<WidgetPreferences>(DEFAULT_PREFERENCES)
   const [widgetOrder, setWidgetOrder] = useState<string[]>(DEFAULT_WIDGET_ORDER)
 
@@ -104,8 +106,13 @@ function App() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       {activeMenu === 'chat' ? (
-        // Full-screen chat layout
-        <ChatPanel isOpen={true} fullScreen={true} onClose={() => setActiveMenu('executive')} />
+        // Full-screen knowledge-assistant layout (nav shortcut)
+        <ChatPanel
+          isOpen={true}
+          fullScreen={true}
+          agentConfig={AGENTS.knowledge}
+          onClose={() => setActiveMenu('executive')}
+        />
       ) : activeMenu === 'preferences' ? (
         // Preferences layout
         <Box sx={{ display: 'flex', height: '100vh', backgroundColor: '#fafafa' }}>
@@ -124,14 +131,17 @@ function App() {
           <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             {activeMenu === 'dashboard' && (
               <Dashboard
-                onChatClick={() => setChatPanelOpen(true)}
+                onChatClick={() => setOpenAgentId('knowledge')}
                 preferences={preferences}
                 widgetOrder={widgetOrder}
                 onWidgetOrderChange={setWidgetOrder}
               />
             )}
             {activeMenu === 'executive' && (
-              <ExecutiveDashboard onChatClick={() => setChatPanelOpen(true)} />
+              <ExecutiveDashboard
+                onChatClick={() => setOpenAgentId('knowledge')}
+                onOpenAgent={(agentId) => setOpenAgentId(agentId)}
+              />
             )}
             {activeMenu === 'quicksight-demo' && (
               <Box sx={{ flex: 1, overflow: 'auto', backgroundColor: '#fafafa' }}>
@@ -140,9 +150,13 @@ function App() {
             )}
           </Box>
 
-          {/* Floating Chat Panel on Dashboard */}
-          {chatPanelOpen && (
-            <ChatPanel isOpen={chatPanelOpen} onClose={() => setChatPanelOpen(false)} />
+          {/* Floating dashboard-specific or global agent panel */}
+          {openAgentId && (
+            <ChatPanel
+              isOpen={true}
+              agentConfig={AGENTS[openAgentId] ?? AGENTS.knowledge}
+              onClose={() => setOpenAgentId(null)}
+            />
           )}
         </Box>
       )}

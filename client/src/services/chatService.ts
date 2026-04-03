@@ -99,18 +99,26 @@ async function streamRequest(
 }
 
 export const chatService = {
-  sendMessage: async (message: string) => {
-    const raw = await chatRequest<ChatApiResponse>('/api/v1/chat', { session_id: SESSION_ID, message: message, conversation_histoiry: [] })
+  /**
+   * Send a message to the given agent endpoint.
+   * Defaults to the knowledge assistant when no endpoint is supplied.
+   */
+  sendMessage: async (message: string, endpoint = '/api/v1/chat') => {
+    const raw = await chatRequest<ChatApiResponse>(endpoint, { session_id: SESSION_ID, message, conversation_history: [] })
     return normaliseResponse(raw)
   },
 
-  /** Stream a response token-by-token. Calls onChunk with each new text piece. */
+  /**
+   * Stream a response token-by-token.
+   * Pass a custom streamEndpoint to target a specific dashboard agent.
+   */
   streamMessage: (
     message: string,
     onChunk: (chunk: string) => void,
     signal?: AbortSignal,
+    streamEndpoint = '/api/v1/chat/stream',
   ): Promise<void> => {
-    return streamRequest('/api/v1/chat/stream', { session_id: SESSION_ID, message }, onChunk, signal)
+    return streamRequest(streamEndpoint, { session_id: SESSION_ID, message }, onChunk, signal)
   },
 
   /** Check health of the chat agent service. */

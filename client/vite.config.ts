@@ -26,5 +26,11 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
+    resolve: {
+      alias: {
+        crypto: 'node:crypto',
+      }
+    }
   }
+
 })
