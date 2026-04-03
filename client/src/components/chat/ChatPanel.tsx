@@ -284,7 +284,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
                     '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' },
                   }}
                 >
-                  ↺ Clear History
+                  ↺ Clear
                 </Button>
               )}
                <Button

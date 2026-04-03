@@ -1,5 +1,5 @@
 import React from 'react'
-import { Box, Typography, CircularProgress, Paper, Chip, Autocomplete, TextField, InputAdornment, Button } from '@mui/material'
+import { Box, Typography, CircularProgress, Paper, Chip, Autocomplete, TextField, Button } from '@mui/material'
 import WorkIcon from '@mui/icons-material/Work'
 import ScheduleIcon from '@mui/icons-material/Schedule'
 import AccountTreeIcon from '@mui/icons-material/AccountTree'
@@ -8,7 +8,7 @@ import TrendingUpIcon from '@mui/icons-material/TrendingUp'
 import TableChartIcon from '@mui/icons-material/TableChart'
 import PeopleIcon from '@mui/icons-material/People'
 import AppsIcon from '@mui/icons-material/Apps'
-import SearchIcon from '@mui/icons-material/Search'
+
 import SmartToyIcon from '@mui/icons-material/SmartToy'
 import {
   WidgetShell, StatCardGrid, MetricBarList, DataTable, TrendLineChart, DonutChart, ComposedBarLineChart,
@@ -68,10 +68,10 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   const [metadataDetail, setMetadataDetail] = React.useState<AppData['metadata_detail']>([])
   const [jobRunTable, setJobRunTable] = React.useState<AppData['job_run_table']>([])
   const [tableLoading, setTableLoading] = React.useState(false)
-  const [jobSearch,    setJobSearch]    = React.useState('')
+  const [selectedJob, setSelectedJob] = React.useState('')
 
   // Reset job filter when application changes
-  React.useEffect(() => { setJobSearch('') }, [selected])
+  React.useEffect(() => { setSelectedJob('') }, [selected])
 
   // Load application list on mount or when mock mode changes
   React.useEffect(() => {
@@ -180,13 +180,16 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
     return { rows, days }
   }, [trendData])
 
-  // Filtered rows — driven by jobSearch text
-  const filteredJobList     = React.useMemo(() => (data?.job_list ?? []).filter(r           => !jobSearch || r.jobname.toLowerCase().includes(jobSearch.toLowerCase())),       [data, jobSearch])
-  const filteredMeta        = React.useMemo(() => (data?.metadata ?? []).filter(r           => !jobSearch || r.jobname.toLowerCase().includes(jobSearch.toLowerCase())),       [data, jobSearch])
-  const filteredPred        = React.useMemo(() => (data?.predecessor_jobs ?? []).filter(r   => !jobSearch || r.jobname.toLowerCase().includes(jobSearch.toLowerCase())),       [data, jobSearch])
-  const filteredSucc        = React.useMemo(() => (data?.successor_jobs ?? []).filter(r     => !jobSearch || r.jobname.toLowerCase().includes(jobSearch.toLowerCase())),       [data, jobSearch])
-  const filteredMetaDetail  = React.useMemo(() => metadataDetail.filter(r                  => !jobSearch || r.jobname.toLowerCase().includes(jobSearch.toLowerCase())),       [metadataDetail, jobSearch])
-  const filteredJobRunTable = React.useMemo(() => jobRunTable.filter(r                     => !jobSearch || r.job_longname.toLowerCase().includes(jobSearch.toLowerCase())),    [jobRunTable, jobSearch])
+  // Available job options for the job selector dropdown
+  const jobOptions = React.useMemo(() => (data?.job_list ?? []).map(j => j.jobname), [data])
+
+  // Filtered rows — driven by selectedJob (exact match, empty = all jobs)
+  const filteredJobList     = React.useMemo(() => (data?.job_list ?? []).filter(r           => !selectedJob || r.jobname === selectedJob),      [data, selectedJob])
+  const filteredMeta        = React.useMemo(() => (data?.metadata ?? []).filter(r           => !selectedJob || r.jobname === selectedJob),      [data, selectedJob])
+  const filteredPred        = React.useMemo(() => (data?.predecessor_jobs ?? []).filter(r   => !selectedJob || r.jobname === selectedJob),      [data, selectedJob])
+  const filteredSucc        = React.useMemo(() => (data?.successor_jobs ?? []).filter(r     => !selectedJob || r.jobname === selectedJob),      [data, selectedJob])
+  const filteredMetaDetail  = React.useMemo(() => metadataDetail.filter(r                  => !selectedJob || r.jobname === selectedJob),      [metadataDetail, selectedJob])
+  const filteredJobRunTable = React.useMemo(() => jobRunTable.filter(r                     => !selectedJob || r.job_longname === selectedJob), [jobRunTable, selectedJob])
 
   // Metadata detail columns (full esp_job_cmnd data)
   const metaCols: ColumnDef[] = [
@@ -281,8 +284,8 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
               <Autocomplete
                 options={applications}
                 value={selected}
-                onChange={(_, val) => { if (val) setSelected(val) }}
-                disableClearable
+                onChange={(_, val) =>  setSelected(val ?? '') }
+                disableClearable={false}
                 size="small"
                 sx={{ minWidth: 260 }}
                 renderInput={(params) => (
@@ -304,6 +307,49 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                 )}
               />
             )}
+
+            {/* ── Job selector (populated after app data loads) ── */}
+            {selected && (
+              <>
+                <Typography sx={{ fontSize: '12px', color: '#666', fontWeight: 500 }}>Job:</Typography>
+                <Autocomplete
+                  options={jobOptions}
+                  value={selectedJob || null}
+                  onChange={(_, val) => setSelectedJob(val ?? '')}
+                  disabled={loading || !data}
+                  disableClearable={false}
+                  clearOnEscape
+                  size="small"
+                  sx={{ minWidth: 220 }}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      placeholder={loading ? 'Loading…' : 'All jobs'}
+                      sx={{
+                        '& .MuiOutlinedInput-root': {
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          borderRadius: 1,
+                          bgcolor: '#fff',
+                          '& .MuiOutlinedInput-notchedOutline': { borderColor: '#1976d240' },
+                          '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#1976d2' },
+                          '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#1976d2' },
+                        },
+                      }}
+                    />
+                  )}
+                />
+                {selectedJob && (
+                  <Chip
+                    label={`Job: ${selectedJob}`}
+                    size="small"
+                    onDelete={() => setSelectedJob('')}
+                    sx={{ fontSize: '10px', height: 18, color: '#1976d2', backgroundColor: '#e3f2fd', border: '1px solid #1976d240' }}
+                  />
+                )}
+              </>
+            )}
+
             {onOpenAgent && (
               <Button
                 size="small"
@@ -369,31 +415,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
             </WidgetShell>
           </Paper>
 
-          {/* ── Job filter bar ── */}
-          <Paper elevation={0} sx={{ borderRadius: 2, border: '1px solid #e8ecf1', bgcolor: '#f8f9fb' }}>
-            <Box sx={{ px: 2, py: 1, display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
-              <SearchIcon sx={{ fontSize: 16, color: '#90a4ae' }} />
-              <TextField
-                size="small"
-                placeholder="Filter jobs by name…"
-                value={jobSearch}
-                onChange={e => setJobSearch(e.target.value)}
-                InputProps={{ startAdornment: <InputAdornment position="start" /> }}
-                sx={{ minWidth: 260, '& .MuiOutlinedInput-root': { fontSize: '12px', borderRadius: 2 } }}
-              />
-              {jobSearch && (
-                <Chip
-                  label={`"${jobSearch}"`}
-                  size="small"
-                  onDelete={() => setJobSearch('')}
-                  sx={{ fontSize: '10px', color: '#2e7d32', backgroundColor: '#e8f5e9', border: '1px solid #2e7d3230' }}
-                />
-              )}
-              <Typography sx={{ fontSize: '11px', color: '#aaa', ml: 'auto' }}>
-                {filteredJobList.length} / {data.job_list.length} jobs
-              </Typography>
-            </Box>
-          </Paper>
+
 
           {/* ── Row 2: Job List + Trend ── */}
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: 2 }}>
