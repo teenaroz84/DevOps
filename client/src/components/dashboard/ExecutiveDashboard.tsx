@@ -107,6 +107,15 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
 
   useEffect(() => {
     setLoading(true)
+    // Clear stale data immediately so mock values don't persist into live view
+    setDmfSummary(null)
+    setRunsOverTime([])
+    setTalendSummary(null)
+    setIncidents([])
+    setTickets([])
+    setEspJobCounts([])
+    setCost(null)
+    setSnowflakePlatform(null)
     if (useMock) {
       setDmfSummary(MOCK_DMF_SUMMARY)
       setRunsOverTime(MOCK_DMF_RUNS_OVER_TIME)
@@ -134,7 +143,7 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
       setTalendSummary(tln)
       setIncidents(Array.isArray(inc) ? inc : [])
       setTickets(Array.isArray(tkt) ? tkt : [])
-      setEspJobCounts(Array.isArray(esp) ? esp : [])
+      setEspJobCounts(Array.isArray(esp) ? esp : Array.isArray(esp?.jobs_summary) ? esp.jobs_summary : [])
       setSnowflakePlatform(null)
       setLoading(false)
     }).catch(() => setLoading(false))
@@ -168,8 +177,13 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
 
   // ESP derived
   const totalEspApps = espJobCounts.length
-  const totalEspJobs = espJobCounts.reduce((s: number, a: any) => s + (a.total_jobs ?? 0), 0)
+  const totalEspJobs = espJobCounts.reduce((s: number, a: any) => s + (parseInt(a.total_jobs, 10) || 0), 0)
   const topEspApp    = espJobCounts.reduce((top: any, a: any) => (!top || a.total_jobs > top.total_jobs ? a : top), null as any)
+  const avgJobsPerApp = totalEspApps > 0 ? Math.round(totalEspJobs / totalEspApps) : 0
+
+  const CAP = 30_000
+  const capCount = (n: number): string | number =>
+    !isFinite(n) || isNaN(n) ? '—' : n > CAP ? '30,000+' : n.toLocaleString()
 
   // ── Cross-system correlation data ─────────────────────────
   // Map ServiceNow ticket affectedService → source system
@@ -362,19 +376,19 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
         { label: 'Applications', value: totalEspApps,
           color: '#2e7d32', bg: '#e8f5e9',
           description: 'Number of distinct ESP scheduler applications.',
-          dialogStats: [{ label: 'Total Jobs', value: totalEspJobs }] },
-        { label: 'Total Jobs',   value: totalEspJobs,
+          dialogStats: [{ label: 'Total Jobs', value: capCount(totalEspJobs) }] },
+        { label: 'Total Jobs',   value: capCount(totalEspJobs),
           color: '#1565c0', bg: '#e3f2fd',
           description: 'Total job definitions across all ESP applications.',
-          dialogStats: [{ label: 'Applications', value: totalEspApps }, { label: 'Avg / App', value: totalEspApps > 0 ? Math.round(totalEspJobs / totalEspApps) : 0 }] },
-        { label: 'Largest App',  value: topEspApp?.total_jobs ?? '—',
+          dialogStats: [{ label: 'Applications', value: totalEspApps }, { label: 'Avg / App', value: capCount(avgJobsPerApp) }] },
+        { label: 'Largest App',  value: capCount(parseInt(topEspApp?.total_jobs, 10) || 0),
           color: '#546e7a', bg: '#eceff1',
           description: `Application with the most job definitions${topEspApp ? ` (${topEspApp.appl_name})` : ''}.`,
           dialogStats: topEspApp ? [{ label: 'App', value: topEspApp.appl_name }] : [] },
-        { label: 'Avg Jobs / App', value: totalEspApps > 0 ? Math.round(totalEspJobs / totalEspApps) : '—',
+        { label: 'Avg Jobs / App', value: totalEspApps > 0 ? capCount(avgJobsPerApp) : '—',
           color: '#7b1fa2', bg: '#f3e5f5',
           description: 'Average number of job definitions per ESP application.',
-          dialogStats: [{ label: 'Applications', value: totalEspApps }, { label: 'Total Jobs', value: totalEspJobs }] },
+          dialogStats: [{ label: 'Applications', value: totalEspApps }, { label: 'Total Jobs', value: capCount(totalEspJobs) }] },
       ],
       alert: undefined,
     },

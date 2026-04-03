@@ -74,7 +74,7 @@ interface DataTableProps<T = any> {
 
 function getKey<T>(row: T, rowKey: DataTableProps<T>['rowKey'], idx: number): string {
   if (!rowKey) return String(idx)
-  if (typeof rowKey === 'string') return String((row as any)[rowKey] ?? idx)
+  if (typeof rowKey === 'string') return `${String((row as any)[rowKey] ?? idx)}-${idx}`
   return rowKey(row)
 }
 

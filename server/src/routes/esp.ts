@@ -84,7 +84,7 @@ router.get('/job-counts', async (_req: Request, res: Response) => {
     res.json({
       jobs_summary: result.rows.map((row: any) => ({
         appl_name: row.appl_name,
-        total_jobs: row.total_jobs
+        total_jobs: parseInt(row.total_jobs, 10) || 0
       }))
     });
   } catch (err: any) {

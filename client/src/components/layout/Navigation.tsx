@@ -348,28 +348,6 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuChange
       {isExpanded && (
         <>
           <Divider sx={{ my: 1 }} />
-          <Box sx={{ p: 2, textAlign: 'center' }}>
-            <Chip
-              label="Online"
-              size="small"
-              icon={
-                <Box
-                  sx={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: '50%',
-                    backgroundColor: '#4caf50',
-                  }}
-                  component="span"
-                />
-              }
-              sx={{
-                backgroundColor: '#e8f5e9',
-                color: '#2e7d32',
-                fontWeight: 500,
-              }}
-            />
-          </Box>
         </>
       )}
     </Drawer>
