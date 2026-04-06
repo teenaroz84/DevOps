@@ -15,6 +15,12 @@ export const dmfService = {
 
   // ── Lineage tab ─────────────────────────────────────────
   getLineageMeta: () => apiClient.get('/api/dmf/lineage/meta'),
+  getLineageCounts: (filters: { src_cd?: string } = {}) => {
+    const params = new URLSearchParams()
+    if (filters.src_cd && filters.src_cd !== 'All') params.set('src_cd', filters.src_cd)
+    const qs = params.toString()
+    return apiClient.get(`/api/dmf/lineage/counts${qs ? `?${qs}` : ''}`)
+  },
   getLineageJobs: (filters: { src_cd?: string; dataset_nm?: string; src_nm?: string; tgt_nm?: string; proc_typ_cd?: string; run_status?: string } = {}) => {
     const params = new URLSearchParams()
     Object.entries(filters).forEach(([k, v]) => { if (v && v !== 'All') params.set(k, v) })

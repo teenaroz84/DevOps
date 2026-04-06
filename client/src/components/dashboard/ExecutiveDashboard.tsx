@@ -182,9 +182,9 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
   const topEspApp    = espJobCounts.reduce((top: any, a: any) => (!top || a.total_jobs > top.total_jobs ? a : top), null as any)
   const avgJobsPerApp = totalEspApps > 0 ? Math.round(totalEspJobs / totalEspApps) : 0
 
-  const CAP = 30_000
+  const CAP = 200_000
   const capCount = (n: number): string | number =>
-    !isFinite(n) || isNaN(n) ? '—' : n > CAP ? '30,000+' : n.toLocaleString()
+    !isFinite(n) || isNaN(n) ? '—' : n > CAP ? '200,000+' : n.toLocaleString()
 
   // ── Cross-system correlation data ─────────────────────────
   // Map ServiceNow ticket affectedService → source system
@@ -863,10 +863,15 @@ interface ExecutiveDashboardProps {
 
 export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onChatClick, onOpenAgent }) => {
   const { useMock } = useMockData()
-  const [source, setSource] = useState<SourceKey>('pipeline')
+  const [source, setSource] = useState<SourceKey>('overview')
+  const [lastUpdatedMap, setLastUpdatedMap] = useState<Partial<Record<SourceKey, Date>>>({ overview: new Date() })
   const visibleSources = SOURCES.filter(s => !s.mockOnly || useMock)
   const active = visibleSources.find(s => s.key === source) ?? visibleSources[0]!
 
+  useEffect(() => {
+    setLastUpdatedMap(prev => ({ ...prev, [source]: new Date() }))
+  }, [source])
+ 
   // The agent relevant to the current tab (falls back to 'knowledge')
   // contextAgentId kept for potential future per-tab agent buttons on individual dashboard components
 
@@ -881,6 +886,9 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onChatCl
           </Typography>
           <Typography sx={{ color: '#90a4ae', fontSize: '12px' }}>
             {active.label}  {active.sub}
+          </Typography>
+          <Typography sx={{ color: '#607d8b', fontSize: '11px', mt: 0.25 }}>
+            Updated {(lastUpdatedMap[source] ?? new Date()).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}
           </Typography>
         </Box>
         <Button
@@ -942,6 +950,5 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onChatCl
         {source === 'snowflake'  && <SnowflakeDashboardTab onOpenAgent={onOpenAgent} />}
         </Box>
 
-s
     </Box>  )
 } 

@@ -171,3 +171,27 @@ export const MOCK_DMF_LINEAGE_JOBS = [
   { id:'lj12', processDate:'3/17/2026', sourceCode:'GLD',         datasetName:'NCO_SF_LLC_BI_LOAN',            processTypeCode:'ENR', sourceName:'NCO_SF_LLC_BI_LOAN_SOURCE',       targetName:'NCO_SF_LLC_BI_LOAN_TARGET',           runStartTime:'3/17/2026 3:28 AM',  runEndTime:'3/17/2026 3:31 AM',  status:'success' },
   { id:'lj13', processDate:'3/17/2026', sourceCode:'SASVIYA',     datasetName:'TEST_TRANSACTION_SAS_CRU_R',    processTypeCode:'ING', sourceName:'TEST_TRANSACTION_SAS_CRU_RESULT', targetName:'TEST_TRANSACTION_SAS_CRU_RESULT',     runStartTime:'3/17/2026 4:03 AM',  runEndTime:'3/17/2026 6:04 AM',  status:'success' },
 ]
+
+// Derived counts for mock mode — mirrors what the /lineage/counts endpoint returns.
+// These are aggregate totals so the UI never has to iterate over millions of real rows.
+export const MOCK_DMF_LINEAGE_COUNTS = (() => {
+  const jobs = MOCK_DMF_LINEAGE_JOBS
+  const total = jobs.length
+  const byStatus = [
+    { status: 'success' as const, count: jobs.filter(j => j.status === 'success').length },
+    { status: 'failed'  as const, count: jobs.filter(j => j.status === 'failed').length },
+  ].filter(x => x.count > 0)
+  const byProcType = ['ING','ENR','DIS','INT'].map(t => ({
+    procTypeCode: t,
+    count: jobs.filter(j => j.processTypeCode === t).length,
+  })).filter(x => x.count > 0)
+  const bySrcCdMap: Record<string, number> = {}
+  const byTgtNmMap: Record<string, number> = {}
+  jobs.forEach(j => {
+    bySrcCdMap[j.sourceCode]  = (bySrcCdMap[j.sourceCode]  ?? 0) + 1
+    byTgtNmMap[j.targetName]  = (byTgtNmMap[j.targetName]  ?? 0) + 1
+  })
+  const bySrcCd = Object.entries(bySrcCdMap).sort((a, b) => b[1] - a[1]).map(([sourceCode, count]) => ({ sourceCode, count }))
+  const byTgtNm = Object.entries(byTgtNmMap).sort((a, b) => b[1] - a[1]).map(([targetName, count]) => ({ targetName, count }))
+  return { total, byStatus, byProcType, bySrcCd, byTgtNm }
+})()

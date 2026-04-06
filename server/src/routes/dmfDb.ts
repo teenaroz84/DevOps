@@ -92,6 +92,51 @@ router.get('/lineage/meta', async (_req: Request, res: Response) => {
   }
 });
 
+// ─── GET /api/dmf/lineage/counts ───────────────────────────
+// Fast aggregated counts — safe on large tables (uses GROUP BY / COUNT).
+// Optionally filtered by src_cd to scope counts to one source code.
+router.get('/lineage/counts', async (req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const { src_cd } = req.query;
+    const conditions: string[] = [];
+    const params: any[] = [];
+    if (src_cd && String(src_cd) !== 'All') {
+      conditions.push(`src_cd = $${params.length + 1}`);
+      params.push(String(src_cd));
+    }
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const [totalRes, byStatus, byProcType, bySrcCd, byTgtNm] = await Promise.all([
+      pool.query(`SELECT COUNT(*) AS cnt FROM edoops.DMF_RUN_MASTER ${where}`, params),
+      pool.query(`SELECT run_status, COUNT(*) AS cnt FROM edoops.DMF_RUN_MASTER ${where} GROUP BY run_status ORDER BY cnt DESC`, params),
+      pool.query(`SELECT proc_typ_cd, COUNT(*) AS cnt FROM edoops.DMF_RUN_MASTER ${where} GROUP BY proc_typ_cd ORDER BY cnt DESC`, params),
+      pool.query(`SELECT src_cd, COUNT(*) AS cnt FROM edoops.DMF_RUN_MASTER ${where} GROUP BY src_cd ORDER BY cnt DESC LIMIT 15`, params),
+      pool.query(`SELECT tgt_nm, COUNT(*) AS cnt FROM edoops.DMF_RUN_MASTER ${where} GROUP BY tgt_nm ORDER BY cnt DESC LIMIT 15`, params),
+    ]);
+    res.json({
+      total: parseInt(totalRes.rows[0]?.cnt ?? '0'),
+      byStatus: byStatus.rows.map((r: any) => ({
+        status: (r.run_status || '').toUpperCase() === 'SUCCESS' ? 'success' : 'failed',
+        count: parseInt(r.cnt),
+      })),
+      byProcType: byProcType.rows.map((r: any) => ({
+        procTypeCode: r.proc_typ_cd || '',
+        count: parseInt(r.cnt),
+      })),
+      bySrcCd: bySrcCd.rows.map((r: any) => ({
+        sourceCode: r.src_cd || '',
+        count: parseInt(r.cnt),
+      })),
+      byTgtNm: byTgtNm.rows.map((r: any) => ({
+        targetName: r.tgt_nm || '',
+        count: parseInt(r.cnt),
+      })),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
 // ─── GET /api/dmf/lineage/jobs ─────────────────────────────
 // Accepts query params: src_cd, dataset_nm, src_nm, tgt_nm, proc_typ_cd, run_status
 router.get('/lineage/jobs', async (req: Request, res: Response) => {

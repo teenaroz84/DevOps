@@ -28,7 +28,7 @@ import { dmfService } from '../../services'
 import { useMockData } from '../../context/MockDataContext'
 import {
   MOCK_DMF_STATUS_TREND, MOCK_DMF_ROWS_TREND, MOCK_DMF_JOBS_TREND, MOCK_DMF_STEP_FAILURE_TREND,
-  MOCK_DMF_ANALYTICS, MOCK_DMF_LINEAGE_META, MOCK_DMF_LINEAGE_JOBS,
+  MOCK_DMF_ANALYTICS, MOCK_DMF_LINEAGE_META, MOCK_DMF_LINEAGE_JOBS, MOCK_DMF_LINEAGE_COUNTS,
 } from '../../services/dmfMockData'
 
 
@@ -36,6 +36,14 @@ import {
 
 
 // ─── NEW: Lineage / Analytics / Trends types ───────────────
+interface LineageCounts {
+  total: number
+  byStatus:   { status: 'success' | 'failed'; count: number }[]
+  byProcType: { procTypeCode: string; count: number }[]
+  bySrcCd:    { sourceCode: string; count: number }[]
+  byTgtNm:    { targetName: string; count: number }[]
+}
+
 interface LineageJob {
   id: string
   processDate: string
@@ -72,13 +80,15 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
 
 
   // ── Lineage state ─────────────────────────────────────────
-  const [lineageMeta,   setLineageMeta]   = useState<{ sourceCodes: string[]; datasetNames: string[]; sourceNames: string[]; targetNames: string[] } | null>(null)
-  const [lineageJobs,   setLineageJobs]   = useState<LineageJob[]>([])
-  const [lineageLoaded, setLineageLoaded] = useState(false)
-  const [lgSourceCode,  setLgSourceCode]  = useState('All')
-  const [lgDataset,     setLgDataset]     = useState('All')
-  const [lgProcType,    setLgProcType]    = useState('All')
-  const [lgStatus,      setLgStatus]      = useState('All')
+  const [lineageMeta,       setLineageMeta]       = useState<{ sourceCodes: string[]; datasetNames: string[]; sourceNames: string[]; targetNames: string[] } | null>(null)
+  const [lineageCounts,     setLineageCounts]     = useState<LineageCounts | null>(null)
+  const [lineageJobs,       setLineageJobs]       = useState<LineageJob[]>([])
+  const [lineageJobsLoading, setLineageJobsLoading] = useState(false)
+  const [lineageLoaded,     setLineageLoaded]     = useState(false)
+  const [lgSourceCode,      setLgSourceCode]      = useState('All')
+  const [lgDataset,         setLgDataset]         = useState('All')
+  const [lgProcType,        setLgProcType]        = useState('All')
+  const [lgStatus,          setLgStatus]          = useState('All')
 
   // ── Analytics state ───────────────────────────────────────
   const [analytics,       setAnalytics]       = useState<AnalyticsData | null>(null)
@@ -102,7 +112,9 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
   useEffect(() => {
     setLineageLoaded(false)
     setLineageMeta(null)
+    setLineageCounts(null)
     setLineageJobs([])
+    setLineageJobsLoading(false)
     setAnalytics(null)
     setAnalyticsMetaLoaded(false)
     setAnalyticsMeta(null)
@@ -115,24 +127,41 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
   }, [useMock])
 
 
-  // ── Lazy-load Lineage data ────────────────────────────────
+  // ── Lazy-load Lineage meta + counts (never loads all jobs) ─
   useEffect(() => {
     if (activeTab !== 'lineage' || lineageLoaded) return
     if (useMock) {
       setLineageMeta(MOCK_DMF_LINEAGE_META)
-      setLineageJobs(MOCK_DMF_LINEAGE_JOBS)
+      setLineageCounts(MOCK_DMF_LINEAGE_COUNTS as LineageCounts)
       setLineageLoaded(true)
       return
     }
     Promise.all([
       dmfService.getLineageMeta(),
-      dmfService.getLineageJobs(),
-    ]).then(([meta, jobs]) => {
+      dmfService.getLineageCounts(),
+    ]).then(([meta, counts]) => {
       setLineageMeta(meta)
-      setLineageJobs(Array.isArray(jobs) ? jobs : [])
+      setLineageCounts(counts)
       setLineageLoaded(true)
     }).catch(() => setLineageLoaded(true))
   }, [activeTab, lineageLoaded, useMock])
+
+  // ── Load jobs only when a specific source code is selected ─
+  useEffect(() => {
+    if (!lineageLoaded || lgSourceCode === 'All') {
+      setLineageJobs([])
+      return
+    }
+    if (useMock) {
+      setLineageJobs(MOCK_DMF_LINEAGE_JOBS.filter(j => j.sourceCode === lgSourceCode))
+      return
+    }
+    setLineageJobsLoading(true)
+    dmfService.getLineageJobs({ src_cd: lgSourceCode, dataset_nm: lgDataset, proc_typ_cd: lgProcType, run_status: lgStatus })
+      .then(jobs => setLineageJobs(Array.isArray(jobs) ? jobs : []))
+      .catch(() => setLineageJobs([]))
+      .finally(() => setLineageJobsLoading(false))
+  }, [lineageLoaded, lgSourceCode, lgDataset, lgProcType, lgStatus, useMock])
 
   // ── Lazy-load Analytics meta (once per mock toggle) ────────
   useEffect(() => {
@@ -264,21 +293,33 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}><CircularProgress size={36} /></Box>
         ) : (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {/* Lineage KPI Summary */}
+            {/* Lineage KPI Summary — counts from server, no full row scan */}
             <StatCardGrid
               items={[
                 { label: 'Source Codes', value: lineageMeta?.sourceCodes.length ?? 0, color: '#1565c0', bg: '#e3f2fd' },
                 { label: 'Datasets', value: lineageMeta?.datasetNames.length ?? 0, color: '#2e7d32', bg: '#e8f5e9' },
                 { label: 'Source Names', value: lineageMeta?.sourceNames.length ?? 0, color: '#f57c00', bg: '#fff3e0' },
                 { label: 'Target Names', value: lineageMeta?.targetNames.length ?? 0, color: '#7b1fa2', bg: '#f3e5f5' },
-                { label: 'Total Jobs', value: lineageJobs.length, color: '#1976d2', bg: '#e3f2fd' },
-                { label: 'Success Rate', value: lineageJobs.length ? Math.round(lineageJobs.filter(j => j.status === 'success').length / lineageJobs.length * 100) : 0, unit: '%', color: '#2e7d32', bg: '#e8f5e9' },
+                {
+                  label: 'Total Jobs',
+                  value: (lineageCounts?.total ?? 0).toLocaleString(),
+                  color: '#1976d2', bg: '#e3f2fd',
+                },
+                {
+                  label: 'Success Rate',
+                  value: (() => {
+                    const s = lineageCounts?.byStatus.find(x => x.status === 'success')?.count ?? 0
+                    const t = lineageCounts?.total ?? 0
+                    return t > 0 ? Math.round(s / t * 100) : 0
+                  })(),
+                  unit: '%', color: '#2e7d32', bg: '#e8f5e9',
+                },
               ]}
               columns={6}
               compact
             />
 
-            {/* Filter bar */}
+            {/* Filter bar — Source Code selection triggers job load */}
             <Box sx={{ backgroundColor: '#fff', border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
               <WidgetShell title="Lineage Filters" titleIcon={<FilterListIcon sx={{ fontSize: 16, color: '#1976d2' }} />}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', px: 2, py: 1 }}>
@@ -314,7 +355,7 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
               </WidgetShell>
             </Box>
 
-            {/* Visual breakdowns — 2×2 chart grid */}
+            {/* Visual breakdowns — powered by aggregate counts, not full job array */}
             <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
 
               {/* Status donut */}
@@ -323,10 +364,10 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
                   <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
                     <DonutChart
                       data={[
-                        { name: 'Success', value: lineageJobs.filter(j => j.status === 'success').length, color: '#2e7d32' },
-                        { name: 'Failed',  value: lineageJobs.filter(j => j.status !== 'success').length, color: '#d32f2f' },
+                        { name: 'Success', value: lineageCounts?.byStatus.find(x => x.status === 'success')?.count ?? 0, color: '#2e7d32' },
+                        { name: 'Failed',  value: lineageCounts?.byStatus.find(x => x.status === 'failed')?.count  ?? 0, color: '#d32f2f' },
                       ].filter(d => d.value > 0)}
-                      centerLabel={lineageJobs.length}
+                      centerLabel={(lineageCounts?.total ?? 0).toLocaleString()}
                       showLegend
                       size={150}
                     />
@@ -341,10 +382,10 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
                     <DonutChart
                       data={['ING','ENR','DIS','INT'].map((type, i) => ({
                         name: type,
-                        value: lineageJobs.filter(j => j.processTypeCode === type).length,
+                        value: lineageCounts?.byProcType.find(x => x.procTypeCode === type)?.count ?? 0,
                         color: ['#1565c0','#f57c00','#2e7d32','#7b1fa2'][i],
                       })).filter(d => d.value > 0)}
-                      centerLabel={lineageJobs.length}
+                      centerLabel={(lineageCounts?.total ?? 0).toLocaleString()}
                       showLegend
                       size={150}
                     />
@@ -354,12 +395,12 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
 
               {/* Source code bar chart */}
               <Box sx={{ backgroundColor: '#fff', border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
-                <WidgetShell title="Jobs by Source Code" source={`Top ${Math.min((lineageMeta?.sourceCodes ?? []).length, 10)}`}>
+                <WidgetShell title="Jobs by Source Code" source={`Top ${Math.min((lineageCounts?.bySrcCd ?? []).length, 10)}`}>
                   <Box sx={{ px: 1, py: 1 }}>
                     <ComposedBarLineChart
-                      data={(lineageMeta?.sourceCodes ?? []).slice(0, 10).map(sc => ({
-                        name: sc,
-                        count: lineageJobs.filter(j => j.sourceCode === sc).length,
+                      data={(lineageCounts?.bySrcCd ?? []).slice(0, 10).map(x => ({
+                        name: x.sourceCode,
+                        count: x.count,
                       }))}
                       xKey="name"
                       bars={[{ key: 'count', label: 'Jobs', color: '#1565c0' }]}
@@ -372,12 +413,12 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
 
               {/* Target name bar chart */}
               <Box sx={{ backgroundColor: '#fff', border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
-                <WidgetShell title="Jobs by Target Name" source={`Top ${Math.min((lineageMeta?.targetNames ?? []).length, 10)}`}>
+                <WidgetShell title="Jobs by Target Name" source={`Top ${Math.min((lineageCounts?.byTgtNm ?? []).length, 10)}`}>
                   <Box sx={{ px: 1, py: 1 }}>
                     <ComposedBarLineChart
-                      data={(lineageMeta?.targetNames ?? []).slice(0, 10).map(tn => ({
-                        name: tn.length > 14 ? tn.slice(0, 14) + '…' : tn,
-                        count: lineageJobs.filter(j => j.targetName === tn).length,
+                      data={(lineageCounts?.byTgtNm ?? []).slice(0, 10).map(x => ({
+                        name: x.targetName.length > 14 ? x.targetName.slice(0, 14) + '…' : x.targetName,
+                        count: x.count,
                       }))}
                       xKey="name"
                       bars={[{ key: 'count', label: 'Jobs', color: '#7b1fa2' }]}
@@ -390,36 +431,40 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
 
             </Box>
 
-            {/* Job Details table */}
+            {/* Job Details table — only loads when a Source Code is selected */}
             <Box sx={{ backgroundColor: '#fff', border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
               <WidgetShell
                 title="Job Details"
-                source="DMF Lineage"
+                source={lgSourceCode === 'All' ? 'Select a Source Code above to load jobs' : `Source: ${lgSourceCode}`}
                 actions={
-                  <Chip label={`${lineageJobs.filter(j => {
-                    if (lgSourceCode !== 'All' && j.sourceCode !== lgSourceCode) return false
-                    if (lgDataset !== 'All' && j.datasetName !== lgDataset) return false
-                    if (lgProcType !== 'All' && j.processTypeCode !== lgProcType) return false
-                    if (lgStatus !== 'All' && j.status !== lgStatus) return false
-                    return true
-                  }).length} jobs`} size="small" sx={{ fontSize: '10px', height: 20, backgroundColor: '#e3f2fd', color: '#1565c0', fontWeight: 600 }} />
+                  lgSourceCode !== 'All'
+                    ? <Chip label={`${lineageJobs.length} jobs`} size="small" sx={{ fontSize: '10px', height: 20, backgroundColor: '#e3f2fd', color: '#1565c0', fontWeight: 600 }} />
+                    : undefined
                 }
               >
-                <DataTable<LineageJob>
-                  columns={lineageColumns}
-                  accentColor="#1565c0"
-                  rows={lineageJobs.filter(j => {
-                    if (lgSourceCode !== 'All' && j.sourceCode !== lgSourceCode) return false
-                    if (lgDataset !== 'All' && j.datasetName !== lgDataset) return false
-                    if (lgProcType !== 'All' && j.processTypeCode !== lgProcType) return false
-                    if (lgStatus !== 'All' && j.status !== lgStatus) return false
-                    return true
-                  })}
-                  rowKey="id"
-                  maxHeight={360}
-                  emptyMessage="No lineage jobs match the current filters"
-                  compact
-                />
+                {lgSourceCode === 'All' ? (
+                  <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 5, gap: 1 }}>
+                    <AccountTreeIcon sx={{ fontSize: 36, color: '#ccc' }} />
+                    <Typography sx={{ fontSize: '13px', color: '#aaa' }}>
+                      Select a <strong>Source Code</strong> from the filter above to view job details.
+                    </Typography>
+                    <Typography sx={{ fontSize: '11px', color: '#bbb' }}>
+                      Total: {(lineageCounts?.total ?? 0).toLocaleString()} jobs across {lineageMeta?.sourceCodes.length ?? 0} source codes
+                    </Typography>
+                  </Box>
+                ) : lineageJobsLoading ? (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}><CircularProgress size={28} /></Box>
+                ) : (
+                  <DataTable<LineageJob>
+                    columns={lineageColumns}
+                    accentColor="#1565c0"
+                    rows={lineageJobs}
+                    rowKey="id"
+                    maxHeight={360}
+                    emptyMessage="No lineage jobs match the current filters"
+                    compact
+                  />
+                )}
               </WidgetShell>
             </Box>
           </Box>
