@@ -11,9 +11,32 @@ import BugReportIcon from '@mui/icons-material/BugReport'
 import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber'
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline'
 import AssignmentIcon from '@mui/icons-material/Assignment'
+import DownloadIcon from '@mui/icons-material/Download'
 import { useMockData } from '../../context/MockDataContext'
 import { servicenowService } from '../../services'
 import { MOCK_SN_INCIDENT_DETAIL } from '../../services/servicenowMockData'
+
+// ─── CSV download helper ───────────────────────────────────
+function downloadCsv(rows: Record<string, any>[], filename: string) {
+  if (!rows.length) return
+  const headers = Object.keys(rows[0])
+  const lines = [
+    headers.join(','),
+    ...rows.map(row =>
+      headers.map(h => {
+        const val = row[h] == null ? '' : String(row[h]).replace(/"/g, '""')
+        return `"${val}"`
+      }).join(',')
+    ),
+  ]
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${filename}_${new Date().toISOString().slice(0, 10)}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
 
 export type DrillDownType = 'pipeline' | 'error' | 'ticket' | 'run' | 'sn_priority'
 
@@ -72,7 +95,23 @@ const PipelineDetail: React.FC<{ data: any }> = ({ data }) => {
       </Tabs>
 
       {tab === 0 && (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <Box>
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
+            <Tooltip title="Download run history as CSV">
+              <span>
+                <IconButton size="small" disabled={!data.runs?.length}
+                  onClick={() => downloadCsv(
+                    data.runs.map((r: any) => ({ runId: r.runId, status: r.status, start: r.start, duration: r.duration, records: r.records ?? '', error: r.error ?? '' })),
+                    `pipeline_runs_${data.id}`
+                  )}
+                  sx={{ color: '#90a4ae', '&:hover': { color: '#1565c0', backgroundColor: '#e3f2fd' } }}
+                >
+                  <DownloadIcon sx={{ fontSize: 16 }} />
+                </IconButton>
+              </span>
+            </Tooltip>
+          </Box>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
           {data.runs.map((run: any) => (
             <Box key={run.runId} sx={{
               border: '1px solid #e0e0e0', borderRadius: 2, p: 1.5,
@@ -103,6 +142,7 @@ const PipelineDetail: React.FC<{ data: any }> = ({ data }) => {
               )}
             </Box>
           ))}
+          </Box>
         </Box>
       )}
 
@@ -207,7 +247,22 @@ const TicketDetail: React.FC<{ data: any }> = ({ data }) => (
     </Box>
 
     <Divider sx={{ my: 2 }} />
-    <Typography sx={{ fontSize: '12px', fontWeight: 700, color: '#555', mb: 1 }}>Activity Log</Typography>
+    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+      <Typography sx={{ fontSize: '12px', fontWeight: 700, color: '#555' }}>Activity Log</Typography>
+      <Tooltip title="Download activity log as CSV">
+        <span>
+          <IconButton size="small" disabled={!data.comments?.length}
+            onClick={() => downloadCsv(
+              data.comments.map((c: any) => ({ author: c.author, time: c.time, text: c.text })),
+              `ticket_activity_${data.id}`
+            )}
+            sx={{ color: '#90a4ae', '&:hover': { color: '#1565c0', backgroundColor: '#e3f2fd' } }}
+          >
+            <DownloadIcon sx={{ fontSize: 16 }} />
+          </IconButton>
+        </span>
+      </Tooltip>
+    </Box>
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
       {data.comments.map((c: any, i: number) => (
         <Box key={i} sx={{ display: 'flex', gap: 1.5, p: 1.5, backgroundColor: '#fafafa', borderRadius: 2, border: '1px solid #eeeeee' }}>
@@ -280,7 +335,29 @@ const SnIncidentDetail: React.FC<{ data: { priority: string; count: number; sour
           No incidents found for {data.priority}.
         </Typography>
       ) : (
-        <Box sx={{ overflowX: 'auto', border: '1px solid #e0e0e0', borderRadius: 2 }}>
+        <Box>
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
+            <Tooltip title="Download incidents as CSV">
+              <span>
+                <IconButton size="small" disabled={!rows.length}
+                  onClick={() => downloadCsv(
+                    rows.map(r => ({
+                      incident_number: r.sninc_inc_num,
+                      priority: r.priority_field,
+                      capability: r.sninc_capability,
+                      description: r.sninc_short_desc,
+                      assignment_group: r.sninc_assignment_grp,
+                    })),
+                    `servicenow_incidents_${data.priority}`
+                  )}
+                  sx={{ color: '#90a4ae', '&:hover': { color: '#c62828', backgroundColor: '#fce4ec' } }}
+                >
+                  <DownloadIcon sx={{ fontSize: 16 }} />
+                </IconButton>
+              </span>
+            </Tooltip>
+          </Box>
+          <Box sx={{ overflowX: 'auto', border: '1px solid #e0e0e0', borderRadius: 2 }}>
           <Table size="small" sx={{ minWidth: 580 }}>
             <TableHead>
               <TableRow sx={{ backgroundColor: '#f5f5f5' }}>
@@ -311,21 +388,22 @@ const SnIncidentDetail: React.FC<{ data: { priority: string; count: number; sour
               ))}
             </TableBody>
           </Table>
+          </Box>
         </Box>
       )}
 
       {/* Action row */}
       <Box sx={{ display: 'flex', gap: 1, mt: 2.5, flexWrap: 'wrap' }}>
-        <Button size="small" variant="contained"
-          sx={{ backgroundColor: '#c62828', '&:hover': { backgroundColor: '#b71c1c' }, textTransform: 'none', fontSize: '12px' }}>
+        <Button size="small" variant="contained" disabled
+          sx={{ textTransform: 'none', fontSize: '12px' }}>
           Escalate Priority
         </Button>
-        <Button size="small" variant="outlined" color="primary"
+        <Button size="small" variant="outlined" color="primary" disabled
           sx={{ textTransform: 'none', fontSize: '12px' }}>
           Mark In Progress
         </Button>
-        <Button size="small" variant="outlined"
-          sx={{ textTransform: 'none', fontSize: '12px', color: '#555', borderColor: '#bbb' }}>
+        <Button size="small" variant="outlined" disabled
+          sx={{ textTransform: 'none', fontSize: '12px' }}>
           Add Comment
         </Button>
       </Box>

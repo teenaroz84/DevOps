@@ -26,6 +26,8 @@ export interface AgentConfig {
   streamEndpoint: string
   /** Input placeholder text */
   placeholder: string
+  /** Welcome message shown at the top of a fresh conversation */
+  welcomeMessage: string
   /** Chips shown when the conversation is empty */
   quickActions: Array<{ label: string; query: string }>
 }
@@ -41,6 +43,15 @@ export const AGENTS: Record<string, AgentConfig> = {
     endpoint: '/api/v1/chat',
     streamEndpoint: '/api/v1/chat/stream',
     placeholder: 'Ask about DMF, ESP, Talend, ingestion standards…',
+    welcomeMessage: `👋 Hi! I'm your **DataOps Knowledge Assistant**.
+
+I can help you with:
+- **DMF** ingestion directory structure & enrichment standards
+- **ESP** scheduling standards and best practices
+- **Talend** development guides
+- Any other cross-platform documentation
+
+What would you like to know?`,
     quickActions: [
       { label: '📁 DMF Ingestion Directory',  query: 'What is the DMF ingestion directory structure?' },
       { label: '🔧 DMF Enrichment Standards', query: 'What are the DMF enrichment standards?' },
@@ -57,6 +68,15 @@ export const AGENTS: Record<string, AgentConfig> = {
     endpoint: '/api/v1/agents/esp/chat',
     streamEndpoint: '/api/v1/agents/esp/chat/stream',
     placeholder: 'Ask about ESP jobs, schedules, failures…',
+    welcomeMessage: `👋 Hi! I'm the **ESP Scheduling Agent**.
+
+I have full visibility into your **Enterprise Scheduler Platform**, including:
+- Job run history & **completion codes**
+- **Idle** and stale jobs
+- Job **dependency chains**
+- Run trend anomalies
+
+Select an application above and ask me anything about its scheduled jobs.`,
     quickActions: [
       { label: '🔴 Failing jobs',       query: 'Which jobs have recent completion-code failures?' },
       { label: '⏳ Stale jobs',          query: 'Which jobs have not run in the last 3 days?' },
@@ -73,6 +93,15 @@ export const AGENTS: Record<string, AgentConfig> = {
     endpoint: '/api/v1/agents/dmf/chat',
     streamEndpoint: '/api/v1/agents/dmf/chat/stream',
     placeholder: 'Ask about DMF pipelines, run status, failures…',
+    welcomeMessage: `👋 Hi! I'm the **DMF Pipeline Agent**.
+
+I can help you investigate **Data Management Framework** pipelines, including:
+- **Failed** runs and error details
+- Source counts by domain
+- **Enrichment** errors
+- Historical run trends
+
+What pipeline would you like to dig into?`,
     quickActions: [
       { label: '❌ Failed pipelines',   query: 'Which DMF pipelines are currently failing?' },
       { label: '📈 Run history',        query: 'Show me recent DMF pipeline run trends.' },
@@ -89,6 +118,15 @@ export const AGENTS: Record<string, AgentConfig> = {
     endpoint: '/api/v1/agents/servicenow/chat',
     streamEndpoint: '/api/v1/agents/servicenow/chat/stream',
     placeholder: 'Ask about incidents, tickets, problems…',
+    welcomeMessage: `👋 Hi! I'm the **ServiceNow Incident Agent**.
+
+I can help you manage your **ITSM queue**, including:
+- Open **P1 / P2** incidents
+- **Ageing** problems (30+ days)
+- Emergency changes pending
+- Assignment group workloads & **incident trends**
+
+How can I help you today?`,
     quickActions: [
       { label: '🚨 Open P1/P2 incidents', query: 'What are the current open P1 and P2 incidents?' },
       { label: '📋 Ageing problems',       query: 'Show me problems open longer than 30 days.' },
@@ -105,6 +143,15 @@ export const AGENTS: Record<string, AgentConfig> = {
     endpoint: '/api/v1/agents/talend/chat',
     streamEndpoint: '/api/v1/agents/talend/chat/stream',
     placeholder: 'Ask about Talend jobs, errors, pipelines…',
+    welcomeMessage: `👋 Hi! I'm the **Talend Integration Agent**.
+
+I monitor your **data integration jobs**, including:
+- **Failed** jobs and error root causes
+- Long-running executions
+- **Retry** patterns
+- Overall job success rates
+
+Tell me which job or pipeline you want to investigate.`,
     quickActions: [
       { label: '❌ Failed jobs today',  query: 'Which Talend jobs failed today?' },
       { label: '⏱  Long-running jobs', query: 'Which jobs are running longer than expected?' },
@@ -121,6 +168,7 @@ export const AGENTS: Record<string, AgentConfig> = {
     endpoint: '/api/v1/agents/snowflake/chat',
     streamEndpoint: '/api/v1/agents/snowflake/chat/stream',
     placeholder: 'Ask about Snowflake costs, queries, usage…',
+    welcomeMessage: `👋 Hi! I'm the **Snowflake Analytics Agent**.\n\nI can help you analyse your **Cloud Data Platform**, including:\n- **Costs** by warehouse\n- Slow-running or expensive **queries**\n- **Storage** consumption\n- Top **credit-consuming** users\n\nWhat would you like to explore?`,
     quickActions: [
       { label: '💰 Cost by warehouse', query: 'Show me current costs by warehouse.' },
       { label: '🐌 Slow queries',       query: 'Which queries are taking the longest to run?' },

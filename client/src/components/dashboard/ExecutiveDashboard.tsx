@@ -44,11 +44,11 @@ const SOURCES: {
   mockOnly?: boolean
 }[] = [
   { key: 'overview',   label: 'Overview',        icon: <DashboardIcon />,    accent: '#1976d2', sub: 'Executive Summary'       },
-  { key: 'pipeline',   label: 'ESP',             icon: <CloudIcon />,        accent: '#2e7d32', sub: 'Enterprise Data Platform' },
-  { key: 'dmf',        label: 'DMF',             icon: <StorageIcon />,      accent: '#1565c0', sub: 'PostgreSQL'              },
-  { key: 'servicenow', label: 'ServiceNow',      icon: <SupportAgentIcon />, accent: '#c62828', sub: 'ITSM'                    },
-  { key: 'logs',       label: 'Talend',          icon: <AccountTreeIcon />,  accent: '#e65100', sub: 'Data Integration'        },
-  { key: 'snowflake',  label: 'Snowflake',       icon: <AcUnitIcon />,       accent: '#29b6f6', sub: 'Cloud Data Platform',     mockOnly: true },
+  { key: 'servicenow', label: 'ServiceNow',      icon: <SupportAgentIcon />, accent: '#c62828', sub: ''                    },
+  { key: 'pipeline',   label: 'ESP',             icon: <CloudIcon />,        accent: '#2e7d32', sub: '' },
+  { key: 'dmf',        label: 'DMF',             icon: <StorageIcon />,      accent: '#1565c0', sub: ''              },
+  { key: 'logs',       label: 'Talend',          icon: <AccountTreeIcon />,  accent: '#e65100', sub: ''        },
+  { key: 'snowflake',  label: 'Snowflake',       icon: <AcUnitIcon />,       accent: '#29b6f6', sub: '',     mockOnly: true },
 ]
 
 // ─── Overview widget preferences ─────────────────────────────
@@ -880,7 +880,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onChatCl
             Executive DataOps Dashboard
           </Typography>
           <Typography sx={{ color: '#90a4ae', fontSize: '12px' }}>
-            {active.label} — {active.sub}
+            {active.label}  {active.sub}
           </Typography>
         </Box>
         <Button

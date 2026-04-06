@@ -213,7 +213,7 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuChange
                 textOverflow: 'ellipsis',
               }}
             >
-              Assistant
+              Knowledge Assist
             </Typography>
           )}
           </Box>

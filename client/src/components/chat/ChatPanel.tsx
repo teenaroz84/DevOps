@@ -107,24 +107,43 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
 
   const WELCOME_MESSAGE: Message = React.useMemo(() => ({
     role: 'agent',
-    content: agentConfig
-      ? `👋 Hi! I'm the **${agentConfig.name}**. ${agentConfig.subtitle}. Ask me anything about this platform.`
-      : DEFAULT_WELCOME.content,
+    content: agentConfig ? agentConfig.welcomeMessage : DEFAULT_WELCOME.content,
     type: 'info',
   }), [agentConfig])
 
   const STORAGE_KEY = `chat_history_${agent.id}`
 
-  // Restore chat history from localStorage on first mount
+  // Restore chat history from localStorage on first mount,
+  // but always use the current welcome message as the first entry.
   const [messages, setMessages] = useState<Message[]>(() => {
     try {
       const saved = localStorage.getItem(`chat_history_${agent.id}`)
-      if (saved) return JSON.parse(saved) as Message[]
+      if (saved) {
+        const parsed = JSON.parse(saved) as Message[]
+        // Replace stored welcome (index 0) with the up-to-date one
+        return [WELCOME_MESSAGE, ...parsed.slice(1)]
+      }
     } catch {
       // corrupted data — fall through
     }
     return [WELCOME_MESSAGE]
   })
+
+  // When the agent changes, reload the correct history and welcome message
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(`chat_history_${agent.id}`)
+      if (saved) {
+        const parsed = JSON.parse(saved) as Message[]
+        setMessages([WELCOME_MESSAGE, ...parsed.slice(1)])
+        return
+      }
+    } catch {
+      // fall through
+    }
+    setMessages([WELCOME_MESSAGE])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agent.id])
 
   const [loading, setLoading] = useState(false)
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null)

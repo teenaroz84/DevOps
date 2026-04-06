@@ -906,7 +906,7 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
         <Box sx={{ px: 2, py: 1.25, display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
           <SupportAgentIcon sx={{ fontSize: 16, color: '#c62828' }} />
           <Typography sx={{ fontWeight: 700, fontSize: '11px', color: '#555', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
-            ServiceNow — ITSM Dashboard
+            ServiceNow 
           </Typography>
           {useMock && (
             <Chip label="MOCK DATA" size="small" sx={{ fontSize: '9px', height: 18, bgcolor: '#fff3e0', color: '#f57c00', fontWeight: 700, border: '1px solid #f57c0040' }} />

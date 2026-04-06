@@ -1,5 +1,5 @@
 import React from 'react'
-import { Box, Typography, CircularProgress, Paper, Chip, Autocomplete, TextField, Button } from '@mui/material'
+import { Box, Typography, CircularProgress, Paper, Chip, Autocomplete, TextField, Button, Checkbox } from '@mui/material'
 import WorkIcon from '@mui/icons-material/Work'
 import ScheduleIcon from '@mui/icons-material/Schedule'
 import AccountTreeIcon from '@mui/icons-material/AccountTree'
@@ -68,10 +68,10 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   const [metadataDetail, setMetadataDetail] = React.useState<AppData['metadata_detail']>([])
   const [jobRunTable, setJobRunTable] = React.useState<AppData['job_run_table']>([])
   const [tableLoading, setTableLoading] = React.useState(false)
-  const [selectedJob, setSelectedJob] = React.useState('')
+  const [selectedJobs, setSelectedJobs] = React.useState<string[]>([])
 
   // Reset job filter when application changes
-  React.useEffect(() => { setSelectedJob('') }, [selected])
+  React.useEffect(() => { setSelectedJobs([]) }, [selected])
 
   // Load application list on mount or when mock mode changes
   React.useEffect(() => {
@@ -183,13 +183,13 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   // Available job options for the job selector dropdown
   const jobOptions = React.useMemo(() => (data?.job_list ?? []).map(j => j.jobname), [data])
 
-  // Filtered rows — driven by selectedJob (exact match, empty = all jobs)
-  const filteredJobList     = React.useMemo(() => (data?.job_list ?? []).filter(r           => !selectedJob || r.jobname === selectedJob),      [data, selectedJob])
-  const filteredMeta        = React.useMemo(() => (data?.metadata ?? []).filter(r           => !selectedJob || r.jobname === selectedJob),      [data, selectedJob])
-  const filteredPred        = React.useMemo(() => (data?.predecessor_jobs ?? []).filter(r   => !selectedJob || r.jobname === selectedJob),      [data, selectedJob])
-  const filteredSucc        = React.useMemo(() => (data?.successor_jobs ?? []).filter(r     => !selectedJob || r.jobname === selectedJob),      [data, selectedJob])
-  const filteredMetaDetail  = React.useMemo(() => metadataDetail.filter(r                  => !selectedJob || r.jobname === selectedJob),      [metadataDetail, selectedJob])
-  const filteredJobRunTable = React.useMemo(() => jobRunTable.filter(r                     => !selectedJob || r.job_longname === selectedJob), [jobRunTable, selectedJob])
+  // Filtered rows — driven by selectedJobs (multi-select, empty = all jobs)
+  const filteredJobList     = React.useMemo(() => (data?.job_list ?? []).filter(r           => !selectedJobs.length || selectedJobs.includes(r.jobname)),           [data, selectedJobs])
+  const filteredMeta        = React.useMemo(() => (data?.metadata ?? []).filter(r           => !selectedJobs.length || selectedJobs.includes(r.jobname)),           [data, selectedJobs])
+  const filteredPred        = React.useMemo(() => (data?.predecessor_jobs ?? []).filter(r   => !selectedJobs.length || selectedJobs.includes(r.jobname)),           [data, selectedJobs])
+  const filteredSucc        = React.useMemo(() => (data?.successor_jobs ?? []).filter(r     => !selectedJobs.length || selectedJobs.includes(r.jobname)),           [data, selectedJobs])
+  const filteredMetaDetail  = React.useMemo(() => metadataDetail.filter(r                  => !selectedJobs.length || selectedJobs.includes(r.jobname)),           [metadataDetail, selectedJobs])
+  const filteredJobRunTable = React.useMemo(() => jobRunTable.filter(r                     => !selectedJobs.length || selectedJobs.includes(r.job_longname)),      [jobRunTable, selectedJobs])
 
   // Metadata detail columns (full esp_job_cmnd data)
   const metaCols: ColumnDef[] = [
@@ -313,18 +313,68 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
               <>
                 <Typography sx={{ fontSize: '12px', color: '#666', fontWeight: 500 }}>Job:</Typography>
                 <Autocomplete
-                  options={jobOptions}
-                  value={selectedJob || null}
-                  onChange={(_, val) => setSelectedJob(val ?? '')}
-                  disabled={loading || !data}
-                  disableClearable={false}
+                  multiple
+                  options={['__SELECT_ALL__', ...jobOptions]}
+                  value={selectedJobs}
+                  disableCloseOnSelect
                   clearOnEscape
+                  disabled={loading || !data}
                   size="small"
-                  sx={{ minWidth: 220 }}
+                  sx={{ minWidth: 260, maxWidth: 480 }}
+                  getOptionLabel={(option) => option === '__SELECT_ALL__' ? 'Select All' : option}
+                  onChange={(_, val) => {
+                    if (val.includes('__SELECT_ALL__')) {
+                      // toggle: if all already selected, clear; otherwise select all
+                      setSelectedJobs(selectedJobs.length === jobOptions.length ? [] : [...jobOptions])
+                    } else {
+                      setSelectedJobs(val)
+                    }
+                  }}
+                  renderOption={(props, option, { selected }) => {
+                    const { key, ...rest } = props as any
+                    if (option === '__SELECT_ALL__') {
+                      const allSelected = selectedJobs.length === jobOptions.length
+                      return (
+                        <li key="__SELECT_ALL__" {...rest} style={{ borderBottom: '1px solid #e8ecf1', fontWeight: 700 }}>
+                          <Checkbox
+                            size="small"
+                            checked={allSelected}
+                            indeterminate={selectedJobs.length > 0 && !allSelected}
+                            sx={{ mr: 1, p: 0.5, color: '#1976d2', '&.Mui-checked': { color: '#1976d2' }, '&.MuiCheckbox-indeterminate': { color: '#1976d2' } }}
+                          />
+                          <Typography sx={{ fontSize: '12px', fontWeight: 700, color: '#1976d2' }}>Select All</Typography>
+                        </li>
+                      )
+                    }
+                    return (
+                      <li key={option} {...rest}>
+                        <Checkbox
+                          size="small"
+                          checked={selected}
+                          sx={{ mr: 1, p: 0.5, color: '#1976d2', '&.Mui-checked': { color: '#1976d2' } }}
+                        />
+                        <Typography sx={{ fontSize: '12px' }}>{option}</Typography>
+                      </li>
+                    )
+                  }}
+                  renderTags={(value, getTagProps) =>
+                    value.map((option, index) => {
+                      const { key, ...tagProps } = getTagProps({ index })
+                      return (
+                        <Chip
+                          key={key}
+                          label={option}
+                          size="small"
+                          {...tagProps}
+                          sx={{ fontSize: '10px', height: 18, color: '#1976d2', backgroundColor: '#e3f2fd', border: '1px solid #1976d240' }}
+                        />
+                      )
+                    })
+                  }
                   renderInput={(params) => (
                     <TextField
                       {...params}
-                      placeholder={loading ? 'Loading…' : 'All jobs'}
+                      placeholder={loading ? 'Loading…' : selectedJobs.length ? '' : 'All jobs'}
                       sx={{
                         '& .MuiOutlinedInput-root': {
                           fontSize: '12px',
@@ -339,14 +389,6 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                     />
                   )}
                 />
-                {selectedJob && (
-                  <Chip
-                    label={`Job: ${selectedJob}`}
-                    size="small"
-                    onDelete={() => setSelectedJob('')}
-                    sx={{ fontSize: '10px', height: 18, color: '#1976d2', backgroundColor: '#e3f2fd', border: '1px solid #1976d240' }}
-                  />
-                )}
               </>
             )}
 
