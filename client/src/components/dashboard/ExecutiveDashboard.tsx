@@ -261,7 +261,8 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
       bg: talendFailed > 0 ? '#fce4ec' : '#e8f5e9',
       trend: `${talendFailPct}% fail rate · ${talendRunning} running`,
       trendPositiveIsGood: false,
-      description: 'Talend task executions that reached a failed state',
+      description: `Talend task executions that reached a failed state.${!useMock ? '\n\n⚠ Mock data — Talend has no live API endpoint connected yet. Values shown are from hardcoded mock data even in live mode.' : ''}`,
+      tag: !useMock ? { label: 'Mock Data', color: '#b45309', bg: '#fef3c7' } : undefined,
     },
     {
       label: 'Budget Usage',
@@ -269,9 +270,12 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
       unit: budgetPct ? '%' : '',
       color: budgetPct > 110 ? '#c62828' : budgetPct > 100 ? '#f57c00' : '#2e7d32',
       bg: budgetPct > 110 ? '#fce4ec' : budgetPct > 100 ? '#fff3e0' : '#e8f5e9',
-      trend: cost ? `$${(cost.total / 1000).toFixed(0)}K of $${(cost.budget / 1000).toFixed(0)}K` : 'Snowflake (mock mode)',
+      trend: cost
+        ? `$${(cost.total / 1000).toFixed(0)}K of $${(cost.budget / 1000).toFixed(0)}K`
+        : 'Snowflake (mock mode)',
       trendPositiveIsGood: false,
-      description: 'Snowflake compute + infrastructure budget utilisation',
+      description: `Snowflake compute + infrastructure budget utilisation.${!useMock ? '\n\n⚠ Mock data — /api/snowflake/cost returns hardcoded values from server/src/mockData.ts. No live Snowflake cost query is connected yet.' : ''}`,
+      tag: !useMock ? { label: 'Mock Data', color: '#b45309', bg: '#fef3c7' } : undefined,
     },
   ]
 

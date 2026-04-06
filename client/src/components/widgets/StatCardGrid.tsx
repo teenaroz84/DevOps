@@ -37,6 +37,8 @@ export interface StatCardItem {
   description?: string
   /** Extra stats shown in the dialog (key: value pairs) */
   dialogStats?: { label: string; value: string | number }[]
+  /** Small pill badge shown below the label (e.g. "Mock Data") */
+  tag?: { label: string; color?: string; bg?: string }
 }
 
 interface StatCardGridProps {
@@ -117,6 +119,23 @@ export const StatCardGrid: React.FC<StatCardGridProps> = ({
               >
                 {item.label}
               </Typography>
+
+              {item.tag && (
+                <Box
+                  sx={{
+                    display: 'inline-block',
+                    px: 0.75,
+                    py: '1px',
+                    borderRadius: '4px',
+                    backgroundColor: item.tag.bg ?? '#fff3e0',
+                    mb: 0.4,
+                  }}
+                >
+                  <Typography sx={{ fontSize: '9px', fontWeight: 700, color: item.tag.color ?? '#e65100', letterSpacing: '0.3px', textTransform: 'uppercase' }}>
+                    {item.tag.label}
+                  </Typography>
+                </Box>
+              )}
 
               <Box
                 sx={{
