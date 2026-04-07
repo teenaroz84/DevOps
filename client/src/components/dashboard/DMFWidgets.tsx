@@ -183,33 +183,24 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
     }).catch(() => setLineageLoaded(true))
   }, [activeTab, lineageLoaded, useMock, dateRange])
 
-  // ── Load jobs when any filter is set ───────────────────────
-  const hasAnyFilter = !!(lgSourceCode || lgDatasets.length || lgProcTypes.length || lgStatuses.length || lgStepNames.length)
+  // ── Load jobs when source is selected (other filters applied client-side) ──────
+  const hasAnyFilter = !!lgSourceCode
 
   useEffect(() => {
-    if (!lineageLoaded || !hasAnyFilter) {
+    if (!lineageLoaded || !lgSourceCode) {
       setLineageJobs([])
       return
     }
     if (useMock) {
-      let jobs = MOCK_DMF_LINEAGE_JOBS
-      if (lgSourceCode) jobs = jobs.filter(j => j.sourceCode === lgSourceCode)
-      setLineageJobs(jobs)
+      setLineageJobs(MOCK_DMF_LINEAGE_JOBS.filter(j => j.sourceCode === lgSourceCode))
       return
     }
     setLineageJobsLoading(true)
-    dmfService.getLineageJobs({
-      src_cd:     lgSourceCode || undefined,
-      dataset_nm: lgDatasets.length === 1 ? lgDatasets[0] : undefined,
-      proc_typ_cd: lgProcTypes.length === 1 ? lgProcTypes[0] : undefined,
-      run_status: lgStatuses.length === 1 ? lgStatuses[0] : undefined,
-      step_nm:    lgStepNames.length === 1 ? lgStepNames[0] : undefined,
-      date_range: dateRange,
-    })
+    dmfService.getLineageJobs({ src_cd: lgSourceCode, date_range: dateRange })
       .then(jobs => setLineageJobs(Array.isArray(jobs) ? jobs : []))
       .catch(() => setLineageJobs([]))
       .finally(() => setLineageJobsLoading(false))
-  }, [lineageLoaded, lgSourceCode, lgDatasets, lgProcTypes, lgStatuses, lgStepNames, useMock, dateRange])
+  }, [lineageLoaded, lgSourceCode, useMock, dateRange])
 
   // ── Lazy-load Analytics meta (once per mock toggle) ────────
   // Loaded on both lineage and analytics tabs (step names needed for lineage filter)
