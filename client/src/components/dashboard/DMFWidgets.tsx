@@ -98,7 +98,6 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
   const [lgDatasets,        setLgDatasets]        = useState<string[]>([])
   const [lgProcTypes,       setLgProcTypes]       = useState<string[]>([])
   const [lgStatuses,        setLgStatuses]        = useState<string[]>([])
-  const [lgStepNames,       setLgStepNames]       = useState<string[]>([])
 
   // ── Analytics state ───────────────────────────────────────
   const [analytics,       setAnalytics]       = useState<AnalyticsData | null>(null)
@@ -129,7 +128,6 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
     setLgDatasets([])
     setLgProcTypes([])
     setLgStatuses([])
-    setLgStepNames([])
     setAnalytics(null)
     setAnalyticsMetaLoaded(false)
     setAnalyticsMeta(null)
@@ -161,7 +159,6 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
     setLgDatasets([])
     setLgProcTypes([])
     setLgStatuses([])
-    setLgStepNames([])
   }, [lgSourceCode])
 
   // ── Lazy-load Lineage meta + counts (never loads all jobs) ─
@@ -205,7 +202,7 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
   // ── Lazy-load Analytics meta (once per mock toggle) ────────
   // Loaded on both lineage and analytics tabs (step names needed for lineage filter)
   useEffect(() => {
-    if ((activeTab !== 'analytics' && activeTab !== 'lineage') || analyticsMetaLoaded) return
+    if (activeTab !== 'analytics' || analyticsMetaLoaded) return
     if (useMock) {
       setAnalyticsMeta({
         sourceTypes:  MOCK_DMF_ANALYTICS.sourceTypeCounts.map(r => r.type),
@@ -423,7 +420,7 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
 
           const successCount = displayByStatus.find(x => x.status === 'success')?.count ?? 0
           const successRate  = displayTotal > 0 ? Math.round(successCount / displayTotal * 100) : 0
-          const hasSubFilters = lgDatasets.length > 0 || lgProcTypes.length > 0 || lgStatuses.length > 0 || lgStepNames.length > 0 || lgStepNames.length > 0
+          const hasSubFilters = lgDatasets.length > 0 || lgProcTypes.length > 0 || lgStatuses.length > 0
 
           return (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -444,7 +441,7 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
                   {(isFiltered || hasSubFilters) && (
                     <Button
                       size="small"
-                      onClick={() => { setLgSourceCode(''); setLgDatasets([]); setLgProcTypes([]); setLgStatuses([]); setLgStepNames([]) }}
+                      onClick={() => { setLgSourceCode(''); setLgDatasets([]); setLgProcTypes([]); setLgStatuses([]) }}
                       sx={{ ml: 'auto', fontSize: '11px', color: '#d32f2f', textTransform: 'none', height: 22, minWidth: 'auto', px: 1 }}
                     >
                       Clear All
@@ -530,26 +527,6 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
                             color: opt === 'success' ? '#2e7d32' : '#c62828',
                           }}
                         />
-                      ))
-                    }
-                    ListboxProps={{ sx: { fontSize: '12px' } }}
-                  />
-                  {/* Step Name — multi-select */}
-                  <Autocomplete
-                    multiple
-                    limitTags={2}
-                    disableCloseOnSelect
-                    options={analyticsMeta?.stepNames ?? []}
-                    value={lgStepNames}
-                    onChange={(_, v) => setLgStepNames(v)}
-                    size="small"
-                    sx={{ minWidth: 160, '& .MuiInputBase-root': { fontSize: '11px' }, '& .MuiInputLabel-root': { fontSize: '11px' } }}
-                    renderInput={(params) => (
-                      <TextField {...params} label="Step Name" placeholder="All" size="small" InputLabelProps={{ shrink: true }} />
-                    )}
-                    renderTags={(val, getTagProps) =>
-                      val.map((opt, idx) => (
-                        <Chip {...getTagProps({ index: idx })} key={opt} label={opt} size="small" sx={{ fontSize: '10px', height: 18 }} />
                       ))
                     }
                     ListboxProps={{ sx: { fontSize: '12px' } }}
