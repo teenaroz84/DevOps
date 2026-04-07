@@ -7,6 +7,8 @@ import {
   Button,
   Autocomplete,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
 } from '@mui/material'
 import FilterListIcon from '@mui/icons-material/FilterList'
 import AccountTreeIcon from '@mui/icons-material/AccountTree'
@@ -73,9 +75,17 @@ const DMF_TABS = [
 type DMFTab = typeof DMF_TABS[number]['key']
 
 
+const DMF_DATE_RANGE_OPTIONS = [
+  { value: '1m', label: 'Last 1 Month' },
+  { value: '3m', label: 'Last 3 Months' },
+  { value: '6m', label: 'Last 6 Months' },
+  { value: '1y', label: 'Last 1 Year' },
+]
+
 export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => void }> = ({ onOpenAgent }) => {
   const { useMock } = useMockData()
   const [activeTab, setActiveTab] = useState<DMFTab>('lineage')
+  const [dateRange, setDateRange] = useState<string>('3m')
 
 
   // ── Lineage state ─────────────────────────────────────────
@@ -88,6 +98,7 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
   const [lgDatasets,        setLgDatasets]        = useState<string[]>([])
   const [lgProcTypes,       setLgProcTypes]       = useState<string[]>([])
   const [lgStatuses,        setLgStatuses]        = useState<string[]>([])
+  const [lgStepNames,       setLgStepNames]       = useState<string[]>([])
 
   // ── Analytics state ───────────────────────────────────────
   const [analytics,       setAnalytics]       = useState<AnalyticsData | null>(null)
@@ -118,6 +129,7 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
     setLgDatasets([])
     setLgProcTypes([])
     setLgStatuses([])
+    setLgStepNames([])
     setAnalytics(null)
     setAnalyticsMetaLoaded(false)
     setAnalyticsMeta(null)
@@ -129,12 +141,27 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
     setStepFailureTrend([])
   }, [useMock])
 
+  // Reset all data when dateRange changes
+  useEffect(() => {
+    setLineageLoaded(false)
+    setLineageCounts(null)
+    setLineageJobs([])
+    setAnalyticsMetaLoaded(false)
+    setAnalytics(null)
+    setTrendsLoaded(false)
+    setStatusTrend([])
+    setRowsTrend([])
+    setJobsTrend([])
+    setStepFailureTrend([])
+  }, [dateRange])
+
 
   // ── Reset sub-filters when source changes ──────────────────────
   useEffect(() => {
     setLgDatasets([])
     setLgProcTypes([])
     setLgStatuses([])
+    setLgStepNames([])
   }, [lgSourceCode])
 
   // ── Lazy-load Lineage meta + counts (never loads all jobs) ─
@@ -148,13 +175,13 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
     }
     Promise.all([
       dmfService.getLineageMeta(),
-      dmfService.getLineageCounts(),
+      dmfService.getLineageCounts({ date_range: dateRange }),
     ]).then(([meta, counts]) => {
       setLineageMeta(meta)
       setLineageCounts(counts)
       setLineageLoaded(true)
     }).catch(() => setLineageLoaded(true))
-  }, [activeTab, lineageLoaded, useMock])
+  }, [activeTab, lineageLoaded, useMock, dateRange])
 
   // ── Load jobs only when a specific source code is selected ─
   useEffect(() => {
@@ -167,15 +194,20 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
       return
     }
     setLineageJobsLoading(true)
-    dmfService.getLineageJobs({ src_cd: lgSourceCode })
+    dmfService.getLineageJobs({
+      src_cd: lgSourceCode,
+      step_nm: lgStepNames.length === 1 ? lgStepNames[0] : undefined,
+      date_range: dateRange,
+    })
       .then(jobs => setLineageJobs(Array.isArray(jobs) ? jobs : []))
       .catch(() => setLineageJobs([]))
       .finally(() => setLineageJobsLoading(false))
-  }, [lineageLoaded, lgSourceCode, useMock])
+  }, [lineageLoaded, lgSourceCode, lgStepNames, useMock, dateRange])
 
   // ── Lazy-load Analytics meta (once per mock toggle) ────────
+  // Loaded on both lineage and analytics tabs (step names needed for lineage filter)
   useEffect(() => {
-    if (activeTab !== 'analytics' || analyticsMetaLoaded) return
+    if ((activeTab !== 'analytics' && activeTab !== 'lineage') || analyticsMetaLoaded) return
     if (useMock) {
       setAnalyticsMeta({
         sourceTypes:  MOCK_DMF_ANALYTICS.sourceTypeCounts.map(r => r.type),
@@ -227,11 +259,12 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
       tgt_typ:    anlTgtTypes.length   ? anlTgtTypes.join(',')   : 'All',
       step_nm:    anlStepNames.length  ? anlStepNames.join(',')  : 'All',
       run_status: anlRunStatuses.length ? anlRunStatuses.join(',') : 'All',
+      date_range: dateRange,
     })
       .then(d => setAnalytics(d))
       .catch(() => {})
       .finally(() => setAnlLoading(false))
-  }, [activeTab, analyticsMetaLoaded, anlSrcType, anlTgtTypes, anlStepNames, anlRunStatuses, useMock])
+  }, [activeTab, analyticsMetaLoaded, anlSrcType, anlTgtTypes, anlStepNames, anlRunStatuses, useMock, dateRange])
 
   // ── Lazy-load Trends data ─────────────────────────────────
   useEffect(() => {
@@ -245,15 +278,15 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
       return
     }
     Promise.all([
-      dmfService.getStatusTrend(),
-      dmfService.getRowsTrend(),
-      dmfService.getJobsTrend(),
-      dmfService.getStepFailureTrend(),
+      dmfService.getStatusTrend(dateRange),
+      dmfService.getRowsTrend(dateRange),
+      dmfService.getJobsTrend(dateRange),
+      dmfService.getStepFailureTrend(dateRange),
     ]).then(([st, rt, jt, sft]) => {
       setStatusTrend(st); setRowsTrend(rt); setJobsTrend(jt); setStepFailureTrend(sft)
       setTrendsLoaded(true)
     }).catch(() => setTrendsLoaded(true))
-  }, [activeTab, trendsLoaded, useMock])
+  }, [activeTab, trendsLoaded, useMock, dateRange])
 
   // ── Lineage columns ────────────────────────────────────────
   const lineageColumns: ColumnDef<LineageJob>[] = [
@@ -305,9 +338,23 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
         })}
       </Box>
 
-      {/* ── Agent button strip ── */}
-      {onOpenAgent && (
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', px: 2, py: 0.75, backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', flexShrink: 0 }}>
+      {/* ── Agent button strip + Date Range selector ── */}
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2, py: 0.75, backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', flexShrink: 0 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Typography sx={{ fontSize: '11px', color: '#546e7a', fontWeight: 600, mr: 0.5 }}>Duration:</Typography>
+          <ToggleButtonGroup
+            value={dateRange}
+            exclusive
+            onChange={(_, v) => { if (v) setDateRange(v) }}
+            size="small"
+            sx={{ '& .MuiToggleButton-root': { fontSize: '11px', py: 0.3, px: 1.2, textTransform: 'none', borderColor: '#cfd8dc', color: '#546e7a', '&.Mui-selected': { backgroundColor: '#1976d2', color: '#fff', borderColor: '#1976d2', '&:hover': { backgroundColor: '#1565c0' } } } }}
+          >
+            {DMF_DATE_RANGE_OPTIONS.map(o => (
+              <ToggleButton key={o.value} value={o.value}>{o.label}</ToggleButton>
+            ))}
+          </ToggleButtonGroup>
+        </Box>
+        {onOpenAgent && (
           <Button
             size="small"
             variant="contained"
@@ -325,8 +372,8 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
           >
             Ask DMF Agent
           </Button>
-        </Box>
-      )}
+        )}
+      </Box>
 
       {/* ── Tab content ── */}
       <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
@@ -376,7 +423,7 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
 
           const successCount = displayByStatus.find(x => x.status === 'success')?.count ?? 0
           const successRate  = displayTotal > 0 ? Math.round(successCount / displayTotal * 100) : 0
-          const hasSubFilters = lgDatasets.length > 0 || lgProcTypes.length > 0 || lgStatuses.length > 0
+          const hasSubFilters = lgDatasets.length > 0 || lgProcTypes.length > 0 || lgStatuses.length > 0 || lgStepNames.length > 0 || lgStepNames.length > 0
 
           return (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -397,7 +444,7 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
                   {(isFiltered || hasSubFilters) && (
                     <Button
                       size="small"
-                      onClick={() => { setLgSourceCode(''); setLgDatasets([]); setLgProcTypes([]); setLgStatuses([]) }}
+                      onClick={() => { setLgSourceCode(''); setLgDatasets([]); setLgProcTypes([]); setLgStatuses([]); setLgStepNames([]) }}
                       sx={{ ml: 'auto', fontSize: '11px', color: '#d32f2f', textTransform: 'none', height: 22, minWidth: 'auto', px: 1 }}
                     >
                       Clear All
@@ -486,6 +533,26 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
                             color: opt === 'success' ? '#2e7d32' : '#c62828',
                           }}
                         />
+                      ))
+                    }
+                    ListboxProps={{ sx: { fontSize: '12px' } }}
+                  />
+                  {/* Step Name — multi-select */}
+                  <Autocomplete
+                    multiple
+                    limitTags={2}
+                    disableCloseOnSelect
+                    options={analyticsMeta?.stepNames ?? []}
+                    value={lgStepNames}
+                    onChange={(_, v) => setLgStepNames(v)}
+                    size="small"
+                    sx={{ minWidth: 160, '& .MuiInputBase-root': { fontSize: '11px' }, '& .MuiInputLabel-root': { fontSize: '11px' } }}
+                    renderInput={(params) => (
+                      <TextField {...params} label="Step Name" placeholder="All" size="small" InputLabelProps={{ shrink: true }} />
+                    )}
+                    renderTags={(val, getTagProps) =>
+                      val.map((opt, idx) => (
+                        <Chip {...getTagProps({ index: idx })} key={opt} label={opt} size="small" sx={{ fontSize: '10px', height: 18 }} />
                       ))
                     }
                     ListboxProps={{ sx: { fontSize: '12px' } }}

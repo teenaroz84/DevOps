@@ -15,13 +15,14 @@ export const dmfService = {
 
   // ── Lineage tab ─────────────────────────────────────────
   getLineageMeta: () => apiClient.get('/api/dmf/lineage/meta'),
-  getLineageCounts: (filters: { src_cd?: string } = {}) => {
+  getLineageCounts: (filters: { src_cd?: string; date_range?: string } = {}) => {
     const params = new URLSearchParams()
     if (filters.src_cd && filters.src_cd !== 'All') params.set('src_cd', filters.src_cd)
+    if (filters.date_range) params.set('date_range', filters.date_range)
     const qs = params.toString()
     return apiClient.get(`/api/dmf/lineage/counts${qs ? `?${qs}` : ''}`)
   },
-  getLineageJobs: (filters: { src_cd?: string; dataset_nm?: string; src_nm?: string; tgt_nm?: string; proc_typ_cd?: string; run_status?: string } = {}) => {
+  getLineageJobs: (filters: { src_cd?: string; dataset_nm?: string; src_nm?: string; tgt_nm?: string; proc_typ_cd?: string; run_status?: string; step_nm?: string; date_range?: string } = {}) => {
     const params = new URLSearchParams()
     Object.entries(filters).forEach(([k, v]) => { if (v && v !== 'All') params.set(k, v) })
     const qs = params.toString()
@@ -30,7 +31,7 @@ export const dmfService = {
 
   // ── Analytics tab ───────────────────────────────────────
   getAnalyticsMeta: () => apiClient.get('/api/dmf/analytics/meta'),
-  getAnalytics: (filters: { src_typ?: string; tgt_typ?: string; step_nm?: string; tgt_nm?: string; run_status?: string } = {}) => {
+  getAnalytics: (filters: { src_typ?: string; tgt_typ?: string; step_nm?: string; tgt_nm?: string; run_status?: string; date_range?: string } = {}) => {
     const params = new URLSearchParams()
     Object.entries(filters).forEach(([k, v]) => { if (v && v !== 'All') params.set(k, v) })
     const qs = params.toString()
@@ -38,8 +39,8 @@ export const dmfService = {
   },
 
   // ── Trends tab ──────────────────────────────────────────
-  getStatusTrend: () => apiClient.get('/api/dmf/status-trend'),
-  getRowsTrend: () => apiClient.get('/api/dmf/rows-trend'),
-  getJobsTrend: () => apiClient.get('/api/dmf/jobs-trend'),
-  getStepFailureTrend: () => apiClient.get('/api/dmf/step-failure-trend'),
+  getStatusTrend: (date_range?: string) => apiClient.get(`/api/dmf/status-trend${date_range ? `?date_range=${date_range}` : ''}`),
+  getRowsTrend: (date_range?: string) => apiClient.get(`/api/dmf/rows-trend${date_range ? `?date_range=${date_range}` : ''}`),
+  getJobsTrend: (date_range?: string) => apiClient.get(`/api/dmf/jobs-trend${date_range ? `?date_range=${date_range}` : ''}`),
+  getStepFailureTrend: (date_range?: string) => apiClient.get(`/api/dmf/step-failure-trend${date_range ? `?date_range=${date_range}` : ''}`),
 }

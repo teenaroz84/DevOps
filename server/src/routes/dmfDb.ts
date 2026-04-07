@@ -19,6 +19,22 @@ const STATUS_COLOR: Record<string, string> = {
   'PARTIAL LOAD': '#ff9800',
 };
 
+/**
+ * Converts a date_range query param ("1m","3m","6m","1y") into a
+ * SQL fragment like "AND proc_dt >= CURRENT_DATE - INTERVAL '3 months'".
+ * Returns an empty string when date_range is absent / "all".
+ */
+function dateRangeClause(dateRange: any, col = 'proc_dt'): string {
+  const map: Record<string, string> = {
+    '1m': `1 month`,
+    '3m': `3 months`,
+    '6m': `6 months`,
+    '1y': `1 year`,
+  };
+  const interval = map[String(dateRange ?? '').toLowerCase()];
+  return interval ? `AND ${col} >= CURRENT_DATE - INTERVAL '${interval}'` : '';
+}
+
 // ─── GET /api/dmf/failed-by-stage ─────────────────────────
 // Counts FAILED runs grouped by step_nm from DMF_RUN_STEP_DETAIL
 router.get('/failed-by-stage', async (_req: Request, res: Response) => {
@@ -92,18 +108,22 @@ router.get('/lineage/meta', async (_req: Request, res: Response) => {
 
 // ─── GET /api/dmf/lineage/counts ───────────────────────────
 // Fast aggregated counts — safe on large tables (uses GROUP BY / COUNT).
-// Optionally filtered by src_cd to scope counts to one source code.
+// Optionally filtered by src_cd and date_range.
 router.get('/lineage/counts', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
-    const { src_cd } = req.query;
+    const { src_cd, date_range } = req.query;
     const conditions: string[] = [];
     const params: any[] = [];
     if (src_cd && String(src_cd) !== 'All') {
       conditions.push(`src_cd = $${params.length + 1}`);
       params.push(String(src_cd));
     }
-    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const drClause = dateRangeClause(date_range);
+    const baseCond = conditions.length > 0
+      ? `WHERE ${conditions.join(' AND ')} ${drClause}`
+      : drClause ? `WHERE 1=1 ${drClause}` : '';
+    const where = baseCond;
     const [totalRes, byStatus, byProcType, bySrcCd, byTgtNm] = await Promise.all([
       pool.query(`SELECT COUNT(*) AS cnt FROM edoops.DMF_RUN_MASTER ${where}`, params),
       pool.query(`SELECT run_status, COUNT(*) AS cnt FROM edoops.DMF_RUN_MASTER ${where} GROUP BY run_status ORDER BY cnt DESC`, params),
@@ -136,11 +156,11 @@ router.get('/lineage/counts', async (req: Request, res: Response) => {
 });
 
 // ─── GET /api/dmf/lineage/jobs ─────────────────────────────
-// Accepts query params: src_cd, dataset_nm, src_nm, tgt_nm, proc_typ_cd, run_status
+// Accepts query params: src_cd, dataset_nm, src_nm, tgt_nm, proc_typ_cd, run_status, step_nm, date_range
 router.get('/lineage/jobs', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
-    const { src_cd, dataset_nm, src_nm, tgt_nm, proc_typ_cd, run_status } = req.query;
+    const { src_cd, dataset_nm, src_nm, tgt_nm, proc_typ_cd, run_status, date_range } = req.query;
 
     const conditions: string[] = [];
     const params: any[] = [];
@@ -160,8 +180,10 @@ router.get('/lineage/jobs', async (req: Request, res: Response) => {
       conditions.push(`UPPER(run_status) = $${params.length + 1}`);
       params.push(String(run_status).toUpperCase());
     }
-
-    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const drClause = dateRangeClause(date_range);
+    const where = conditions.length > 0
+      ? `WHERE ${conditions.join(' AND ')} ${drClause}`
+      : drClause ? `WHERE 1=1 ${drClause}` : '';
     const { rows } = await pool.query(`
       SELECT DISTINCT proc_dt, src_cd, dataset_nm, proc_typ_cd,
                       src_nm, tgt_nm, run_strt_tm, run_end_tm, run_status
@@ -210,10 +232,11 @@ router.get('/analytics/meta', async (_req: Request, res: Response) => {
 });
 
 // ─── GET /api/dmf/analytics ────────────────────────────────
-// Accepts optional query params: src_typ, tgt_typ, step_nm, tgt_nm, run_status
+// Accepts optional query params: src_typ, tgt_typ, step_nm, tgt_nm, run_status, date_range
 router.get('/analytics', async (req: Request, res: Response) => {
   try {
-    const { src_typ, tgt_typ, step_nm, tgt_nm, run_status } = req.query;
+    const { src_typ, tgt_typ, step_nm, tgt_nm, run_status, date_range } = req.query;
+    const drDetail = dateRangeClause(date_range);
 
     // Build shared WHERE snippets (parameterised)
     // master_conditions applies to DMF_RUN_MASTER; detail_conditions applies to DMF_RUN_STEP_DETAIL
@@ -241,8 +264,9 @@ router.get('/analytics', async (req: Request, res: Response) => {
     addDetail('tgt_typ',    tgt_typ);
     addDetail('step_nm',    step_nm);
 
-    const mWhere = masterConds.join(' AND ');
-    const dWhere = detailConds.join(' AND ');
+    const mWherePlain = masterConds.join(' AND ') + ` ${dateRangeClause(date_range)}`;
+    const mWhere      = mWherePlain;
+    const dWhere      = detailConds.join(' AND ') + ` ${drDetail}`;
 
     // Build a status summary query that also respects src_typ / tgt_typ / step_nm.
     // When detail filters are active, restrict master rows to those whose run_id
@@ -262,13 +286,13 @@ router.get('/analytics', async (req: Request, res: Response) => {
         FROM edoops.DMF_RUN_MASTER m
         WHERE ${mWhere}
           AND m.run_id IN (
-            SELECT DISTINCT d.run_id FROM edoops.DMF_RUN_STEP_DETAIL d ${subWhere}
+            SELECT DISTINCT d.run_id FROM edoops.DMF_RUN_STEP_DETAIL d WHERE ${subWhere ? subWhere.replace('WHERE ','') + ` ${drDetail}` : `1=1 ${drDetail}`}
           )
         GROUP BY m.run_status
       `;
       statusParams = [...masterParams, ...detailParams];
     } else {
-      statusSql = `SELECT run_status, COUNT(*) AS cnt FROM edoops.DMF_RUN_MASTER WHERE ${mWhere} GROUP BY run_status`;
+      statusSql = `SELECT run_status, COUNT(*) AS cnt FROM edoops.DMF_RUN_MASTER WHERE ${mWherePlain} GROUP BY run_status`;
       statusParams = masterParams;
     }
 
@@ -278,12 +302,12 @@ router.get('/analytics', async (req: Request, res: Response) => {
       pool.query(`SELECT src_typ, COUNT(*) AS cnt FROM edoops.DMF_RUN_STEP_DETAIL WHERE ${dWhere} GROUP BY src_typ ORDER BY cnt DESC`,                            detailParams),
       pool.query(`SELECT tgt_typ, COUNT(*) AS cnt FROM edoops.DMF_RUN_STEP_DETAIL WHERE ${dWhere} GROUP BY tgt_typ ORDER BY cnt DESC`,                            detailParams),
       pool.query(`SELECT step_nm, COUNT(*) AS cnt FROM edoops.DMF_RUN_STEP_DETAIL WHERE ${dWhere} AND step_status = 'FAILED' GROUP BY step_nm ORDER BY cnt DESC`, detailParams),
-      pool.query(`SELECT src_nm,  COUNT(*) AS cnt FROM edoops.DMF_RUN_MASTER     WHERE ${mWhere} AND run_status = 'FAILED' GROUP BY src_nm ORDER BY cnt DESC`,    masterParams),
+      pool.query(`SELECT src_nm,  COUNT(*) AS cnt FROM edoops.DMF_RUN_MASTER     WHERE ${mWherePlain} AND run_status = 'FAILED' GROUP BY src_nm ORDER BY cnt DESC`,    masterParams),
       pool.query(`
         SELECT dataset_nm,
                AVG(EXTRACT(EPOCH FROM (run_end_tm::timestamp - run_strt_tm::timestamp)) * 1000) AS avg_ms
         FROM edoops.DMF_RUN_MASTER
-        WHERE ${mWhere}
+        WHERE ${mWherePlain}
           AND run_end_tm IS NOT NULL AND run_strt_tm IS NOT NULL
         GROUP BY dataset_nm ORDER BY avg_ms DESC
       `, masterParams),
@@ -304,15 +328,17 @@ router.get('/analytics', async (req: Request, res: Response) => {
 
 // ─── GET /api/dmf/status-trend ─────────────────────────────
 // Pivots (run_status × month) → [{ month, success, failed, inProgress, partialLoad }]
-router.get('/status-trend', async (_req: Request, res: Response) => {
+router.get('/status-trend', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
+    const drClause = dateRangeClause(req.query.date_range);
     const { rows } = await pool.query(`
       SELECT run_status,
-             TO_CHAR(proc_dt::date, 'Mon') AS month_name,
+             TO_CHAR(proc_dt::date, 'Mon YYYY') AS month_name,
              COUNT(*) AS cnt
       FROM edoops.DMF_RUN_MASTER
-      GROUP BY run_status, TO_CHAR(proc_dt::date, 'Mon')
+      WHERE 1=1 ${drClause}
+      GROUP BY run_status, TO_CHAR(proc_dt::date, 'Mon YYYY')
       ORDER BY MIN(proc_dt::date)
     `);
 
@@ -341,16 +367,18 @@ router.get('/status-trend', async (_req: Request, res: Response) => {
 
 // ─── GET /api/dmf/rows-trend ───────────────────────────────
 // Returns [{ month, rowsLoaded, rowsParsed, rowsRjctd }]
-router.get('/rows-trend', async (_req: Request, res: Response) => {
+router.get('/rows-trend', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
+    const drClause = dateRangeClause(req.query.date_range);
     const { rows } = await pool.query(`
-      SELECT TO_CHAR(proc_dt::date, 'Mon') AS month_name,
+      SELECT TO_CHAR(proc_dt::date, 'Mon YYYY') AS month_name,
              SUM(rows_loaded) AS rows_loaded,
              SUM(rows_parsed) AS rows_parsed,
              SUM(rows_rjctd)  AS rows_rjctd
       FROM edoops.DMF_RUN_STEP_DETAIL
-      GROUP BY TO_CHAR(proc_dt::date, 'Mon')
+      WHERE 1=1 ${drClause}
+      GROUP BY TO_CHAR(proc_dt::date, 'Mon YYYY')
       ORDER BY MIN(proc_dt::date)
     `);
     res.json(rows.map((r: any) => ({
@@ -366,15 +394,17 @@ router.get('/rows-trend', async (_req: Request, res: Response) => {
 
 // ─── GET /api/dmf/jobs-trend ───────────────────────────────
 // Pivots (proc_typ_cd × month) → [{ month, ING, ENR, DIS, INT }]
-router.get('/jobs-trend', async (_req: Request, res: Response) => {
+router.get('/jobs-trend', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
+    const drClause = dateRangeClause(req.query.date_range);
     const { rows } = await pool.query(`
       SELECT proc_typ_cd,
-             TO_CHAR(proc_dt::date, 'Mon') AS month_name,
+             TO_CHAR(proc_dt::date, 'Mon YYYY') AS month_name,
              COUNT(DISTINCT run_id)  AS cnt
       FROM edoops.DMF_RUN_MASTER
-      GROUP BY proc_typ_cd, TO_CHAR(proc_dt::date, 'Mon')
+      WHERE 1=1 ${drClause}
+      GROUP BY proc_typ_cd, TO_CHAR(proc_dt::date, 'Mon YYYY')
       ORDER BY MIN(proc_dt::date)
     `);
 
@@ -392,15 +422,17 @@ router.get('/jobs-trend', async (_req: Request, res: Response) => {
 });
 
 // ─── GET /api/dmf/step-failure-trend ──────────────────────
-// Returns [{ period, count }] — total step executions per month
-router.get('/step-failure-trend', async (_req: Request, res: Response) => {
+// Returns [{ period, count }] — total step failures per month
+router.get('/step-failure-trend', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
+    const drClause = dateRangeClause(req.query.date_range);
     const { rows } = await pool.query(`
-      SELECT TO_CHAR(proc_dt::date, 'Mon') AS period,
+      SELECT TO_CHAR(proc_dt::date, 'Mon YYYY') AS period,
              COUNT(*) AS cnt
       FROM edoops.DMF_RUN_STEP_DETAIL
-      GROUP BY TO_CHAR(proc_dt::date, 'Mon')
+      WHERE step_status = 'FAILED' ${drClause}
+      GROUP BY TO_CHAR(proc_dt::date, 'Mon YYYY')
       ORDER BY MIN(proc_dt::date)
     `);
     res.json(rows.map((r: any) => ({

@@ -936,8 +936,8 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
               loading={platformsLoading}
               size="small"
               sx={{ minWidth: 220, '& .MuiInputBase-root': { fontSize: '11px' }, '& .MuiInputLabel-root': { fontSize: '11px' } }}
-              renderOption={(props, option) => (
-                <li {...props}>
+              renderOption={({ key, ...props }, option) => (
+                <li key={key} {...props}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, width: '100%' }}>
                     {option.hasCritical && (
                       <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: '#c62828', flexShrink: 0 }} />
