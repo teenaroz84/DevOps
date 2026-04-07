@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { Box, Typography, Chip, Paper, TextField, InputAdornment, Button } from '@mui/material'
+import { Box, Typography, Chip, Paper, TextField, InputAdornment, Button, Autocomplete, CircularProgress } from '@mui/material'
 import BugReportIcon from '@mui/icons-material/BugReport'
 import SearchIcon from '@mui/icons-material/Search'
 import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber'
@@ -20,6 +20,7 @@ import {
   MOCK_SERVICENOW_MISSED_INCIDENTS,
   MOCK_SERVICENOW_INCIDENT_LIST,
   MOCK_SERVICENOW_EMERGENCY_CHANGES,
+  MOCK_SERVICENOW_PLATFORMS,
 } from '../../services/servicenowMockData'
 
 const SEV_CONFIG: Record<string, { color: string; bg: string; dot: string }> = {
@@ -494,7 +495,7 @@ const INCIDENT_COLORS: Record<string, string> = {
   P5: '#757575',
 }
 
-export const IncidentsWidget: React.FC = () => {
+export const IncidentsWidget: React.FC<{ platform?: string | null }> = ({ platform }) => {
   const [incidents, setIncidents] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -510,10 +511,10 @@ export const IncidentsWidget: React.FC = () => {
       setLoading(false)
       return
     }
-    servicenowService.getIncidents()
+    servicenowService.getIncidents(platform ?? undefined)
       .then(d => { setIncidents(Array.isArray(d) ? d : []); setLoading(false) })
       .catch(err => { setError(err.message || 'Failed to fetch incidents'); setLoading(false) })
-  }, [useMock])
+  }, [useMock, platform])
 
   const totalIncidents = incidents.reduce((sum, i) => sum + (i.incident_count || 0), 0)
 
@@ -577,7 +578,7 @@ export const IncidentsWidget: React.FC = () => {
 
 // ─── Missed / Open P3+P4 Incidents Widget (bar chart) ────
 
-export const MissedIncidentsWidget: React.FC = () => {
+export const MissedIncidentsWidget: React.FC<{ platform?: string | null }> = ({ platform }) => {
   const [data, setData] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -591,10 +592,10 @@ export const MissedIncidentsWidget: React.FC = () => {
       setLoading(false)
       return
     }
-    servicenowService.getMissedIncidents()
+    servicenowService.getMissedIncidents(platform ?? undefined)
       .then(d => { setData(Array.isArray(d) ? d : []); setLoading(false) })
       .catch(err => { setError(err.message || 'Failed to fetch'); setLoading(false) })
-  }, [useMock])
+  }, [useMock, platform])
 
   const total = data.reduce((s, r) => s + (r.incident_count || 0), 0)
   const maxCount = Math.max(...data.map(r => r.incident_count || 0), 1)
@@ -666,7 +667,7 @@ export const MissedIncidentsWidget: React.FC = () => {
 
 // ─── Incident List Widget (P3/P4 detailed records) ────────
 
-export const IncidentListWidget: React.FC = () => {
+export const IncidentListWidget: React.FC<{ platform?: string | null }> = ({ platform }) => {
   const [data, setData] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -681,10 +682,10 @@ export const IncidentListWidget: React.FC = () => {
       setLoading(false)
       return
     }
-    servicenowService.getIncidentList()
+    servicenowService.getIncidentList(platform ?? undefined)
       .then(d => { setData(Array.isArray(d) ? d : []); setLoading(false) })
       .catch(err => { setError(err.message || 'Failed to fetch'); setLoading(false) })
-  }, [useMock])
+  }, [useMock, platform])
 
   const filtered = useMemo(() =>
     data
@@ -757,7 +758,7 @@ export const IncidentListWidget: React.FC = () => {
 
 // ─── Emergency Changes Widget ──────────────────────────────
 
-export const EmergencyChangesWidget: React.FC = () => {
+export const EmergencyChangesWidget: React.FC<{ platform?: string | null }> = ({ platform }) => {
   const [changes, setChanges] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -772,10 +773,10 @@ export const EmergencyChangesWidget: React.FC = () => {
       setLoading(false)
       return
     }
-    servicenowService.getEmergencyChanges()
+    servicenowService.getEmergencyChanges(platform ?? undefined)
       .then(d => { setChanges(Array.isArray(d) ? d : []); setLoading(false) })
       .catch(err => { setError(err.message || 'Failed to fetch emergency changes'); setLoading(false) })
-  }, [useMock])
+  }, [useMock, platform])
 
   const total = changes.reduce((s, r) => s + (r.incident_count || 0), 0)
   const donutData = changes.map(r => ({
@@ -897,6 +898,21 @@ import SupportAgentIcon from '@mui/icons-material/SupportAgent'
 
 export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => void }> = ({ onOpenAgent }) => {
   const { useMock } = useMockData()
+  const [platforms,        setPlatforms]        = useState<{ platform: string; hasCritical: boolean }[]>([])
+  const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null)
+  const [platformsLoading, setPlatformsLoading] = useState(false)
+
+  useEffect(() => {
+    setPlatformsLoading(true)
+    if (useMock) {
+      setPlatforms(MOCK_SERVICENOW_PLATFORMS)
+      setPlatformsLoading(false)
+      return
+    }
+    servicenowService.getPlatforms()
+      .then(d => { setPlatforms(Array.isArray(d) ? d : []); setPlatformsLoading(false) })
+      .catch(() => setPlatformsLoading(false))
+  }, [useMock])
 
   return (
     <Box sx={{ bgcolor: '#f5f6f8', minHeight: '100%', p: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -911,6 +927,48 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
           {useMock && (
             <Chip label="MOCK DATA" size="small" sx={{ fontSize: '9px', height: 18, bgcolor: '#fff3e0', color: '#f57c00', fontWeight: 700, border: '1px solid #f57c0040' }} />
           )}
+          <Autocomplete
+              options={platforms}
+              getOptionLabel={(opt) => opt.platform}
+              value={platforms.find(p => p.platform === selectedPlatform) ?? null}
+              onChange={(_, v) => setSelectedPlatform(v?.platform ?? null)}
+              isOptionEqualToValue={(opt, val) => opt.platform === val.platform}
+              loading={platformsLoading}
+              size="small"
+              sx={{ minWidth: 220, '& .MuiInputBase-root': { fontSize: '11px' }, '& .MuiInputLabel-root': { fontSize: '11px' } }}
+              renderOption={(props, option) => (
+                <li {...props}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, width: '100%' }}>
+                    {option.hasCritical && (
+                      <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: '#c62828', flexShrink: 0 }} />
+                    )}
+                    <Typography sx={{ fontSize: '12px', flex: 1 }}>{option.platform}</Typography>
+                    {option.hasCritical && (
+                      <Chip label="P1/P2" size="small" sx={{ fontSize: '9px', height: 16, bgcolor: '#fce4ec', color: '#c62828', fontWeight: 700 }} />
+                    )}
+                  </Box>
+                </li>
+              )}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Platform"
+                  placeholder="All Platforms"
+                  size="small"
+                  InputLabelProps={{ shrink: true }}
+                  InputProps={{
+                    ...params.InputProps,
+                    endAdornment: (
+                      <>
+                        {platformsLoading && <CircularProgress size={12} />}
+                        {params.InputProps.endAdornment}
+                      </>
+                    ),
+                  }}
+                />
+              )}
+              ListboxProps={{ sx: { fontSize: '12px' } }}
+            />
           <Typography sx={{ fontSize: '11px', color: '#aaa', ml: 'auto' }}>
             Source: PostgreSQL · edoops.service_now_inc / service_now_chg
           </Typography>
@@ -939,21 +997,21 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
       {/* ── Row 1: Open P1/P2/P3 counts + Missed P3/P4 bar chart ── */}
       <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, alignItems: 'start' }}>
         <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #c62828', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-          <IncidentsWidget />
+          <IncidentsWidget platform={selectedPlatform} />
         </Paper>
         <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #e65100', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-          <MissedIncidentsWidget />
+          <MissedIncidentsWidget platform={selectedPlatform} />
         </Paper>
       </Box>
 
       {/* ── Row 2: Incident list P3/P4 (full width) ── */}
       <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #1565c0', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-        <IncidentListWidget />
+        <IncidentListWidget platform={selectedPlatform} />
       </Paper>
 
       {/* ── Row 3: Emergency Changes ── */}
       <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #7b1fa2', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-        <EmergencyChangesWidget />
+        <EmergencyChangesWidget platform={selectedPlatform} />
       </Paper>
 
     </Box>

@@ -197,12 +197,27 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
     if (activeTab !== 'analytics' || !analyticsMetaLoaded) return
     if (useMock) {
       const base = MOCK_DMF_ANALYTICS
+      const totalSrc  = base.sourceTypeCounts.reduce((s, r) => s + r.count, 0) || 1
+      const totalTgt  = base.targetTypeCounts.reduce((s, r) => s + r.count, 0) || 1
+      const totalStep = base.stepFailureCounts.reduce((s, r) => s + r.count, 0) || 1
+      const filtSrc   = anlSrcType
+        ? base.sourceTypeCounts.filter(r => r.type === anlSrcType).reduce((s, r) => s + r.count, 0)
+        : totalSrc
+      const filtTgt   = anlTgtTypes.length
+        ? base.targetTypeCounts.filter(r => anlTgtTypes.includes(r.type)).reduce((s, r) => s + r.count, 0)
+        : totalTgt
+      const filtStep  = anlStepNames.length
+        ? base.stepFailureCounts.filter(r => anlStepNames.includes(r.step)).reduce((s, r) => s + r.count, 0)
+        : totalStep
+      const scale = (filtSrc / totalSrc) * (filtTgt / totalTgt) * (filtStep / totalStep)
+      let scaledStatus = base.statusSummary.map(r => ({ ...r, count: Math.max(1, Math.round(r.count * scale)) }))
+      if (anlRunStatuses.length) scaledStatus = scaledStatus.filter(r => anlRunStatuses.includes(r.status))
       setAnalytics({
         ...base,
-        statusSummary:    anlRunStatuses.length ? base.statusSummary.filter(r    => anlRunStatuses.includes(r.status))    : base.statusSummary,
-        sourceTypeCounts: anlSrcType             ? base.sourceTypeCounts.filter(r => r.type === anlSrcType)             : base.sourceTypeCounts,
-        targetTypeCounts: anlTgtTypes.length    ? base.targetTypeCounts.filter(r => anlTgtTypes.includes(r.type))          : base.targetTypeCounts,
-        stepFailureCounts: anlStepNames.length  ? base.stepFailureCounts.filter(r => anlStepNames.includes(r.step))       : base.stepFailureCounts,
+        statusSummary:     scaledStatus,
+        sourceTypeCounts:  anlSrcType            ? base.sourceTypeCounts.filter(r => r.type === anlSrcType)           : base.sourceTypeCounts,
+        targetTypeCounts:  anlTgtTypes.length    ? base.targetTypeCounts.filter(r => anlTgtTypes.includes(r.type))    : base.targetTypeCounts,
+        stepFailureCounts: anlStepNames.length   ? base.stepFailureCounts.filter(r => anlStepNames.includes(r.step))  : base.stepFailureCounts,
       })
       return
     }
@@ -484,7 +499,6 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
                 items={[
                   { label: 'Sources', value: lineageMeta?.sourceCodes.length ?? 0, color: '#1565c0', bg: '#e3f2fd' },
                   { label: 'Datasets', value: lineageMeta?.datasetNames.length ?? 0, color: '#2e7d32', bg: '#e8f5e9' },
-                  { label: 'Source Names', value: lineageMeta?.sourceNames.length ?? 0, color: '#f57c00', bg: '#fff3e0' },
                   { label: 'Target Names', value: lineageMeta?.targetNames.length ?? 0, color: '#7b1fa2', bg: '#f3e5f5' },
                   {
                     label: isFiltered ? `Jobs ( ${lgSourceCode} )` : 'Total Jobs',
@@ -497,7 +511,7 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
                     unit: '%', color: '#2e7d32', bg: '#e8f5e9',
                   },
                 ]}
-                columns={6}
+                columns={5}
                 compact
               />
 

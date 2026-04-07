@@ -8,22 +8,25 @@ import { getPgPool } from '../db/postgres';
 
 const router = Router();
 
-// GET /api/servicenow/incidents
-// Open P1/P2/P3 incident count grouped by priority
-router.get('/incidents', async (_req: Request, res: Response) => {
+// GET /api/servicenow/incidents?platform=<value>
+// Open P1/P2/P3 incident count grouped by priority; optionally filtered by platform
+router.get('/incidents', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
+    const platform = req.query.platform as string | undefined;
+    const platformClause = platform ? `AND sn.sninc_applkp_pltf_nm = $1` : '';
+    const params = platform ? [platform] : [];
     const result = await pool.query(`
       SELECT sg.short_priority AS priority_field,
              COUNT(*)::int     AS incident_count
       FROM   edoops.service_now_inc sn
       JOIN   edoops.sla_glossary    sg
         ON   sn.sninc_priority = sg.snow_priority
-      WHERE  sn.sninc_applkp_pltf_nm LIKE 'BI%'
-        AND  sg.short_priority IN ('P1','P2','P3')
+      WHERE  sg.short_priority IN ('P1','P2','P3')
+        ${platformClause}
       GROUP BY sg.short_priority
       ORDER BY sg.short_priority
-    `);
+    `, params);
     res.json(result.rows);
   } catch (err: any) {
     console.error('ServiceNow incidents error:', err.message);
@@ -31,22 +34,25 @@ router.get('/incidents', async (_req: Request, res: Response) => {
   }
 });
 
-// GET /api/servicenow/missed-incidents
-// Open P3/P4 incident count for "missed SLA" bar chart
-router.get('/missed-incidents', async (_req: Request, res: Response) => {
+// GET /api/servicenow/missed-incidents?platform=<value>
+// Open P3/P4 incident count for "missed SLA" bar chart; optionally filtered by platform
+router.get('/missed-incidents', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
+    const platform = req.query.platform as string | undefined;
+    const platformClause = platform ? `AND sn.sninc_applkp_pltf_nm = $1` : '';
+    const params = platform ? [platform] : [];
     const result = await pool.query(`
       SELECT sg.short_priority AS priority_field,
              COUNT(*)::int     AS incident_count
       FROM   edoops.service_now_inc sn
       JOIN   edoops.sla_glossary    sg
         ON   sn.sninc_priority = sg.snow_priority
-      WHERE  sn.sninc_applkp_pltf_nm LIKE 'BI%'
-        AND  sg.short_priority IN ('P3','P4')
+      WHERE  sg.short_priority IN ('P3','P4')
+        ${platformClause}
       GROUP BY sg.short_priority
       ORDER BY sg.short_priority
-    `);
+    `, params);
     res.json(result.rows);
   } catch (err: any) {
     console.error('ServiceNow missed-incidents error:', err.message);
@@ -54,11 +60,14 @@ router.get('/missed-incidents', async (_req: Request, res: Response) => {
   }
 });
 
-// GET /api/servicenow/incident-list
-// Detailed P3/P4 incident records: number, priority, capability, description, assignment group
-router.get('/incident-list', async (_req: Request, res: Response) => {
+// GET /api/servicenow/incident-list?platform=<value>
+// Detailed P3/P4 incident records; optionally filtered by platform
+router.get('/incident-list', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
+    const platform = req.query.platform as string | undefined;
+    const platformClause = platform ? `AND sn.sninc_applkp_pltf_nm = $1` : '';
+    const params = platform ? [platform] : [];
     const result = await pool.query(`
       SELECT sn.sninc_inc_num        AS sninc_inc_num,
              sg.short_priority       AS priority_field,
@@ -68,11 +77,11 @@ router.get('/incident-list', async (_req: Request, res: Response) => {
       FROM   edoops.service_now_inc sn
       JOIN   edoops.sla_glossary    sg
         ON   sn.sninc_priority = sg.snow_priority
-      WHERE  sn.sninc_applkp_pltf_nm LIKE 'BI%'
-        AND  sg.short_priority IN ('P3','P4')
+      WHERE  sg.short_priority IN ('P3','P4')
+        ${platformClause}
       ORDER BY sg.short_priority, sn.sninc_inc_num
       LIMIT 200
-    `);
+    `, params);
     res.json(result.rows);
   } catch (err: any) {
     console.error('ServiceNow incident-list error:', err.message);
@@ -80,22 +89,25 @@ router.get('/incident-list', async (_req: Request, res: Response) => {
   }
 });
 
-// GET /api/servicenow/emergency-changes
-// Open Emergency Changes (service_now_chg) by priority
-router.get('/emergency-changes', async (_req: Request, res: Response) => {
+// GET /api/servicenow/emergency-changes?platform=<value>
+// Open Emergency Changes (service_now_chg) by priority; optionally filtered by platform
+router.get('/emergency-changes', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
+    const platform = req.query.platform as string | undefined;
+    const platformClause = platform ? `AND sn.snchg_pltf_nm = $1` : '';
+    const params = platform ? [platform] : [];
     const result = await pool.query(`
       SELECT sg.short_priority AS priority_field,
              COUNT(*)::int     AS incident_count
       FROM   edoops.service_now_chg sn
       JOIN   edoops.sla_glossary    sg
         ON   sn.snchg_priority = sg.snow_priority
-      WHERE  sn.snchg_pltf_nm LIKE 'BI%'
-        AND  sg.short_priority IN ('P1','P2','P3')
+      WHERE  sg.short_priority IN ('P1','P2','P3')
+        ${platformClause}
       GROUP BY sg.short_priority
       ORDER BY sg.short_priority
-    `);
+    `, params);
     res.json(result.rows);
   } catch (err: any) {
     console.error('ServiceNow emergency-changes error:', err.message);
@@ -127,6 +139,31 @@ router.get('/incident-detail', async (req: Request, res: Response) => {
     res.json(result.rows);
   } catch (err: any) {
     console.error('ServiceNow incident-detail error:', err.message);
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
+// GET /api/servicenow/platforms
+// All non-null platform names with a flag if they have any active P1/P2 incidents
+router.get('/platforms', async (_req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const result = await pool.query(`
+      SELECT sn.sninc_applkp_pltf_nm        AS platform,
+             BOOL_OR(sg.short_priority IN ('P1','P2')) AS has_critical
+      FROM   edoops.service_now_inc sn
+      LEFT JOIN edoops.sla_glossary sg
+        ON sn.sninc_priority = sg.snow_priority
+      WHERE  sn.sninc_applkp_pltf_nm IS NOT NULL
+      GROUP BY sn.sninc_applkp_pltf_nm
+      ORDER BY sn.sninc_applkp_pltf_nm
+    `);
+    res.json(result.rows.map((r: any) => ({
+      platform:    r.platform,
+      hasCritical: r.has_critical === true,
+    })));
+  } catch (err: any) {
+    console.error('ServiceNow platforms error:', err.message);
     res.status(500).json({ error: 'Query failed', details: err.message });
   }
 });

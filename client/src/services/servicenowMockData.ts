@@ -100,5 +100,14 @@ export const MOCK_SERVICENOW_EMERGENCY_CHANGES = [
   { priority_field: 'P3', incident_count: 2 },
 ]
 
+export const MOCK_SERVICENOW_PLATFORMS = [
+  { platform: 'BI Analytics',      hasCritical: true  },
+  { platform: 'BI Reporting',      hasCritical: true  },
+  { platform: 'Data Integration',  hasCritical: false },
+  { platform: 'Data Warehouse',    hasCritical: true  },
+  { platform: 'DMF Orchestration', hasCritical: false },
+  { platform: 'ESP Scheduler',     hasCritical: false },
+]
+
 // Kept for backwards compat (no longer used on main dashboard)
 export const MOCK_SERVICENOW_AGEING_PROBLEMS: never[] = []
