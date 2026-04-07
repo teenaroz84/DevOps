@@ -85,27 +85,23 @@ router.get('/run-status', async (_req: Request, res: Response) => {
 });
 
 // ─── GET /api/dmf/lineage/meta ─────────────────────────────
-router.get('/lineage/meta', async (_req: Request, res: Response) => {
+// Accepts date_range to scope the scan — avoids full table scan
+router.get('/lineage/meta', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
-    // Single scan — ORDER BY dropped from ARRAY_AGG (sort done in JS, avoids per-aggregate sort pass)
+    const drClause = dateRangeClause(req.query.date_range);
     const { rows } = await pool.query(`
       SELECT
-        ARRAY_AGG(DISTINCT src_cd)      FILTER (WHERE src_cd      IS NOT NULL) AS src_cds,
-        ARRAY_AGG(DISTINCT dataset_nm)  FILTER (WHERE dataset_nm  IS NOT NULL) AS dataset_nms,
-        ARRAY_AGG(DISTINCT src_nm)      FILTER (WHERE src_nm      IS NOT NULL) AS src_nms,
-        ARRAY_AGG(DISTINCT tgt_nm)      FILTER (WHERE tgt_nm      IS NOT NULL) AS tgt_nms,
-        ARRAY_AGG(DISTINCT proc_typ_cd) FILTER (WHERE proc_typ_cd IS NOT NULL) AS proc_typ_cds
+        ARRAY_AGG(DISTINCT src_cd)     FILTER (WHERE src_cd     IS NOT NULL) AS src_cds,
+        ARRAY_AGG(DISTINCT dataset_nm) FILTER (WHERE dataset_nm IS NOT NULL) AS dataset_nms
       FROM edoops.DMF_RUN_MASTER
+      WHERE 1=1 ${drClause}
     `);
     const r = rows[0] || {};
     const sort = (a: string[]) => (a ?? []).slice().sort();
     res.json({
-      sourceCodes:   sort(r.src_cds),
-      datasetNames:  sort(r.dataset_nms),
-      sourceNames:   sort(r.src_nms),
-      targetNames:   sort(r.tgt_nms),
-      procTypeCodes: sort(r.proc_typ_cds),
+      sourceCodes:  sort(r.src_cds),
+      datasetNames: sort(r.dataset_nms),
     });
   } catch (err: any) {
     res.status(500).json({ error: 'Query failed', details: err.message });
@@ -113,7 +109,7 @@ router.get('/lineage/meta', async (_req: Request, res: Response) => {
 });
 
 // ─── GET /api/dmf/lineage/counts ───────────────────────────
-// GROUPING SETS: single table scan produces all five aggregation levels.
+// 3 focused parallel GROUP BY queries — simpler than GROUPING SETS, easier for the planner.
 router.get('/lineage/counts', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
@@ -129,114 +125,61 @@ router.get('/lineage/counts', async (req: Request, res: Response) => {
       ? `WHERE ${conditions.join(' AND ')} ${drClause}`
       : drClause ? `WHERE 1=1 ${drClause}` : '';
 
-    // Single scan with GROUPING SETS — replaces 5 separate queries.
-    // GROUPING(col) returns 1 when col is rolled-up (not the grouping key for this row).
-    const { rows } = await pool.query(`
-      SELECT
-        run_status,
-        proc_typ_cd,
-        src_cd,
-        tgt_nm,
-        GROUPING(run_status)  AS g_rs,
-        GROUPING(proc_typ_cd) AS g_pc,
-        GROUPING(src_cd)      AS g_sc,
-        GROUPING(tgt_nm)      AS g_tn,
-        COUNT(*) AS cnt
-      FROM edoops.DMF_RUN_MASTER
-      ${where}
-      GROUP BY GROUPING SETS (
-        (),
-        (run_status),
-        (proc_typ_cd),
-        (src_cd),
-        (tgt_nm)
-      )
-    `, params);
+    const [statusRes, procTypeRes, srcCdRes] = await Promise.all([
+      pool.query(`SELECT run_status, COUNT(*) AS cnt FROM edoops.DMF_RUN_MASTER ${where} GROUP BY run_status`, params),
+      pool.query(`SELECT proc_typ_cd, COUNT(*) AS cnt FROM edoops.DMF_RUN_MASTER ${where} GROUP BY proc_typ_cd`, params),
+      pool.query(`SELECT src_cd, COUNT(*) AS cnt FROM edoops.DMF_RUN_MASTER ${where} GROUP BY src_cd`, params),
+    ]);
 
-    let total = 0;
-    const byStatus:   { status: string; count: number }[]   = [];
-    const byProcType: { procTypeCode: string; count: number }[] = [];
-    const bySrcCd:    { sourceCode: string; count: number }[]   = [];
-    const byTgtNm:    { targetName: string; count: number }[]   = [];
+    const byStatus = statusRes.rows.map((r: any) => ({
+      status: (r.run_status || '').toUpperCase() === 'SUCCESS' ? 'success' : 'failed',
+      count: parseInt(r.cnt, 10),
+    })).sort((a: any, b: any) => b.count - a.count);
 
-    for (const r of rows) {
-      const cnt = parseInt(r.cnt, 10);
-      const [grs, gpc, gsc, gtn] = [r.g_rs, r.g_pc, r.g_sc, r.g_tn].map(Number);
-      if (grs === 1 && gpc === 1 && gsc === 1 && gtn === 1) {
-        total = cnt; // grand total
-      } else if (grs === 0 && gpc === 1 && gsc === 1 && gtn === 1) {
-        byStatus.push({ status: (r.run_status || '').toUpperCase() === 'SUCCESS' ? 'success' : 'failed', count: cnt });
-      } else if (grs === 1 && gpc === 0 && gsc === 1 && gtn === 1) {
-        byProcType.push({ procTypeCode: r.proc_typ_cd || '', count: cnt });
-      } else if (grs === 1 && gpc === 1 && gsc === 0 && gtn === 1) {
-        bySrcCd.push({ sourceCode: r.src_cd || '', count: cnt });
-      } else if (grs === 1 && gpc === 1 && gsc === 1 && gtn === 0) {
-        byTgtNm.push({ targetName: r.tgt_nm || '', count: cnt });
-      }
-    }
+    const byProcType = procTypeRes.rows.map((r: any) => ({
+      procTypeCode: r.proc_typ_cd || '',
+      count: parseInt(r.cnt, 10),
+    })).sort((a: any, b: any) => b.count - a.count);
 
-    // Sort descending by count (done in JS to avoid ORDER BY inside GROUPING SETS)
-    byStatus.sort((a, b) => b.count - a.count);
-    byProcType.sort((a, b) => b.count - a.count);
-    bySrcCd.sort((a, b) => b.count - a.count);
-    byTgtNm.sort((a, b) => b.count - a.count);
+    const bySrcCd = srcCdRes.rows.map((r: any) => ({
+      sourceCode: r.src_cd || '',
+      count: parseInt(r.cnt, 10),
+    })).sort((a: any, b: any) => b.count - a.count);
 
-    res.json({ total, byStatus, byProcType, bySrcCd, byTgtNm });
+    const total = byStatus.reduce((s: number, r: any) => s + r.count, 0);
+
+    res.json({ total, byStatus, byProcType, bySrcCd });
   } catch (err: any) {
     res.status(500).json({ error: 'Query failed', details: err.message });
   }
 });
 
 // ─── GET /api/dmf/lineage/jobs ─────────────────────────────
-// Accepts: src_cd, dataset_nm, src_nm, tgt_nm, proc_typ_cd, run_status, step_nm, date_range
-// Date range is applied first to minimise the scan window.
+// Accepts: src_cd (required), date_range
+// Other filters are applied client-side after fetch to keep the query simple and fast.
 router.get('/lineage/jobs', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
-    const { src_cd, dataset_nm, src_nm, tgt_nm, proc_typ_cd, run_status, step_nm, date_range } = req.query;
+    const { src_cd, date_range } = req.query;
 
-    const conditions: string[] = [];
-    const params: any[] = [];
-
-    // Apply date range FIRST so the planner can use any proc_dt index
-    const drClause = dateRangeClause(date_range);
-    if (drClause) {
-      // inline into conditions so it participates in the index scan
-      const map: Record<string, string> = { '1m': '1 month', '3m': '3 months', '6m': '6 months', '1y': '1 year' };
-      const interval = map[String(date_range ?? '').toLowerCase()];
-      if (interval) {
-        conditions.push(`m.proc_dt::date >= CURRENT_DATE - INTERVAL '${interval}'`);
-      }
+    // src_cd is required — return empty set without it
+    if (!src_cd || String(src_cd) === 'All') {
+      return res.json([]);
     }
 
-    const add = (col: string, val: any) => {
-      if (val && String(val) !== 'All') {
-        conditions.push(`m.${col} = $${params.length + 1}`);
-        params.push(String(val));
-      }
-    };
-    add('src_cd',      src_cd);
-    add('dataset_nm',  dataset_nm);
-    add('src_nm',      src_nm);
-    add('tgt_nm',      tgt_nm);
-    add('proc_typ_cd', proc_typ_cd);
-    if (run_status && String(run_status) !== 'All') {
-      conditions.push(`UPPER(m.run_status) = $${params.length + 1}`);
-      params.push(String(run_status).toUpperCase());
-    }
-    if (step_nm && String(step_nm) !== 'All') {
-      conditions.push(`EXISTS (SELECT 1 FROM edoops.DMF_RUN_STEP_DETAIL d WHERE d.run_id = m.run_id AND d.step_nm = $${params.length + 1})`);
-      params.push(String(step_nm));
-    }
+    const params: any[] = [String(src_cd)];
+    const drMap: Record<string, string> = { '1m': '1 month', '3m': '3 months', '6m': '6 months', '1y': '1 year' };
+    const interval = drMap[String(date_range ?? '').toLowerCase()] ?? '3 months';
 
-    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
     const { rows } = await pool.query(`
-      SELECT m.proc_dt, m.src_cd, m.dataset_nm, m.proc_typ_cd,
-             m.src_nm, m.tgt_nm, m.run_strt_tm, m.run_end_tm, m.run_status
-      FROM edoops.DMF_RUN_MASTER m
-      ${where}
-      ORDER BY m.proc_dt DESC
+      SELECT proc_dt, src_cd, dataset_nm, proc_typ_cd,
+             src_nm, tgt_nm, run_strt_tm, run_end_tm, run_status
+      FROM edoops.DMF_RUN_MASTER
+      WHERE proc_dt::date >= CURRENT_DATE - INTERVAL '${interval}'
+        AND src_cd = $1
+      ORDER BY proc_dt DESC
     `, params);
+
     res.json(rows.map((r: any, i: number) => ({
       id:              `${i}-${r.src_cd}-${r.proc_dt}`,
       processDate:     r.proc_dt     ? String(r.proc_dt).split('T')[0]     : '',
@@ -256,23 +199,26 @@ router.get('/lineage/jobs', async (req: Request, res: Response) => {
 
 // ─── GET /api/dmf/analytics/meta ──────────────────────────
 // Single-pass: all distinct filter values from both tables in one round-trip
-router.get('/analytics/meta', async (_req: Request, res: Response) => {
+router.get('/analytics/meta', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
-    // ORDER BY dropped inside ARRAY_AGG — avoids per-aggregate sort, done in JS instead
+    // Scoped to date_range to avoid full table scans
+    const drClause = dateRangeClause(req.query.date_range);
     const [detailMeta, masterMeta] = await Promise.all([
       pool.query(`
         SELECT
-          ARRAY_AGG(DISTINCT src_typ)  FILTER (WHERE src_typ  IS NOT NULL) AS src_typs,
-          ARRAY_AGG(DISTINCT tgt_typ)  FILTER (WHERE tgt_typ  IS NOT NULL) AS tgt_typs,
-          ARRAY_AGG(DISTINCT step_nm)  FILTER (WHERE step_nm  IS NOT NULL) AS step_nms
+          ARRAY_AGG(DISTINCT src_typ) FILTER (WHERE src_typ IS NOT NULL) AS src_typs,
+          ARRAY_AGG(DISTINCT tgt_typ) FILTER (WHERE tgt_typ IS NOT NULL) AS tgt_typs,
+          ARRAY_AGG(DISTINCT step_nm) FILTER (WHERE step_nm IS NOT NULL) AS step_nms
         FROM edoops.DMF_RUN_STEP_DETAIL
+        WHERE 1=1 ${drClause}
       `),
       pool.query(`
         SELECT
           ARRAY_AGG(DISTINCT run_status) FILTER (WHERE run_status IS NOT NULL) AS run_statuses,
           ARRAY_AGG(DISTINCT tgt_nm)     FILTER (WHERE tgt_nm     IS NOT NULL) AS tgt_nms
         FROM edoops.DMF_RUN_MASTER
+        WHERE 1=1 ${drClause}
       `),
     ]);
     const d = detailMeta.rows[0] || {};

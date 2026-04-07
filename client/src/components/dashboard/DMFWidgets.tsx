@@ -89,7 +89,7 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
 
 
   // ── Lineage state ─────────────────────────────────────────
-  const [lineageMeta,       setLineageMeta]       = useState<{ sourceCodes: string[]; datasetNames: string[]; sourceNames: string[]; targetNames: string[] } | null>(null)
+  const [lineageMeta,       setLineageMeta]       = useState<{ sourceCodes: string[]; datasetNames: string[] } | null>(null)
   const [lineageCounts,     setLineageCounts]     = useState<LineageCounts | null>(null)
   const [lineageJobs,       setLineageJobs]       = useState<LineageJob[]>([])
   const [lineageJobsLoading, setLineageJobsLoading] = useState(false)
@@ -174,7 +174,7 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
       return
     }
     Promise.all([
-      dmfService.getLineageMeta(),
+      dmfService.getLineageMeta(dateRange),
       dmfService.getLineageCounts({ date_range: dateRange }),
     ]).then(([meta, counts]) => {
       setLineageMeta(meta)
@@ -226,7 +226,7 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
       setAnalytics(MOCK_DMF_ANALYTICS)
       return
     }
-    dmfService.getAnalyticsMeta()
+    dmfService.getAnalyticsMeta(dateRange)
       .then(d => { setAnalyticsMeta(d); setAnalyticsMetaLoaded(true) })
       .catch(() => setAnalyticsMetaLoaded(true))
   }, [activeTab, analyticsMetaLoaded, useMock])

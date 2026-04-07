@@ -14,7 +14,7 @@ export const dmfService = {
   getRecentFailures: () => apiClient.get('/api/dmf/recent-failures'),
 
   // ── Lineage tab ─────────────────────────────────────────
-  getLineageMeta: () => apiClient.get('/api/dmf/lineage/meta'),
+  getLineageMeta: (date_range?: string) => apiClient.get(`/api/dmf/lineage/meta${date_range ? `?date_range=${date_range}` : ''}`),
   getLineageCounts: (filters: { src_cd?: string; date_range?: string } = {}) => {
     const params = new URLSearchParams()
     if (filters.src_cd && filters.src_cd !== 'All') params.set('src_cd', filters.src_cd)
@@ -30,7 +30,7 @@ export const dmfService = {
   },
 
   // ── Analytics tab ───────────────────────────────────────
-  getAnalyticsMeta: () => apiClient.get('/api/dmf/analytics/meta'),
+  getAnalyticsMeta: (date_range?: string) => apiClient.get(`/api/dmf/analytics/meta${date_range ? `?date_range=${date_range}` : ''}`),
   getAnalytics: (filters: { src_typ?: string; tgt_typ?: string; step_nm?: string; tgt_nm?: string; run_status?: string; date_range?: string } = {}) => {
     const params = new URLSearchParams()
     Object.entries(filters).forEach(([k, v]) => { if (v && v !== 'All') params.set(k, v) })
