@@ -183,26 +183,33 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
     }).catch(() => setLineageLoaded(true))
   }, [activeTab, lineageLoaded, useMock, dateRange])
 
-  // ── Load jobs only when a specific source code is selected ─
+  // ── Load jobs when any filter is set ───────────────────────
+  const hasAnyFilter = !!(lgSourceCode || lgDatasets.length || lgProcTypes.length || lgStatuses.length || lgStepNames.length)
+
   useEffect(() => {
-    if (!lineageLoaded || !lgSourceCode) {
+    if (!lineageLoaded || !hasAnyFilter) {
       setLineageJobs([])
       return
     }
     if (useMock) {
-      setLineageJobs(MOCK_DMF_LINEAGE_JOBS.filter(j => j.sourceCode === lgSourceCode))
+      let jobs = MOCK_DMF_LINEAGE_JOBS
+      if (lgSourceCode) jobs = jobs.filter(j => j.sourceCode === lgSourceCode)
+      setLineageJobs(jobs)
       return
     }
     setLineageJobsLoading(true)
     dmfService.getLineageJobs({
-      src_cd: lgSourceCode,
-      step_nm: lgStepNames.length === 1 ? lgStepNames[0] : undefined,
+      src_cd:     lgSourceCode || undefined,
+      dataset_nm: lgDatasets.length === 1 ? lgDatasets[0] : undefined,
+      proc_typ_cd: lgProcTypes.length === 1 ? lgProcTypes[0] : undefined,
+      run_status: lgStatuses.length === 1 ? lgStatuses[0] : undefined,
+      step_nm:    lgStepNames.length === 1 ? lgStepNames[0] : undefined,
       date_range: dateRange,
     })
       .then(jobs => setLineageJobs(Array.isArray(jobs) ? jobs : []))
       .catch(() => setLineageJobs([]))
       .finally(() => setLineageJobsLoading(false))
-  }, [lineageLoaded, lgSourceCode, lgStepNames, useMock, dateRange])
+  }, [lineageLoaded, lgSourceCode, lgDatasets, lgProcTypes, lgStatuses, lgStepNames, useMock, dateRange])
 
   // ── Lazy-load Analytics meta (once per mock toggle) ────────
   // Loaded on both lineage and analytics tabs (step names needed for lineage filter)
@@ -385,14 +392,16 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
         !lineageLoaded ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}><CircularProgress size={36} /></Box>
         ) : (() => {
-          // ─ Derived: use lineageJobs when source selected, else global counts ─
-          const isFiltered = !!lgSourceCode
+          // ─ Derived: use lineageJobs when any filter active, else global counts ─
+          const isFiltered = hasAnyFilter
 
+          // Server already applies src_cd / proc_typ_cd / run_status / step_nm as single-value filters.
+          // Client-side post-filter handles multi-value selections (dataset, proc_type, status).
           const filteredJobs = isFiltered
             ? lineageJobs.filter(j =>
-                (lgDatasets.length === 0 || lgDatasets.includes(j.datasetName)) &&
+                (lgDatasets.length === 0  || lgDatasets.includes(j.datasetName)) &&
                 (lgProcTypes.length === 0 || lgProcTypes.includes(j.processTypeCode)) &&
-                (lgStatuses.length === 0 || lgStatuses.includes(j.status))
+                (lgStatuses.length === 0  || lgStatuses.includes(j.status))
               )
             : []
 
@@ -438,8 +447,8 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
                     {!isFiltered
                       ? `${lineageMeta?.sourceCodes.length ?? 0} sources · ${(lineageCounts?.total ?? 0).toLocaleString()} total jobs`
                       : lineageJobsLoading
-                        ? `Loading jobs for ${lgSourceCode}…`
-                        : `${filteredJobs.length} of ${lineageJobs.length} jobs · ${lgSourceCode}`}
+                        ? 'Loading filtered jobs…'
+                        : `${filteredJobs.length} of ${lineageJobs.length} matching jobs`}
                   </Typography>
                   {(isFiltered || hasSubFilters) && (
                     <Button
@@ -472,7 +481,6 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
                     options={lineageMeta?.datasetNames ?? []}
                     value={lgDatasets}
                     onChange={(_, v) => setLgDatasets(v)}
-                    disabled={!isFiltered}
                     size="small"
                     sx={{ minWidth: 180, '& .MuiInputBase-root': { fontSize: '11px' }, '& .MuiInputLabel-root': { fontSize: '11px' } }}
                     renderInput={(params) => (
@@ -493,7 +501,6 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
                     options={['ING', 'ENR', 'DIS', 'INT']}
                     value={lgProcTypes}
                     onChange={(_, v) => setLgProcTypes(v)}
-                    disabled={!isFiltered}
                     size="small"
                     sx={{ minWidth: 140, '& .MuiInputBase-root': { fontSize: '11px' }, '& .MuiInputLabel-root': { fontSize: '11px' } }}
                     renderInput={(params) => (
@@ -514,7 +521,6 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
                     options={['success', 'failed']}
                     value={lgStatuses}
                     onChange={(_, v) => setLgStatuses(v)}
-                    disabled={!isFiltered}
                     size="small"
                     sx={{ minWidth: 120, '& .MuiInputBase-root': { fontSize: '11px' }, '& .MuiInputLabel-root': { fontSize: '11px' } }}
                     renderInput={(params) => (
@@ -590,7 +596,7 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
                 <Box sx={{ backgroundColor: '#fff', border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
                   <WidgetShell
                     title="Job Status Distribution"
-                    source={isFiltered ? `Source: ${lgSourceCode}` : 'All sources'}
+                    source={isFiltered ? 'Filtered' : 'All sources'}
                   >
                     <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
                       {isFiltered && lineageJobsLoading ? (
@@ -614,7 +620,7 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
                 <Box sx={{ backgroundColor: '#fff', border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
                   <WidgetShell
                     title="Process Type Breakdown"
-                    source={isFiltered ? `Source: ${lgSourceCode}` : 'All sources'}
+                    source={isFiltered ? 'Filtered' : 'All sources'}
                   >
                     <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
                       {isFiltered && lineageJobsLoading ? (
@@ -652,7 +658,7 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
                   </Box>
                 ) : (
                   <Box sx={{ backgroundColor: '#fff', border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
-                    <WidgetShell title="Jobs by Dataset" source={`Source: ${lgSourceCode}`}>
+                    <WidgetShell title="Jobs by Dataset" source="Filtered results">
                       <Box sx={{ px: 1, py: 1 }}>
                         {lineageJobsLoading ? (
                           <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress size={24} /></Box>
@@ -682,7 +688,7 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
                 <Box sx={{ backgroundColor: '#fff', border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
                   <WidgetShell
                     title="Jobs by Target Name"
-                    source={isFiltered ? `Source: ${lgSourceCode}` : `Top ${Math.min((lineageCounts?.byTgtNm ?? []).length, 10)}`}
+                    source={isFiltered ? 'Filtered' : `Top ${Math.min((lineageCounts?.byTgtNm ?? []).length, 10)}`}
                   >
                     <Box sx={{ px: 1, py: 1 }}>
                       {isFiltered && lineageJobsLoading ? (
@@ -709,18 +715,18 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
               <Box sx={{ backgroundColor: '#fff', border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
                 <WidgetShell
                   title="Job Details"
-                  source={!lgSourceCode ? 'Select a source above to load jobs' : `Source: ${lgSourceCode}`}
+                  source={!hasAnyFilter ? 'Apply a filter above to load jobs' : `${filteredJobs.length} matching jobs`}
                   actions={
-                    lgSourceCode
+                    hasAnyFilter
                       ? <Chip label={`${filteredJobs.length} jobs`} size="small" sx={{ fontSize: '10px', height: 20, backgroundColor: '#e3f2fd', color: '#1565c0', fontWeight: 600 }} />
                       : undefined
                   }
                 >
-                  {!lgSourceCode ? (
+                  {!hasAnyFilter ? (
                     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 5, gap: 1 }}>
                       <AccountTreeIcon sx={{ fontSize: 36, color: '#ccc' }} />
                       <Typography sx={{ fontSize: '13px', color: '#aaa' }}>
-                        Select a <strong>Source</strong> above to view job details.
+                        Apply a <strong>filter</strong> above to view job details.
                       </Typography>
                       <Typography sx={{ fontSize: '11px', color: '#bbb' }}>
                         Total: {(lineageCounts?.total ?? 0).toLocaleString()} jobs across {lineageMeta?.sourceCodes.length ?? 0} sources
