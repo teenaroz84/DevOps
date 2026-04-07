@@ -177,7 +177,12 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
   useEffect(() => {
     if (activeTab !== 'analytics' || analyticsMetaLoaded) return
     if (useMock) {
-      setAnalyticsMeta({ sourceTypes: [], targetTypes: [], stepNames: [], runStatuses: [] })
+      setAnalyticsMeta({
+        sourceTypes:  MOCK_DMF_ANALYTICS.sourceTypeCounts.map(r => r.type),
+        targetTypes:  MOCK_DMF_ANALYTICS.targetTypeCounts.map(r => r.type),
+        stepNames:    MOCK_DMF_ANALYTICS.stepFailureCounts.map(r => r.step),
+        runStatuses:  MOCK_DMF_ANALYTICS.statusSummary.map(r => r.status),
+      })
       setAnalyticsMetaLoaded(true)
       setAnalytics(MOCK_DMF_ANALYTICS)
       return
@@ -189,7 +194,18 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
 
   // ── Re-fetch Analytics data when filters change ───────────
   useEffect(() => {
-    if (activeTab !== 'analytics' || !analyticsMetaLoaded || useMock) return
+    if (activeTab !== 'analytics' || !analyticsMetaLoaded) return
+    if (useMock) {
+      const base = MOCK_DMF_ANALYTICS
+      setAnalytics({
+        ...base,
+        statusSummary:    anlRunStatuses.length ? base.statusSummary.filter(r    => anlRunStatuses.includes(r.status))    : base.statusSummary,
+        sourceTypeCounts: anlSrcTypes.length    ? base.sourceTypeCounts.filter(r => anlSrcTypes.includes(r.type))          : base.sourceTypeCounts,
+        targetTypeCounts: anlTgtTypes.length    ? base.targetTypeCounts.filter(r => anlTgtTypes.includes(r.type))          : base.targetTypeCounts,
+        stepFailureCounts: anlStepNames.length  ? base.stepFailureCounts.filter(r => anlStepNames.includes(r.step))       : base.stepFailureCounts,
+      })
+      return
+    }
     setAnlLoading(true)
     dmfService.getAnalytics({
       src_typ:    anlSrcTypes.length   ? anlSrcTypes.join(',')   : 'All',
