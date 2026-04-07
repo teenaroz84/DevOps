@@ -93,7 +93,7 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
   const [analytics,       setAnalytics]       = useState<AnalyticsData | null>(null)
   const [analyticsMeta,       setAnalyticsMeta]       = useState<{ sourceTypes: string[]; targetTypes: string[]; stepNames: string[]; runStatuses: string[] } | null>(null)
   const [analyticsMetaLoaded, setAnalyticsMetaLoaded] = useState(false)
-  const [anlSrcTypes,         setAnlSrcTypes]         = useState<string[]>([])
+  const [anlSrcType,          setAnlSrcType]          = useState<string | null>(null)
   const [anlTgtTypes,         setAnlTgtTypes]         = useState<string[]>([])
   const [anlStepNames,        setAnlStepNames]        = useState<string[]>([])
   const [anlRunStatuses,      setAnlRunStatuses]      = useState<string[]>([])
@@ -121,7 +121,7 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
     setAnalytics(null)
     setAnalyticsMetaLoaded(false)
     setAnalyticsMeta(null)
-    setAnlSrcTypes([]); setAnlTgtTypes([]); setAnlStepNames([]); setAnlRunStatuses([])
+    setAnlSrcType(null); setAnlTgtTypes([]); setAnlStepNames([]); setAnlRunStatuses([])
     setTrendsLoaded(false)
     setStatusTrend([])
     setRowsTrend([])
@@ -200,7 +200,7 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
       setAnalytics({
         ...base,
         statusSummary:    anlRunStatuses.length ? base.statusSummary.filter(r    => anlRunStatuses.includes(r.status))    : base.statusSummary,
-        sourceTypeCounts: anlSrcTypes.length    ? base.sourceTypeCounts.filter(r => anlSrcTypes.includes(r.type))          : base.sourceTypeCounts,
+        sourceTypeCounts: anlSrcType             ? base.sourceTypeCounts.filter(r => r.type === anlSrcType)             : base.sourceTypeCounts,
         targetTypeCounts: anlTgtTypes.length    ? base.targetTypeCounts.filter(r => anlTgtTypes.includes(r.type))          : base.targetTypeCounts,
         stepFailureCounts: anlStepNames.length  ? base.stepFailureCounts.filter(r => anlStepNames.includes(r.step))       : base.stepFailureCounts,
       })
@@ -208,7 +208,7 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
     }
     setAnlLoading(true)
     dmfService.getAnalytics({
-      src_typ:    anlSrcTypes.length   ? anlSrcTypes.join(',')   : 'All',
+      src_typ:    anlSrcType ?? 'All',
       tgt_typ:    anlTgtTypes.length   ? anlTgtTypes.join(',')   : 'All',
       step_nm:    anlStepNames.length  ? anlStepNames.join(',')  : 'All',
       run_status: anlRunStatuses.length ? anlRunStatuses.join(',') : 'All',
@@ -216,7 +216,7 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
       .then(d => setAnalytics(d))
       .catch(() => {})
       .finally(() => setAnlLoading(false))
-  }, [activeTab, analyticsMetaLoaded, anlSrcTypes, anlTgtTypes, anlStepNames, anlRunStatuses, useMock])
+  }, [activeTab, analyticsMetaLoaded, anlSrcType, anlTgtTypes, anlStepNames, anlRunStatuses, useMock])
 
   // ── Lazy-load Trends data ─────────────────────────────────
   useEffect(() => {
@@ -368,8 +368,8 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
 
               {/* ── 1. Source selector ────────────────────────────────────── */}
               {/* ── 1. Combined Filters ────────────────────────────────────── */}
-              <Box sx={{ backgroundColor: '#fff', border: '1px solid #e0e0e0', borderRadius: 2, p: 2 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+              <Box sx={{ backgroundColor: '#fff', border: '1px solid #e0e0e0', borderRadius: 2, p: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
                   <FilterListIcon sx={{ fontSize: 15, color: '#1565c0' }} />
                   <Typography sx={{ fontWeight: 700, fontSize: '12px', color: '#37474f' }}>Filters</Typography>
                   <Typography sx={{ fontSize: '11px', color: '#aaa', ml: 0.5 }}>
@@ -389,16 +389,16 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
                     </Button>
                   )}
                 </Box>
-                <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'flex-start' }}>
                   {/* Source — searchable, clearable single-select */}
                   <Autocomplete
                     options={lineageMeta?.sourceCodes ?? []}
                     value={lgSourceCode || null}
                     onChange={(_, v) => setLgSourceCode(v ?? '')}
                     size="small"
-                    sx={{ minWidth: 180 }}
+                    sx={{ minWidth: 160, '& .MuiInputBase-root': { fontSize: '11px' }, '& .MuiInputLabel-root': { fontSize: '11px' } }}
                     renderInput={(params) => (
-                      <TextField {...params} label="Source" placeholder="Search sources…" size="small" />
+                      <TextField {...params} label="Source" placeholder="All" size="small" InputLabelProps={{ shrink: true }} />
                     )}
                     ListboxProps={{ sx: { fontSize: '12px' } }}
                   />
@@ -412,9 +412,9 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
                     onChange={(_, v) => setLgDatasets(v)}
                     disabled={!isFiltered}
                     size="small"
-                    sx={{ minWidth: 200 }}
+                    sx={{ minWidth: 180, '& .MuiInputBase-root': { fontSize: '11px' }, '& .MuiInputLabel-root': { fontSize: '11px' } }}
                     renderInput={(params) => (
-                      <TextField {...params} label="Dataset" size="small" />
+                      <TextField {...params} label="Dataset" placeholder="All" size="small" InputLabelProps={{ shrink: true }} />
                     )}
                     renderTags={(val, getTagProps) =>
                       val.map((opt, idx) => (
@@ -433,9 +433,9 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
                     onChange={(_, v) => setLgProcTypes(v)}
                     disabled={!isFiltered}
                     size="small"
-                    sx={{ minWidth: 160 }}
+                    sx={{ minWidth: 140, '& .MuiInputBase-root': { fontSize: '11px' }, '& .MuiInputLabel-root': { fontSize: '11px' } }}
                     renderInput={(params) => (
-                      <TextField {...params} label="Process Type" size="small" />
+                      <TextField {...params} label="Process Type" placeholder="All" size="small" InputLabelProps={{ shrink: true }} />
                     )}
                     renderTags={(val, getTagProps) =>
                       val.map((opt, idx) => (
@@ -454,9 +454,9 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
                     onChange={(_, v) => setLgStatuses(v)}
                     disabled={!isFiltered}
                     size="small"
-                    sx={{ minWidth: 140 }}
+                    sx={{ minWidth: 120, '& .MuiInputBase-root': { fontSize: '11px' }, '& .MuiInputLabel-root': { fontSize: '11px' } }}
                     renderInput={(params) => (
-                      <TextField {...params} label="Status" size="small" />
+                      <TextField {...params} label="Status" placeholder="All" size="small" InputLabelProps={{ shrink: true }} />
                     )}
                     renderTags={(val, getTagProps) =>
                       val.map((opt, idx) => (
@@ -674,40 +674,32 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
         ) : (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {/* Analytics Filter Bar */}
-            <Box sx={{ backgroundColor: '#fff', border: '1px solid #e0e0e0', borderRadius: 2, p: 2 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+            <Box sx={{ backgroundColor: '#fff', border: '1px solid #e0e0e0', borderRadius: 2, p: 1 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
                 <FilterListIcon sx={{ fontSize: 15, color: '#1976d2' }} />
                 <Typography sx={{ fontWeight: 700, fontSize: '12px', color: '#37474f' }}>Filters</Typography>
                 <Typography sx={{ fontSize: '11px', color: '#aaa', ml: 0.5 }}>Charts refresh on filter change</Typography>
-                {(anlSrcTypes.length > 0 || anlTgtTypes.length > 0 || anlStepNames.length > 0 || anlRunStatuses.length > 0) && (
+                {(anlSrcType !== null || anlTgtTypes.length > 0 || anlStepNames.length > 0 || anlRunStatuses.length > 0) && (
                   <Button
                     size="small"
-                    onClick={() => { setAnlSrcTypes([]); setAnlTgtTypes([]); setAnlStepNames([]); setAnlRunStatuses([]) }}
+                    onClick={() => { setAnlSrcType(null); setAnlTgtTypes([]); setAnlStepNames([]); setAnlRunStatuses([]) }}
                     sx={{ ml: 'auto', fontSize: '11px', color: '#d32f2f', textTransform: 'none', height: 22, minWidth: 'auto', px: 1 }}
                   >
                     Clear All
                   </Button>
                 )}
               </Box>
-              <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-                {/* Source Type — multi-select */}
+              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                {/* Source Type — single-select searchable */}
                 <Autocomplete
-                  multiple
-                  limitTags={2}
-                  disableCloseOnSelect
                   options={analyticsMeta?.sourceTypes ?? []}
-                  value={anlSrcTypes}
-                  onChange={(_, v) => setAnlSrcTypes(v)}
+                  value={anlSrcType}
+                  onChange={(_, v) => setAnlSrcType(v)}
                   size="small"
-                  sx={{ minWidth: 180 }}
+                  sx={{ minWidth: 160, '& .MuiInputBase-root': { fontSize: '11px' }, '& .MuiInputLabel-root': { fontSize: '11px' } }}
                   renderInput={(params) => (
-                    <TextField {...params} label="Source Type" size="small" />
+                    <TextField {...params} label="Source Type" placeholder="All" size="small" InputLabelProps={{ shrink: true }} />
                   )}
-                  renderTags={(val, getTagProps) =>
-                    val.map((opt, idx) => (
-                      <Chip {...getTagProps({ index: idx })} key={opt} label={opt} size="small" sx={{ fontSize: '10px', height: 18 }} />
-                    ))
-                  }
                   ListboxProps={{ sx: { fontSize: '12px' } }}
                 />
                 {/* Target Type — multi-select */}
@@ -719,9 +711,9 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
                   value={anlTgtTypes}
                   onChange={(_, v) => setAnlTgtTypes(v)}
                   size="small"
-                  sx={{ minWidth: 180 }}
+                  sx={{ minWidth: 160, '& .MuiInputBase-root': { fontSize: '11px' }, '& .MuiInputLabel-root': { fontSize: '11px' } }}
                   renderInput={(params) => (
-                    <TextField {...params} label="Target Type" size="small" />
+                    <TextField {...params} label="Target Type" placeholder="All" size="small" InputLabelProps={{ shrink: true }} />
                   )}
                   renderTags={(val, getTagProps) =>
                     val.map((opt, idx) => (
@@ -739,9 +731,9 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
                   value={anlStepNames}
                   onChange={(_, v) => setAnlStepNames(v)}
                   size="small"
-                  sx={{ minWidth: 200 }}
+                  sx={{ minWidth: 180, '& .MuiInputBase-root': { fontSize: '11px' }, '& .MuiInputLabel-root': { fontSize: '11px' } }}
                   renderInput={(params) => (
-                    <TextField {...params} label="Step Name" size="small" />
+                    <TextField {...params} label="Step Name" placeholder="All" size="small" InputLabelProps={{ shrink: true }} />
                   )}
                   renderTags={(val, getTagProps) =>
                     val.map((opt, idx) => (
@@ -759,9 +751,9 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
                   value={anlRunStatuses}
                   onChange={(_, v) => setAnlRunStatuses(v)}
                   size="small"
-                  sx={{ minWidth: 160 }}
+                  sx={{ minWidth: 140, '& .MuiInputBase-root': { fontSize: '11px' }, '& .MuiInputLabel-root': { fontSize: '11px' } }}
                   renderInput={(params) => (
-                    <TextField {...params} label="Run Status" size="small" />
+                    <TextField {...params} label="Run Status" placeholder="All" size="small" InputLabelProps={{ shrink: true }} />
                   )}
                   renderTags={(val, getTagProps) =>
                     val.map((opt, idx) => (
