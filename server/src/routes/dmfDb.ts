@@ -189,7 +189,7 @@ router.get('/lineage/counts', async (req: Request, res: Response) => {
 router.get('/lineage/jobs', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
-    const { src_cd, dataset_nm, src_nm, tgt_nm, proc_typ_cd, run_status, date_range } = req.query;
+    const { src_cd, dataset_nm, src_nm, tgt_nm, proc_typ_cd, run_status, step_nm, date_range } = req.query;
 
     const conditions: string[] = [];
     const params: any[] = [];
@@ -201,13 +201,13 @@ router.get('/lineage/jobs', async (req: Request, res: Response) => {
       const map: Record<string, string> = { '1m': '1 month', '3m': '3 months', '6m': '6 months', '1y': '1 year' };
       const interval = map[String(date_range ?? '').toLowerCase()];
       if (interval) {
-        conditions.push(`proc_dt::date >= CURRENT_DATE - INTERVAL '${interval}'`);
+        conditions.push(`m.proc_dt::date >= CURRENT_DATE - INTERVAL '${interval}'`);
       }
     }
 
     const add = (col: string, val: any) => {
       if (val && String(val) !== 'All') {
-        conditions.push(`${col} = $${params.length + 1}`);
+        conditions.push(`m.${col} = $${params.length + 1}`);
         params.push(String(val));
       }
     };
@@ -217,17 +217,21 @@ router.get('/lineage/jobs', async (req: Request, res: Response) => {
     add('tgt_nm',      tgt_nm);
     add('proc_typ_cd', proc_typ_cd);
     if (run_status && String(run_status) !== 'All') {
-      conditions.push(`UPPER(run_status) = $${params.length + 1}`);
+      conditions.push(`UPPER(m.run_status) = $${params.length + 1}`);
       params.push(String(run_status).toUpperCase());
+    }
+    if (step_nm && String(step_nm) !== 'All') {
+      conditions.push(`EXISTS (SELECT 1 FROM edoops.DMF_RUN_STEP_DETAIL d WHERE d.run_id = m.run_id AND d.step_nm = $${params.length + 1})`);
+      params.push(String(step_nm));
     }
 
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
     const { rows } = await pool.query(`
-      SELECT proc_dt, src_cd, dataset_nm, proc_typ_cd,
-             src_nm, tgt_nm, run_strt_tm, run_end_tm, run_status
-      FROM edoops.DMF_RUN_MASTER
+      SELECT m.proc_dt, m.src_cd, m.dataset_nm, m.proc_typ_cd,
+             m.src_nm, m.tgt_nm, m.run_strt_tm, m.run_end_tm, m.run_status
+      FROM edoops.DMF_RUN_MASTER m
       ${where}
-      ORDER BY proc_dt DESC
+      ORDER BY m.proc_dt DESC
     `, params);
     res.json(rows.map((r: any, i: number) => ({
       id:              `${i}-${r.src_cd}-${r.proc_dt}`,
