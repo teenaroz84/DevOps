@@ -338,36 +338,6 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
               gap: 2,
             }}
           >
-            {messages.length <= 1 && (
-              <Box>
-                <Typography sx={{ color: '#78909c', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', mb: 1 }}>
-                  Quick Actions
-                </Typography>
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
-                  {quickActions.map((action, idx) => (
-                    <Chip
-                      key={idx}
-                      label={action.label}
-                      size="small"
-                      onClick={() => sendMessage(action.query)}
-                      disabled={loading}
-                      sx={{
-                        fontSize: '11px',
-                        height: 28,
-                        cursor: 'pointer',
-                        backgroundColor: '#e3f2fd',
-                        color: '#1565c0',
-                        border: '1px solid #bbdefb',
-                        fontWeight: 500,
-                        '&:hover': { backgroundColor: '#bbdefb' },
-                        '& .MuiChip-label': { px: 1.2 },
-                      }}
-                    />
-                  ))}
-                </Box>
-              </Box>
-            )}
-
             {messages.map((msg, idx) => (
               <Box key={idx} sx={{ display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start', flexDirection: 'column', alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start', gap: 1 }}>
                 <Paper
@@ -483,6 +453,35 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
             )}
 
             <div ref={messagesEndRef} />
+          </Box>
+
+          {/* Quick Actions Strip */}
+          <Box sx={{ px: 2.5, py: 1.25, backgroundColor: '#fff', borderTop: '1px solid #f0f0f0', flexShrink: 0 }}>
+            <Typography sx={{ color: '#78909c', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', mb: 0.75 }}>
+              Quick Actions
+            </Typography>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+              {quickActions.map((action, idx) => (
+                <Chip
+                  key={idx}
+                  label={action.label}
+                  size="small"
+                  onClick={() => sendMessage(action.query)}
+                  disabled={loading}
+                  sx={{
+                    fontSize: '11px',
+                    height: 28,
+                    cursor: 'pointer',
+                    backgroundColor: '#e3f2fd',
+                    color: '#1565c0',
+                    border: '1px solid #bbdefb',
+                    fontWeight: 500,
+                    '&:hover': { backgroundColor: '#bbdefb' },
+                    '& .MuiChip-label': { px: 1.2 },
+                  }}
+                />
+              ))}
+            </Box>
           </Box>
 
           {/* Divider */}
@@ -675,36 +674,6 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
           gap: 2,
         }}
       >
-        {messages.length <= 1 && (
-          <Box>
-            <Typography sx={{ color: '#78909c', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', mb: 1 }}>
-              Quick Actions
-            </Typography>
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
-              {quickActions.map((action, idx) => (
-                <Chip
-                  key={idx}
-                  label={action.label}
-                  size="small"
-                  onClick={() => sendMessage(action.query)}
-                  disabled={loading}
-                  sx={{
-                    fontSize: '11px',
-                    height: 28,
-                    cursor: 'pointer',
-                    backgroundColor: '#e3f2fd',
-                    color: '#1565c0',
-                    border: '1px solid #bbdefb',
-                    fontWeight: 500,
-                    '&:hover': { backgroundColor: '#bbdefb' },
-                    '& .MuiChip-label': { px: 1.2 },
-                  }}
-                />
-              ))}
-            </Box>
-          </Box>
-        )}
-
         {messages.map((msg, idx) => (
           <Box key={idx} sx={{ display: 'flex', alignItems: 'flex-end', gap: 0.75, justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
             {msg.role === 'agent' && (
@@ -875,6 +844,35 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
         )}
 
         <div ref={messagesEndRef} />
+      </Box>
+
+      {/* Quick Actions Strip */}
+      <Box sx={{ px: 1.5, py: 1, backgroundColor: '#fff', borderTop: '1px solid #f0f0f0', flexShrink: 0 }}>
+        <Typography sx={{ color: '#78909c', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', mb: 0.75 }}>
+          Quick Actions
+        </Typography>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+          {quickActions.map((action, idx) => (
+            <Chip
+              key={idx}
+              label={action.label}
+              size="small"
+              onClick={() => sendMessage(action.query)}
+              disabled={loading}
+              sx={{
+                fontSize: '11px',
+                height: 28,
+                cursor: 'pointer',
+                backgroundColor: '#e3f2fd',
+                color: '#1565c0',
+                border: '1px solid #bbdefb',
+                fontWeight: 500,
+                '&:hover': { backgroundColor: '#bbdefb' },
+                '& .MuiChip-label': { px: 1.2 },
+              }}
+            />
+          ))}
+        </Box>
       </Box>
 
       {/* Divider */}
