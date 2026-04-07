@@ -40,7 +40,6 @@ SELECT
 FROM edoops.DMF_RUN_MASTER
 GROUP BY proc_typ_cd
 ORDER BY proc_typ_cd
-LIMIT 150
 ```
 
 ---
@@ -53,7 +52,6 @@ SELECT run_status, COUNT(*) AS cnt
 FROM   edoops.DMF_RUN_MASTER
 GROUP BY run_status
 ORDER BY cnt DESC
-LIMIT 150
 ```
 
 ---
@@ -67,7 +65,6 @@ FROM edoops.DMF_RUN_STEP_DETAIL
 WHERE step_status = 'FAILED'
 GROUP BY step_nm
 ORDER BY cnt DESC
-LIMIT 150
 ```
 
 ---
@@ -84,7 +81,6 @@ SELECT run_status,
 FROM edoops.DMF_RUN_MASTER
 GROUP BY run_status, TO_CHAR(proc_dt::date, 'Mon')
 ORDER BY MIN(proc_dt::date)
-LIMIT 150
 ```
 
 Response shape: `[{ month, success, failed, inProgress, partialLoad }]`
@@ -102,7 +98,6 @@ SELECT TO_CHAR(proc_dt::date, 'Mon') AS month_name,
 FROM edoops.DMF_RUN_STEP_DETAIL
 GROUP BY TO_CHAR(proc_dt::date, 'Mon')
 ORDER BY MIN(proc_dt::date)
-LIMIT 150
 ```
 
 ---
@@ -117,7 +112,6 @@ SELECT proc_typ_cd,
 FROM edoops.DMF_RUN_MASTER
 GROUP BY proc_typ_cd, TO_CHAR(proc_dt::date, 'Mon')
 ORDER BY MIN(proc_dt::date)
-LIMIT 150
 ```
 
 Response shape: `[{ month, ING, ENR, DIS, INT }]`
@@ -133,7 +127,6 @@ SELECT TO_CHAR(proc_dt::date, 'Mon') AS period,
 FROM edoops.DMF_RUN_STEP_DETAIL
 GROUP BY TO_CHAR(proc_dt::date, 'Mon')
 ORDER BY MIN(proc_dt::date)
-LIMIT 150
 ```
 
 ---
@@ -145,19 +138,19 @@ Populates all filter dropdowns — runs 5 queries in parallel via `Promise.all`.
 
 ```sql
 -- Source codes
-SELECT DISTINCT src_cd      FROM edoops.DMF_RUN_MASTER WHERE src_cd      IS NOT NULL ORDER BY src_cd      LIMIT 150
+SELECT DISTINCT src_cd      FROM edoops.DMF_RUN_MASTER WHERE src_cd      IS NOT NULL ORDER BY src_cd
 
 -- Dataset names
-SELECT DISTINCT dataset_nm  FROM edoops.DMF_RUN_MASTER WHERE dataset_nm  IS NOT NULL ORDER BY dataset_nm  LIMIT 150
+SELECT DISTINCT dataset_nm  FROM edoops.DMF_RUN_MASTER WHERE dataset_nm  IS NOT NULL ORDER BY dataset_nm
 
 -- Source names
-SELECT DISTINCT src_nm      FROM edoops.DMF_RUN_MASTER WHERE src_nm      IS NOT NULL ORDER BY src_nm      LIMIT 150
+SELECT DISTINCT src_nm      FROM edoops.DMF_RUN_MASTER WHERE src_nm      IS NOT NULL ORDER BY src_nm
 
 -- Target names
-SELECT DISTINCT tgt_nm      FROM edoops.DMF_RUN_MASTER WHERE tgt_nm      IS NOT NULL ORDER BY tgt_nm      LIMIT 150
+SELECT DISTINCT tgt_nm      FROM edoops.DMF_RUN_MASTER WHERE tgt_nm      IS NOT NULL ORDER BY tgt_nm
 
 -- Process type codes
-SELECT DISTINCT proc_typ_cd FROM edoops.DMF_RUN_MASTER WHERE proc_typ_cd IS NOT NULL ORDER BY proc_typ_cd LIMIT 150
+SELECT DISTINCT proc_typ_cd FROM edoops.DMF_RUN_MASTER WHERE proc_typ_cd IS NOT NULL ORDER BY proc_typ_cd
 ```
 
 ---
@@ -180,15 +173,15 @@ SELECT proc_typ_cd, COUNT(*) AS cnt
 FROM edoops.DMF_RUN_MASTER [WHERE src_cd = $1]
 GROUP BY proc_typ_cd ORDER BY cnt DESC
 
--- Top 15 source codes
+-- Source codes
 SELECT src_cd, COUNT(*) AS cnt
 FROM edoops.DMF_RUN_MASTER [WHERE src_cd = $1]
-GROUP BY src_cd ORDER BY cnt DESC LIMIT 15
+GROUP BY src_cd ORDER BY cnt DESC
 
--- Top 15 target names
+-- Target names
 SELECT tgt_nm, COUNT(*) AS cnt
 FROM edoops.DMF_RUN_MASTER [WHERE src_cd = $1]
-GROUP BY tgt_nm ORDER BY cnt DESC LIMIT 15
+GROUP BY tgt_nm ORDER BY cnt DESC
 ```
 
 ---
@@ -204,7 +197,6 @@ SELECT DISTINCT proc_dt, src_cd, dataset_nm, proc_typ_cd,
 FROM edoops.DMF_RUN_MASTER
 [WHERE src_cd = $1 AND dataset_nm = $2 AND ...]
 ORDER BY proc_dt DESC
-LIMIT 150
 ```
 
 > **Note:** Dataset type, process type, and status sub-filters are applied **client-side** after the initial fetch scoped to `src_cd`.
@@ -218,19 +210,19 @@ Populates all analytics filter dropdowns — 5 queries in parallel.
 
 ```sql
 -- Source types (from step detail)
-SELECT DISTINCT src_typ  FROM edoops.DMF_RUN_STEP_DETAIL WHERE src_typ  IS NOT NULL ORDER BY src_typ  LIMIT 150
+SELECT DISTINCT src_typ  FROM edoops.DMF_RUN_STEP_DETAIL WHERE src_typ  IS NOT NULL ORDER BY src_typ
 
 -- Target types (from step detail)
-SELECT DISTINCT tgt_typ  FROM edoops.DMF_RUN_STEP_DETAIL WHERE tgt_typ  IS NOT NULL ORDER BY tgt_typ  LIMIT 150
+SELECT DISTINCT tgt_typ  FROM edoops.DMF_RUN_STEP_DETAIL WHERE tgt_typ  IS NOT NULL ORDER BY tgt_typ
 
 -- Step names (from step detail)
-SELECT DISTINCT step_nm  FROM edoops.DMF_RUN_STEP_DETAIL WHERE step_nm  IS NOT NULL ORDER BY step_nm  LIMIT 150
+SELECT DISTINCT step_nm  FROM edoops.DMF_RUN_STEP_DETAIL WHERE step_nm  IS NOT NULL ORDER BY step_nm
 
 -- Run statuses (from run master)
-SELECT DISTINCT run_status FROM edoops.DMF_RUN_MASTER WHERE run_status IS NOT NULL ORDER BY run_status LIMIT 150
+SELECT DISTINCT run_status FROM edoops.DMF_RUN_MASTER WHERE run_status IS NOT NULL ORDER BY run_status
 
 -- Target names (from run master)
-SELECT DISTINCT tgt_nm   FROM edoops.DMF_RUN_MASTER     WHERE tgt_nm   IS NOT NULL ORDER BY tgt_nm   LIMIT 150
+SELECT DISTINCT tgt_nm   FROM edoops.DMF_RUN_MASTER     WHERE tgt_nm   IS NOT NULL ORDER BY tgt_nm
 ```
 
 ---
@@ -242,34 +234,44 @@ Accepts optional params: `src_typ`, `tgt_typ`, `step_nm`, `tgt_nm`, `run_status`
 
 ```sql
 -- 1. Status summary (run master)
-SELECT run_status, COUNT(*) AS cnt
-FROM edoops.DMF_RUN_MASTER
+-- When src_typ / tgt_typ / step_nm filters are active, restricts to run_ids
+-- present in the filtered subset of DMF_RUN_STEP_DETAIL via subquery.
+SELECT m.run_status, COUNT(*) AS cnt
+FROM edoops.DMF_RUN_MASTER m
 WHERE <master_conditions>
-GROUP BY run_status
+  AND m.run_id IN (
+    SELECT DISTINCT d.run_id FROM edoops.DMF_RUN_STEP_DETAIL d
+    WHERE <detail_conditions>
+  )
+GROUP BY m.run_status
+-- (subquery omitted when no detail filters are active)
 
 -- 2. Source type counts (step detail)
 SELECT src_typ, COUNT(*) AS cnt
 FROM edoops.DMF_RUN_STEP_DETAIL
 WHERE <detail_conditions>
 GROUP BY src_typ
+ORDER BY cnt DESC
 
 -- 3. Target type counts (step detail)
 SELECT tgt_typ, COUNT(*) AS cnt
 FROM edoops.DMF_RUN_STEP_DETAIL
 WHERE <detail_conditions>
 GROUP BY tgt_typ
+ORDER BY cnt DESC
 
--- 4. Step execution counts (step detail)
+-- 4. Step failure counts (step detail — failures only)
 SELECT step_nm, COUNT(*) AS cnt
 FROM edoops.DMF_RUN_STEP_DETAIL
-WHERE <detail_conditions>
+WHERE <detail_conditions> AND step_status = 'FAILED'
 GROUP BY step_nm
+ORDER BY cnt DESC
 
 -- 5. Top failed source names (run master)
 SELECT src_nm, COUNT(*) AS cnt
 FROM edoops.DMF_RUN_MASTER
 WHERE <master_conditions> AND run_status = 'FAILED'
-GROUP BY src_nm ORDER BY cnt DESC LIMIT 150
+GROUP BY src_nm ORDER BY cnt DESC
 
 -- 6. Average execution time per dataset (run master)
 SELECT dataset_nm,
@@ -278,10 +280,11 @@ FROM edoops.DMF_RUN_MASTER
 WHERE <master_conditions>
   AND run_end_tm IS NOT NULL AND run_strt_tm IS NOT NULL
 GROUP BY dataset_nm ORDER BY avg_ms DESC
-LIMIT 150
 ```
 
 > **Multi-select filters:** Frontend sends comma-separated values (e.g. `src_typ=ING,ENR`). The `ANY($1::text[])` pattern is used server-side. Empty arrays default to `'All'` which skips the filter.
+
+> **Status summary & detail filters:** When `src_typ`, `tgt_typ`, or `step_nm` are active, the status summary uses an `IN (SELECT DISTINCT run_id ...)` subquery to restrict master rows to those that have matching step detail records.
 
 ---
 
@@ -289,6 +292,6 @@ LIMIT 150
 
 - **Connection**: `getPgPool()` from `server/src/db/postgres.ts`
 - **Error handling**: `safeQuery()` helper swallows errors and returns a fallback `[]`
-- **Row limits**: Most queries cap at `LIMIT 150` to prevent large payloads
+- **Row limits**: No `LIMIT` clauses — all rows are returned
 - **Client-side filtering**: Lineage sub-filters (dataset, proc type, status) are applied in the browser after the initial network request
 - **Color mapping**: Status colors resolved in server response; `#2e7d32` = success, `#d32f2f` = failed, `#f57c00` = in-progress
