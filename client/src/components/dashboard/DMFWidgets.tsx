@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import {
   Box,
   Typography,
@@ -182,6 +182,58 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
 
   // ── Load jobs when source is selected (other filters applied client-side) ──────
   const hasAnyFilter = !!lgSourceCode
+
+  // ── Memoised lineage derivations — prevent blocking paint on filter selection ──
+  const isFiltered = hasAnyFilter
+
+  const filteredJobs = useMemo(() =>
+    isFiltered
+      ? lineageJobs.filter(j =>
+          (lgDatasets.length === 0  || lgDatasets.includes(j.datasetName)) &&
+          (lgProcTypes.length === 0 || lgProcTypes.includes(j.processTypeCode)) &&
+          (lgStatuses.length === 0  || lgStatuses.includes(j.status))
+        )
+      : [],
+    [isFiltered, lineageJobs, lgDatasets, lgProcTypes, lgStatuses]
+  )
+
+  const displayTotal = isFiltered ? filteredJobs.length : (lineageCounts?.total ?? 0)
+
+  const displayByStatus = useMemo(() =>
+    isFiltered
+      ? [
+          { status: 'success' as const, count: filteredJobs.filter(j => j.status === 'success').length },
+          { status: 'failed'  as const, count: filteredJobs.filter(j => j.status === 'failed').length },
+        ].filter(x => x.count > 0)
+      : (lineageCounts?.byStatus ?? []),
+    [isFiltered, filteredJobs, lineageCounts]
+  )
+
+  const displayByProcType = useMemo(() =>
+    isFiltered
+      ? ['ING','ENR','DIS','INT'].map(t => ({
+          procTypeCode: t,
+          count: filteredJobs.filter(j => j.processTypeCode === t).length,
+        })).filter(x => x.count > 0)
+      : (lineageCounts?.byProcType ?? []),
+    [isFiltered, filteredJobs, lineageCounts]
+  )
+
+  const displayByTgtNm = useMemo(() =>
+    isFiltered
+      ? Object.entries(
+          filteredJobs.reduce((acc, j) => {
+            acc[j.targetName] = (acc[j.targetName] ?? 0) + 1
+            return acc
+          }, {} as Record<string, number>)
+        ).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([targetName, count]) => ({ targetName, count }))
+      : (lineageCounts?.byTgtNm ?? []),
+    [isFiltered, filteredJobs, lineageCounts]
+  )
+
+  const successCount = displayByStatus.find(x => x.status === 'success')?.count ?? 0
+  const successRate  = displayTotal > 0 ? Math.round(successCount / displayTotal * 100) : 0
+  const hasSubFilters = lgDatasets.length > 0 || lgProcTypes.length > 0 || lgStatuses.length > 0
 
   useEffect(() => {
     if (!lineageLoaded || !lgSourceCode) {
@@ -374,55 +426,12 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
       <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
 
       {/* ════════════════════════════════════════════════════════
-         LINEAGE TAB
+           TAB
          ════════════════════════════════════════════════════════ */}
       {activeTab === 'lineage' && (
         !lineageLoaded ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}><CircularProgress size={36} /></Box>
-        ) : (() => {
-          // ─ Derived: use lineageJobs when any filter active, else global counts ─
-          const isFiltered = hasAnyFilter
-
-          // Server already applies src_cd / proc_typ_cd / run_status / step_nm as single-value filters.
-          // Client-side post-filter handles multi-value selections (dataset, proc_type, status).
-          const filteredJobs = isFiltered
-            ? lineageJobs.filter(j =>
-                (lgDatasets.length === 0  || lgDatasets.includes(j.datasetName)) &&
-                (lgProcTypes.length === 0 || lgProcTypes.includes(j.processTypeCode)) &&
-                (lgStatuses.length === 0  || lgStatuses.includes(j.status))
-              )
-            : []
-
-          const displayTotal = isFiltered ? filteredJobs.length : (lineageCounts?.total ?? 0)
-
-          const displayByStatus = isFiltered
-            ? [
-                { status: 'success' as const, count: filteredJobs.filter(j => j.status === 'success').length },
-                { status: 'failed'  as const, count: filteredJobs.filter(j => j.status === 'failed').length },
-              ].filter(x => x.count > 0)
-            : (lineageCounts?.byStatus ?? [])
-
-          const displayByProcType = isFiltered
-            ? ['ING','ENR','DIS','INT'].map(t => ({
-                procTypeCode: t,
-                count: filteredJobs.filter(j => j.processTypeCode === t).length,
-              })).filter(x => x.count > 0)
-            : (lineageCounts?.byProcType ?? [])
-
-          const displayByTgtNm: { targetName: string; count: number }[] = isFiltered
-            ? Object.entries(
-                filteredJobs.reduce((acc, j) => {
-                  acc[j.targetName] = (acc[j.targetName] ?? 0) + 1
-                  return acc
-                }, {} as Record<string, number>)
-              ).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([targetName, count]) => ({ targetName, count }))
-            : (lineageCounts?.byTgtNm ?? [])
-
-          const successCount = displayByStatus.find(x => x.status === 'success')?.count ?? 0
-          const successRate  = displayTotal > 0 ? Math.round(successCount / displayTotal * 100) : 0
-          const hasSubFilters = lgDatasets.length > 0 || lgProcTypes.length > 0 || lgStatuses.length > 0
-
-          return (
+        ) : (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
 
               {/* ── 1. Source selector ────────────────────────────────────── */}
@@ -708,7 +717,6 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
               </Box>
             </Box>
           )
-        })()
       )}
 
       {/* ════════════════════════════════════════════════════════
@@ -844,7 +852,7 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
             />
 
             {/* Status Donut + Source Type (bar) + Target Type (bar) + Step Failures (bar) */}
-            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr 1.5fr 1fr', gap: 2 }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1.5fr 1.4fr 1.4fr 1fr', gap: 2 }}>
               {/* Status Summary — Donut */}
               <Box sx={{ backgroundColor: '#fff', border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
                 <WidgetShell title="Status Summary" source="DMF">

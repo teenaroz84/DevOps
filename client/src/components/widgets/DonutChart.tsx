@@ -14,12 +14,12 @@
  *   />
  */
 import React from 'react'
-import { Box, Typography } from '@mui/material'
+import { Box, Tooltip, Typography } from '@mui/material'
 import {
   PieChart,
   Pie,
   Cell,
-  Tooltip,
+  Tooltip as RechartsTooltip,
 } from 'recharts'
 
 export interface DonutSlice {
@@ -85,7 +85,7 @@ export const DonutChart: React.FC<DonutChartProps> = ({
                 <Cell key={i} fill={entry.color} />
               ))}
             </Pie>
-            <Tooltip
+            <RechartsTooltip
               formatter={(val: any) => [
                 typeof val === 'number' ? val.toLocaleString() : val,
               ]}
@@ -120,37 +120,43 @@ export const DonutChart: React.FC<DonutChartProps> = ({
 
         {/* Legend */}
         {showLegend && (
-          <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Box sx={{ flex: 1, minWidth: 80 }}>
             {data.map(item => (
-              <Box
+              <Tooltip
                 key={item.name}
-                sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}
+                title={`${item.name}: ${item.value.toLocaleString()}`}
+                placement="right"
+                arrow
               >
                 <Box
-                  sx={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: '50%',
-                    backgroundColor: item.color,
-                    flexShrink: 0,
-                  }}
-                />
-                <Typography
-                  sx={{
-                    fontSize: '11px',
-                    color: '#555',
-                    flex: 1,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}
+                  sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5, cursor: 'default' }}
                 >
-                  {item.name}
-                </Typography>
-                <Typography sx={{ fontSize: '12px', fontWeight: 700, color: '#222' }}>
-                  {item.value.toLocaleString()}
-                </Typography>
-              </Box>
+                  <Box
+                    sx={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: '50%',
+                      backgroundColor: item.color,
+                      flexShrink: 0,
+                    }}
+                  />
+                  <Typography
+                    sx={{
+                      fontSize: '11px',
+                      color: '#555',
+                      flex: 1,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {item.name}
+                  </Typography>
+                  <Typography sx={{ fontSize: '12px', fontWeight: 700, color: '#222', flexShrink: 0 }}>
+                    {item.value.toLocaleString()}
+                  </Typography>
+                </Box>
+              </Tooltip>
             ))}
           </Box>
         )}
