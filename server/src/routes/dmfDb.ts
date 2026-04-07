@@ -88,23 +88,24 @@ router.get('/run-status', async (_req: Request, res: Response) => {
 router.get('/lineage/meta', async (_req: Request, res: Response) => {
   try {
     const pool = getPgPool();
-    // Single scan: collect all distinct values in one pass
+    // Single scan — ORDER BY dropped from ARRAY_AGG (sort done in JS, avoids per-aggregate sort pass)
     const { rows } = await pool.query(`
       SELECT
-        ARRAY_AGG(DISTINCT src_cd      ORDER BY src_cd)      FILTER (WHERE src_cd      IS NOT NULL) AS src_cds,
-        ARRAY_AGG(DISTINCT dataset_nm  ORDER BY dataset_nm)  FILTER (WHERE dataset_nm  IS NOT NULL) AS dataset_nms,
-        ARRAY_AGG(DISTINCT src_nm      ORDER BY src_nm)      FILTER (WHERE src_nm      IS NOT NULL) AS src_nms,
-        ARRAY_AGG(DISTINCT tgt_nm      ORDER BY tgt_nm)      FILTER (WHERE tgt_nm      IS NOT NULL) AS tgt_nms,
-        ARRAY_AGG(DISTINCT proc_typ_cd ORDER BY proc_typ_cd) FILTER (WHERE proc_typ_cd IS NOT NULL) AS proc_typ_cds
+        ARRAY_AGG(DISTINCT src_cd)      FILTER (WHERE src_cd      IS NOT NULL) AS src_cds,
+        ARRAY_AGG(DISTINCT dataset_nm)  FILTER (WHERE dataset_nm  IS NOT NULL) AS dataset_nms,
+        ARRAY_AGG(DISTINCT src_nm)      FILTER (WHERE src_nm      IS NOT NULL) AS src_nms,
+        ARRAY_AGG(DISTINCT tgt_nm)      FILTER (WHERE tgt_nm      IS NOT NULL) AS tgt_nms,
+        ARRAY_AGG(DISTINCT proc_typ_cd) FILTER (WHERE proc_typ_cd IS NOT NULL) AS proc_typ_cds
       FROM edoops.DMF_RUN_MASTER
     `);
     const r = rows[0] || {};
+    const sort = (a: string[]) => (a ?? []).slice().sort();
     res.json({
-      sourceCodes:   r.src_cds      ?? [],
-      datasetNames:  r.dataset_nms  ?? [],
-      sourceNames:   r.src_nms      ?? [],
-      targetNames:   r.tgt_nms      ?? [],
-      procTypeCodes: r.proc_typ_cds ?? [],
+      sourceCodes:   sort(r.src_cds),
+      datasetNames:  sort(r.dataset_nms),
+      sourceNames:   sort(r.src_nms),
+      targetNames:   sort(r.tgt_nms),
+      procTypeCodes: sort(r.proc_typ_cds),
     });
   } catch (err: any) {
     res.status(500).json({ error: 'Query failed', details: err.message });
@@ -112,7 +113,7 @@ router.get('/lineage/meta', async (_req: Request, res: Response) => {
 });
 
 // ─── GET /api/dmf/lineage/counts ───────────────────────────
-// Single-pass: all GROUP BY aggregations in one query joined client-side.
+// GROUPING SETS: single table scan produces all five aggregation levels.
 router.get('/lineage/counts', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
@@ -128,56 +129,59 @@ router.get('/lineage/counts', async (req: Request, res: Response) => {
       ? `WHERE ${conditions.join(' AND ')} ${drClause}`
       : drClause ? `WHERE 1=1 ${drClause}` : '';
 
-    // One scan for each grouping dimension — still runs in parallel but each is O(N) not 5×O(N)
-    const [totalRes, statusRes, procTypeRes, srcCdRes, tgtNmRes] = await Promise.all([
-      pool.query(`
-        SELECT
-          COUNT(*) AS total,
-          SUM(CASE WHEN UPPER(run_status) = 'SUCCESS' THEN 1 ELSE 0 END) AS success_cnt,
-          SUM(CASE WHEN UPPER(run_status) = 'FAILED'  THEN 1 ELSE 0 END) AS failed_cnt
-        FROM edoops.DMF_RUN_MASTER ${where}
-      `, params),
-      pool.query(`
-        SELECT run_status, COUNT(*) AS cnt
-        FROM edoops.DMF_RUN_MASTER ${where}
-        GROUP BY run_status ORDER BY cnt DESC
-      `, params),
-      pool.query(`
-        SELECT proc_typ_cd, COUNT(*) AS cnt
-        FROM edoops.DMF_RUN_MASTER ${where}
-        GROUP BY proc_typ_cd ORDER BY cnt DESC
-      `, params),
-      pool.query(`
-        SELECT src_cd, COUNT(*) AS cnt
-        FROM edoops.DMF_RUN_MASTER ${where}
-        GROUP BY src_cd ORDER BY cnt DESC
-      `, params),
-      pool.query(`
-        SELECT tgt_nm, COUNT(*) AS cnt
-        FROM edoops.DMF_RUN_MASTER ${where}
-        GROUP BY tgt_nm ORDER BY cnt DESC
-      `, params),
-    ]);
+    // Single scan with GROUPING SETS — replaces 5 separate queries.
+    // GROUPING(col) returns 1 when col is rolled-up (not the grouping key for this row).
+    const { rows } = await pool.query(`
+      SELECT
+        run_status,
+        proc_typ_cd,
+        src_cd,
+        tgt_nm,
+        GROUPING(run_status)  AS g_rs,
+        GROUPING(proc_typ_cd) AS g_pc,
+        GROUPING(src_cd)      AS g_sc,
+        GROUPING(tgt_nm)      AS g_tn,
+        COUNT(*) AS cnt
+      FROM edoops.DMF_RUN_MASTER
+      ${where}
+      GROUP BY GROUPING SETS (
+        (),
+        (run_status),
+        (proc_typ_cd),
+        (src_cd),
+        (tgt_nm)
+      )
+    `, params);
 
-    res.json({
-      total: parseInt(totalRes.rows[0]?.total ?? '0'),
-      byStatus: statusRes.rows.map((r: any) => ({
-        status: (r.run_status || '').toUpperCase() === 'SUCCESS' ? 'success' : 'failed',
-        count: parseInt(r.cnt),
-      })),
-      byProcType: procTypeRes.rows.map((r: any) => ({
-        procTypeCode: r.proc_typ_cd || '',
-        count: parseInt(r.cnt),
-      })),
-      bySrcCd: srcCdRes.rows.map((r: any) => ({
-        sourceCode: r.src_cd || '',
-        count: parseInt(r.cnt),
-      })),
-      byTgtNm: tgtNmRes.rows.map((r: any) => ({
-        targetName: r.tgt_nm || '',
-        count: parseInt(r.cnt),
-      })),
-    });
+    let total = 0;
+    const byStatus:   { status: string; count: number }[]   = [];
+    const byProcType: { procTypeCode: string; count: number }[] = [];
+    const bySrcCd:    { sourceCode: string; count: number }[]   = [];
+    const byTgtNm:    { targetName: string; count: number }[]   = [];
+
+    for (const r of rows) {
+      const cnt = parseInt(r.cnt, 10);
+      const [grs, gpc, gsc, gtn] = [r.g_rs, r.g_pc, r.g_sc, r.g_tn].map(Number);
+      if (grs === 1 && gpc === 1 && gsc === 1 && gtn === 1) {
+        total = cnt; // grand total
+      } else if (grs === 0 && gpc === 1 && gsc === 1 && gtn === 1) {
+        byStatus.push({ status: (r.run_status || '').toUpperCase() === 'SUCCESS' ? 'success' : 'failed', count: cnt });
+      } else if (grs === 1 && gpc === 0 && gsc === 1 && gtn === 1) {
+        byProcType.push({ procTypeCode: r.proc_typ_cd || '', count: cnt });
+      } else if (grs === 1 && gpc === 1 && gsc === 0 && gtn === 1) {
+        bySrcCd.push({ sourceCode: r.src_cd || '', count: cnt });
+      } else if (grs === 1 && gpc === 1 && gsc === 1 && gtn === 0) {
+        byTgtNm.push({ targetName: r.tgt_nm || '', count: cnt });
+      }
+    }
+
+    // Sort descending by count (done in JS to avoid ORDER BY inside GROUPING SETS)
+    byStatus.sort((a, b) => b.count - a.count);
+    byProcType.sort((a, b) => b.count - a.count);
+    bySrcCd.sort((a, b) => b.count - a.count);
+    byTgtNm.sort((a, b) => b.count - a.count);
+
+    res.json({ total, byStatus, byProcType, bySrcCd, byTgtNm });
   } catch (err: any) {
     res.status(500).json({ error: 'Query failed', details: err.message });
   }
@@ -255,29 +259,31 @@ router.get('/lineage/jobs', async (req: Request, res: Response) => {
 router.get('/analytics/meta', async (_req: Request, res: Response) => {
   try {
     const pool = getPgPool();
+    // ORDER BY dropped inside ARRAY_AGG — avoids per-aggregate sort, done in JS instead
     const [detailMeta, masterMeta] = await Promise.all([
       pool.query(`
         SELECT
-          ARRAY_AGG(DISTINCT src_typ  ORDER BY src_typ)  FILTER (WHERE src_typ  IS NOT NULL) AS src_typs,
-          ARRAY_AGG(DISTINCT tgt_typ  ORDER BY tgt_typ)  FILTER (WHERE tgt_typ  IS NOT NULL) AS tgt_typs,
-          ARRAY_AGG(DISTINCT step_nm  ORDER BY step_nm)  FILTER (WHERE step_nm  IS NOT NULL) AS step_nms
+          ARRAY_AGG(DISTINCT src_typ)  FILTER (WHERE src_typ  IS NOT NULL) AS src_typs,
+          ARRAY_AGG(DISTINCT tgt_typ)  FILTER (WHERE tgt_typ  IS NOT NULL) AS tgt_typs,
+          ARRAY_AGG(DISTINCT step_nm)  FILTER (WHERE step_nm  IS NOT NULL) AS step_nms
         FROM edoops.DMF_RUN_STEP_DETAIL
       `),
       pool.query(`
         SELECT
-          ARRAY_AGG(DISTINCT run_status ORDER BY run_status) FILTER (WHERE run_status IS NOT NULL) AS run_statuses,
-          ARRAY_AGG(DISTINCT tgt_nm     ORDER BY tgt_nm)     FILTER (WHERE tgt_nm     IS NOT NULL) AS tgt_nms
+          ARRAY_AGG(DISTINCT run_status) FILTER (WHERE run_status IS NOT NULL) AS run_statuses,
+          ARRAY_AGG(DISTINCT tgt_nm)     FILTER (WHERE tgt_nm     IS NOT NULL) AS tgt_nms
         FROM edoops.DMF_RUN_MASTER
       `),
     ]);
     const d = detailMeta.rows[0] || {};
     const m = masterMeta.rows[0] || {};
+    const sort = (a: string[]) => (a ?? []).slice().sort();
     res.json({
-      sourceTypes:  d.src_typs      ?? [],
-      targetTypes:  d.tgt_typs      ?? [],
-      stepNames:    d.step_nms      ?? [],
-      runStatuses:  m.run_statuses  ?? [],
-      targetNames:  m.tgt_nms       ?? [],
+      sourceTypes:  sort(d.src_typs),
+      targetTypes:  sort(d.tgt_typs),
+      stepNames:    sort(d.step_nms),
+      runStatuses:  sort(m.run_statuses),
+      targetNames:  sort(m.tgt_nms),
     });
   } catch (err: any) {
     res.status(500).json({ error: 'Query failed', details: err.message });

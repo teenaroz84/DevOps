@@ -571,20 +571,11 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
               <StatCardGrid
                 items={[
                   { label: 'Sources', value: lineageMeta?.sourceCodes.length ?? 0, color: '#1565c0', bg: '#e3f2fd' },
-                  { label: 'Datasets', value: lineageMeta?.datasetNames.length ?? 0, color: '#2e7d32', bg: '#e8f5e9' },
-                  { label: 'Target Names', value: lineageMeta?.targetNames.length ?? 0, color: '#7b1fa2', bg: '#f3e5f5' },
-                  {
-                    label: isFiltered ? `Jobs ( ${lgSourceCode} )` : 'Total Jobs',
-                    value: isFiltered ? displayTotal.toLocaleString() : (lineageCounts?.total ?? 0).toLocaleString(),
-                    color: '#1976d2', bg: '#e3f2fd',
-                  },
-                  {
-                    label: 'Success Rate',
-                    value: successRate,
-                    unit: '%', color: '#2e7d32', bg: '#e8f5e9',
-                  },
+                  { label: 'Process Types', value: (lineageCounts?.byProcType ?? []).filter(x => x.count > 0).length, color: '#f57c00', bg: '#fff3e0' },
+                  { label: 'Success Rate', value: successRate, unit: '%', color: '#2e7d32', bg: '#e8f5e9' },
+                  ...(isFiltered ? [{ label: 'Filtered Jobs', value: displayTotal.toLocaleString(), color: '#1976d2', bg: '#e3f2fd' }] : []),
                 ]}
-                columns={5}
+                columns={4}
                 compact
               />
 
