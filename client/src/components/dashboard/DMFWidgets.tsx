@@ -10,6 +10,7 @@ import {
   TextField,
   ToggleButton,
   ToggleButtonGroup,
+  TablePagination,
 } from '@mui/material'
 import FilterListIcon from '@mui/icons-material/FilterList'
 import AccountTreeIcon from '@mui/icons-material/AccountTree'
@@ -44,6 +45,7 @@ interface LineageCounts {
   byProcType: { procTypeCode: string; count: number }[]
   bySrcCd:    { sourceCode: string; count: number }[]
   byTgtNm:    { targetName: string; count: number }[]
+  byDatasetNm: { name: string; count: number }[]
 }
 
 interface LineageJob {
@@ -94,6 +96,9 @@ const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void
   const [lineageCounts,     setLineageCounts]     = useState<LineageCounts | null>(null)
   const [lineageJobs,       setLineageJobs]       = useState<LineageJob[]>([])
   const [lineageJobsLoading, setLineageJobsLoading] = useState(false)
+  const [lineageJobsTotal,   setLineageJobsTotal]   = useState(0)
+  const [lineageJobsPage,    setLineageJobsPage]    = useState(0)
+  const lineageJobsPageSize = 100
   const [lineageLoaded,     setLineageLoaded]     = useState(false)
   const [lgSourceCode,      setLgSourceCode]      = useState('')
   const [lgDatasets,        setLgDatasets]        = useState<string[]>([])
@@ -136,6 +141,8 @@ const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void
     setLineageMeta(null)
     setLineageCounts(null)
     setLineageJobs([])
+    setLineageJobsTotal(0)
+    setLineageJobsPage(0)
     setLineageJobsLoading(false)
     setLgSourceCode('')
     setLgDatasets([])
@@ -171,8 +178,10 @@ const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void
     setStepFailureTrend([])
   }, [dateRange])
 
-
-  // ── Lazy-load Lineage meta + counts (never loads all jobs) ─
+  // Reset to page 0 when source changes
+  useEffect(() => {
+    setLineageJobsPage(0)
+  }, [lgSourceCode])
   useEffect(() => {
     if (activeTab !== 'lineage' || lineageLoaded) return
     if (useMock) {
@@ -214,49 +223,16 @@ const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void
     [isFiltered, lineageJobs, deferredDatasets, deferredProcTypes, deferredStatuses]
   )
 
-  const displayTotal = isFiltered ? filteredJobs.length : (lineageCounts?.total ?? 0)
-
-  const displayByStatus = useMemo(() => {
-    if (!isFiltered) return lineageCounts?.byStatus ?? []
-    let success = 0, failed = 0
-    for (const j of filteredJobs) {
-      if (j.status === 'success') success++
-      else failed++
-    }
-    return [
-      ...(success > 0 ? [{ status: 'success' as const, count: success }] : []),
-      ...(failed  > 0 ? [{ status: 'failed'  as const, count: failed  }] : []),
-    ]
-  }, [isFiltered, filteredJobs, lineageCounts])
-
-  const displayByProcType = useMemo(() => {
-    if (!isFiltered) return lineageCounts?.byProcType ?? []
-    const counts: Record<string, number> = {}
-    for (const j of filteredJobs) counts[j.processTypeCode] = (counts[j.processTypeCode] ?? 0) + 1
-    return ['ING','ENR','DIS','INT']
-      .map(t => ({ procTypeCode: t, count: counts[t] ?? 0 }))
-      .filter(x => x.count > 0)
-  }, [isFiltered, filteredJobs, lineageCounts])
-
-  const displayByTgtNm = useMemo(() => {
-    if (!isFiltered) return lineageCounts?.byTgtNm ?? []
-    const counts: Record<string, number> = {}
-    for (const j of filteredJobs) counts[j.targetName] = (counts[j.targetName] ?? 0) + 1
-    return Object.entries(counts)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10)
-      .map(([targetName, count]) => ({ targetName, count }))
-  }, [isFiltered, filteredJobs, lineageCounts])
-
-  const datasetBarData = useMemo(() => {
-    if (!isFiltered) return []
-    const counts: Record<string, number> = {}
-    for (const j of filteredJobs) counts[j.datasetName] = (counts[j.datasetName] ?? 0) + 1
-    return Object.entries(counts)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10)
-      .map(([name, count]) => ({ name: name.length > 16 ? name.slice(0, 16) + '\u2026' : name, count }))
-  }, [isFiltered, filteredJobs])
+  // Tableau approach: charts always read from lineageCounts (server-aggregated).
+  // The DB does all the work — browser just displays the results.
+  const displayTotal    = lineageCounts?.total ?? 0
+  const displayByStatus  = lineageCounts?.byStatus   ?? []
+  const displayByProcType = lineageCounts?.byProcType ?? []
+  const displayByTgtNm   = lineageCounts?.byTgtNm    ?? []
+  const datasetBarData   = (lineageCounts?.byDatasetNm ?? []).map(d => ({
+    name:  d.name.length > 16 ? d.name.slice(0, 16) + '\u2026' : d.name,
+    count: d.count,
+  }))
 
   const successCount = displayByStatus.find(x => x.status === 'success')?.count ?? 0
   const successRate  = displayTotal > 0 ? Math.round(successCount / displayTotal * 100) : 0
@@ -274,6 +250,16 @@ const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void
     setLgDatasets(draftDatasets)
     setLgProcTypes(draftProcTypes)
     setLgStatuses(draftStatuses)
+    // Re-fetch counts with all active filters — server aggregates, charts update instantly
+    if (!useMock) {
+      dmfService.getLineageCounts({
+        src_cd:      draftSource || undefined,
+        date_range:  dateRange,
+        proc_typ_cd: draftProcTypes.length ? draftProcTypes : undefined,
+        run_status:  draftStatuses.length  ? draftStatuses  : undefined,
+        dataset_nm:  draftDatasets.length  ? draftDatasets  : undefined,
+      }).then(setLineageCounts).catch(() => {})
+    }
   }
 
   const handleClearAll = () => {
@@ -309,11 +295,14 @@ const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void
       return
     }
     setLineageJobsLoading(true)
-    dmfService.getLineageJobs({ src_cd: lgSourceCode, date_range: dateRange })
-      .then(jobs => setLineageJobs(Array.isArray(jobs) ? jobs : []))
-      .catch(() => setLineageJobs([]))
+    dmfService.getLineageJobs({ src_cd: lgSourceCode, date_range: dateRange, page: lineageJobsPage, pageSize: lineageJobsPageSize })
+      .then((result: any) => {
+        setLineageJobs(result.rows ?? [])
+        setLineageJobsTotal(result.total ?? 0)
+      })
+      .catch(() => { setLineageJobs([]); setLineageJobsTotal(0) })
       .finally(() => setLineageJobsLoading(false))
-  }, [lineageLoaded, lgSourceCode, useMock, dateRange])
+  }, [lineageLoaded, lgSourceCode, useMock, dateRange, lineageJobsPage])
 
   // ── Lazy-load Analytics meta (once per mock toggle) ────────
   // Loaded on both lineage and analytics tabs (step names needed for lineage filter)
@@ -505,11 +494,11 @@ const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void
                     <FilterListIcon sx={{ fontSize: 15, color: '#1565c0' }} />
                     <Typography sx={{ fontWeight: 700, fontSize: '12px', color: '#37474f' }}>Filters</Typography>
                     <Typography sx={{ fontSize: '11px', color: '#aaa', ml: 0.5 }}>
-                      {!isFiltered
-                        ? `${lineageMeta?.sourceCodes.length ?? 0} sources · ${(lineageCounts?.total ?? 0).toLocaleString()} total jobs`
-                        : lineageJobsLoading
-                          ? 'Loading filtered jobs…'
-                          : `${filteredJobs.length} of ${lineageJobs.length} matching jobs`}
+                      {lineageJobsLoading
+                        ? 'Loading jobs…'
+                        : !isFiltered
+                          ? `${lineageMeta?.sourceCodes.length ?? 0} sources · ${(lineageCounts?.total ?? 0).toLocaleString()} total jobs`
+                          : `${(lineageCounts?.total ?? 0).toLocaleString()} jobs · page ${lineageJobsPage + 1} of ${Math.ceil(lineageJobsTotal / lineageJobsPageSize) || 1}`}
                     </Typography>
                     <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1 }}>
                       {(hasDraft || isFiltered || hasSubFilters) && (
@@ -628,6 +617,7 @@ const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void
                     />
                   </Box>
                 </Box>
+
                 {/* Full-width loading bar — much more visible than inline spinner */}
                 {lineageJobsLoading && (
                   <LinearProgress
@@ -791,15 +781,28 @@ const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void
                   ) : lineageJobsLoading ? (
                     <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}><CircularProgress size={28} /></Box>
                   ) : (
-                    <DataTable<LineageJob>
-                      columns={lineageColumns}
-                      accentColor="#1565c0"
-                      rows={filteredJobs}
-                      rowKey="id"
-                      maxHeight={360}
-                      emptyMessage="No lineage jobs match the current filters"
-                      compact
-                    />
+                    <>
+                      <DataTable<LineageJob>
+                        columns={lineageColumns}
+                        accentColor="#1565c0"
+                        rows={filteredJobs}
+                        rowKey="id"
+                        maxHeight={360}
+                        emptyMessage="No lineage jobs match the current filters"
+                        compact
+                      />
+                      {lineageJobsTotal > lineageJobsPageSize && (
+                        <TablePagination
+                          component="div"
+                          count={lineageJobsTotal}
+                          page={lineageJobsPage}
+                          rowsPerPage={lineageJobsPageSize}
+                          rowsPerPageOptions={[lineageJobsPageSize]}
+                          onPageChange={(_e, newPage) => setLineageJobsPage(newPage)}
+                          sx={{ borderTop: '1px solid #e8ecf1', fontSize: '12px', '.MuiTablePagination-displayedRows': { fontSize: '12px' } }}
+                        />
+                      )}
+                    </>
                   )}
                 </WidgetShell>
               </Box>

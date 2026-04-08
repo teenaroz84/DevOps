@@ -15,16 +15,22 @@ export const dmfService = {
 
   // ── Lineage tab ─────────────────────────────────────────
   getLineageMeta: (date_range?: string) => apiClient.get(`/api/dmf/lineage/meta${date_range ? `?date_range=${date_range}` : ''}`),
-  getLineageCounts: (filters: { src_cd?: string; date_range?: string } = {}) => {
+  getLineageCounts: (filters: { src_cd?: string; date_range?: string; proc_typ_cd?: string[]; run_status?: string[]; dataset_nm?: string[] } = {}) => {
     const params = new URLSearchParams()
     if (filters.src_cd && filters.src_cd !== 'All') params.set('src_cd', filters.src_cd)
     if (filters.date_range) params.set('date_range', filters.date_range)
+    if (filters.proc_typ_cd?.length) params.set('proc_typ_cd', filters.proc_typ_cd.join(','))
+    if (filters.run_status?.length) params.set('run_status', filters.run_status.join(','))
+    if (filters.dataset_nm?.length) params.set('dataset_nm', filters.dataset_nm.join(','))
     const qs = params.toString()
     return apiClient.get(`/api/dmf/lineage/counts${qs ? `?${qs}` : ''}`)
   },
-  getLineageJobs: (filters: { src_cd?: string; dataset_nm?: string; src_nm?: string; tgt_nm?: string; proc_typ_cd?: string; run_status?: string; step_nm?: string; date_range?: string } = {}) => {
+  getLineageJobs: (filters: { src_cd?: string; date_range?: string; page?: number; pageSize?: number } = {}) => {
     const params = new URLSearchParams()
-    Object.entries(filters).forEach(([k, v]) => { if (v && v !== 'All') params.set(k, v) })
+    if (filters.src_cd && filters.src_cd !== 'All') params.set('src_cd', filters.src_cd)
+    if (filters.date_range) params.set('date_range', filters.date_range)
+    if (filters.page !== undefined) params.set('page', String(filters.page))
+    if (filters.pageSize !== undefined) params.set('pageSize', String(filters.pageSize))
     const qs = params.toString()
     return apiClient.get(`/api/dmf/lineage/jobs${qs ? `?${qs}` : ''}`)
   },
