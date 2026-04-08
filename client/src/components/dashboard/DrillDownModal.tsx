@@ -291,7 +291,7 @@ const PRIORITY_COLORS: Record<string, { bg: string; color: string; border: strin
   P4: { bg: '#f3e5f5', color: '#6a1b9a', border: '#ce93d8' },
 }
 
-const SnIncidentDetail: React.FC<{ data: { priority: string; count: number; source?: string } }> = ({ data }) => {
+const SnIncidentDetail: React.FC<{ data: { priority: string; count: number; source?: string; platform?: string } }> = ({ data }) => {
   const { useMock: isMock } = useMockData()
   const [rows, setRows] = React.useState<any[]>([])
   const [loading, setLoading] = React.useState(true)
@@ -303,12 +303,12 @@ const SnIncidentDetail: React.FC<{ data: { priority: string; count: number; sour
       setRows(filtered)
       setLoading(false)
     } else {
-      servicenowService.getIncidentDetail(data.priority)
+      servicenowService.getIncidentDetail(data.priority, data.platform)
         .then((res: any) => setRows(Array.isArray(res) ? res : res?.data ?? []))
         .catch(() => setRows([]))
         .finally(() => setLoading(false))
     }
-  }, [data.priority, isMock])
+  }, [data.priority, data.platform, isMock])
 
   const pc = PRIORITY_COLORS[data.priority] ?? { bg: '#f5f5f5', color: '#555', border: '#ccc' }
 

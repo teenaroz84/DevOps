@@ -552,7 +552,7 @@ export const IncidentsWidget: React.FC<{ platform?: string | null }> = ({ platfo
                   if (idx < incidents.length) {
                     setDrillDown({
                       type: 'sn_priority',
-                      data: { priority: item.label, count: item.value as number, source: 'Open Incidents' },
+                      data: { priority: item.label, count: item.value as number, source: 'Open Incidents', platform: platform ?? undefined },
                     })
                   }
                 }}
@@ -628,7 +628,7 @@ export const MissedIncidentsWidget: React.FC<{ platform?: string | null }> = ({ 
                   if (idx < data.length) {
                     setDrillDown({
                       type: 'sn_priority',
-                      data: { priority: item.label, count: item.value as number, source: 'Missed SLA' },
+                      data: { priority: item.label, count: item.value as number, source: 'Missed SLA', platform: platform ?? undefined },
                     })
                   }
                 }}
@@ -642,7 +642,7 @@ export const MissedIncidentsWidget: React.FC<{ platform?: string | null }> = ({ 
                   <Box key={r.priority_field}
                     onClick={() => setDrillDown({
                       type: 'sn_priority',
-                      data: { priority: r.priority_field, count: r.incident_count, source: 'Missed SLA' },
+                      data: { priority: r.priority_field, count: r.incident_count, source: 'Missed SLA', platform: platform ?? undefined },
                     })}
                     sx={{ cursor: 'pointer', borderRadius: 1, p: 0.5, '&:hover': { backgroundColor: '#f5f5f5' } }}
                   >

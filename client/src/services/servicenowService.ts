@@ -9,8 +9,13 @@ export const servicenowService = {
     apiClient.get(`/api/servicenow/missed-incidents${platform ? `?platform=${encodeURIComponent(platform)}` : ''}`),
   getIncidentList:      (platform?: string) =>
     apiClient.get(`/api/servicenow/incident-list${platform ? `?platform=${encodeURIComponent(platform)}` : ''}`),
-  getIncidentDetail:    (priority?: string) =>
-    apiClient.get(`/api/servicenow/incident-detail${priority ? `?priority=${encodeURIComponent(priority)}` : ''}`),
+  getIncidentDetail:    (priority?: string, platform?: string) => {
+    const params = new URLSearchParams()
+    if (priority) params.set('priority', priority)
+    if (platform) params.set('platform', platform)
+    const qs = params.toString()
+    return apiClient.get(`/api/servicenow/incident-detail${qs ? `?${qs}` : ''}`)
+  },
   getEmergencyChanges:  (platform?: string) =>
     apiClient.get(`/api/servicenow/emergency-changes${platform ? `?platform=${encodeURIComponent(platform)}` : ''}`),
 }

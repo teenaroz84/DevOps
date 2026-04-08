@@ -69,7 +69,8 @@ router.get('/incident-list', async (req: Request, res: Response) => {
     const platformClause = platform ? `AND sn.sninc_applkp_pltf_nm = $1` : '';
     const params = platform ? [platform] : [];
     const result = await pool.query(`
-      SELECT sn.sninc_inc_num        AS sninc_inc_num,
+      SELECT DISTINCT ON (sn.sninc_inc_num)
+             sn.sninc_inc_num        AS sninc_inc_num,
              sg.short_priority       AS priority_field,
              sn.sninc_capability     AS sninc_capability,
              sn.sninc_short_desc     AS sninc_short_desc,
@@ -79,7 +80,7 @@ router.get('/incident-list', async (req: Request, res: Response) => {
         ON   sn.sninc_priority = sg.snow_priority
       WHERE  sg.short_priority IN ('P3','P4')
         ${platformClause}
-      ORDER BY sg.short_priority, sn.sninc_inc_num
+      ORDER BY sn.sninc_inc_num, sn.sninc_updated_on DESC
       LIMIT 200
     `, params);
     res.json(result.rows);
@@ -115,15 +116,23 @@ router.get('/emergency-changes', async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/servicenow/incident-detail?priority=P1
-// Full incident records for a given priority (defaults to P1-P4)
+// GET /api/servicenow/incident-detail?priority=P1&platform=<value>
+// Full incident records for a given priority; optionally filtered by platform
 router.get('/incident-detail', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
     const priority = req.query.priority as string | undefined;
+    const platform = req.query.platform as string | undefined;
     const priorities = priority ? [priority] : ['P1', 'P2', 'P3', 'P4'];
+    const params: any[] = [priorities];
+    let platformClause = '';
+    if (platform) {
+      params.push(platform);
+      platformClause = `AND sn.sninc_applkp_pltf_nm = $${params.length}`;
+    }
     const result = await pool.query(`
-      SELECT sn.sninc_inc_num        AS sninc_inc_num,
+      SELECT DISTINCT ON (sn.sninc_inc_num)
+             sn.sninc_inc_num        AS sninc_inc_num,
              sg.short_priority       AS priority_field,
              sn.sninc_capability     AS sninc_capability,
              sn.sninc_short_desc     AS sninc_short_desc,
@@ -131,11 +140,11 @@ router.get('/incident-detail', async (req: Request, res: Response) => {
       FROM   edoops.service_now_inc sn
       JOIN   edoops.sla_glossary    sg
         ON   sn.sninc_priority = sg.snow_priority
-      WHERE  sn.sninc_applkp_pltf_nm LIKE 'BI%'
-        AND  sg.short_priority = ANY($1)
-      ORDER BY sg.short_priority, sn.sninc_inc_num
+      WHERE  sg.short_priority = ANY($1)
+        ${platformClause}
+      ORDER BY sn.sninc_inc_num, sn.sninc_updated_on DESC
       LIMIT 500
-    `, [priorities]);
+    `, params);
     res.json(result.rows);
   } catch (err: any) {
     console.error('ServiceNow incident-detail error:', err.message);
