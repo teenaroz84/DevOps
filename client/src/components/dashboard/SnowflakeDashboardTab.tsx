@@ -306,7 +306,7 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
       {/* Header bar */}
       <Paper
         elevation={0}
-        sx={{ borderRadius: 0, borderBottom: '1px solid #e8ecf1', px: 2, pt: 1.5, pb: 0, backgroundColor: '#fff' }}
+        sx={{ borderRadius: 0, borderBottom: '1px solid #e8ecf1', px: 2, pt: 1.5, pb: 0, backgroundColor: '#fff', position: 'sticky', top: 0, zIndex: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.07)' }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>

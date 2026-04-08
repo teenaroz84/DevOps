@@ -4,6 +4,7 @@ import {
   Typography,
   Chip,
   CircularProgress,
+  LinearProgress,
   Button,
   Autocomplete,
   TextField,
@@ -82,7 +83,7 @@ const DMF_DATE_RANGE_OPTIONS = [
   { value: '1y', label: 'Last 1 Year' },
 ]
 
-export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => void }> = ({ onOpenAgent }) => {
+const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void }> = ({ onOpenAgent }) => {
   const { useMock } = useMockData()
   const [activeTab, setActiveTab] = useState<DMFTab>('lineage')
   const [dateRange, setDateRange] = useState<string>('3m')
@@ -99,6 +100,12 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
   const [lgProcTypes,       setLgProcTypes]       = useState<string[]>([])
   const [lgStatuses,        setLgStatuses]        = useState<string[]>([])
 
+  // Draft state — Autocompletes write here; only committed to applied state on Apply click
+  const [draftSource,    setDraftSource]    = useState('')
+  const [draftDatasets,  setDraftDatasets]  = useState<string[]>([])
+  const [draftProcTypes, setDraftProcTypes] = useState<string[]>([])
+  const [draftStatuses,  setDraftStatuses]  = useState<string[]>([])
+
   // ── Analytics state ───────────────────────────────────────
   const [analytics,       setAnalytics]       = useState<AnalyticsData | null>(null)
   const [analyticsMeta,       setAnalyticsMeta]       = useState<{ sourceTypes: string[]; targetTypes: string[]; stepNames: string[]; runStatuses: string[] } | null>(null)
@@ -108,6 +115,12 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
   const [anlStepNames,        setAnlStepNames]        = useState<string[]>([])
   const [anlRunStatuses,      setAnlRunStatuses]      = useState<string[]>([])
   const [anlLoading,          setAnlLoading]          = useState(false)
+
+  // Draft state for analytics filters
+  const [draftAnlSrcType,     setDraftAnlSrcType]     = useState<string | null>(null)
+  const [draftAnlTgtTypes,    setDraftAnlTgtTypes]    = useState<string[]>([])
+  const [draftAnlStepNames,   setDraftAnlStepNames]   = useState<string[]>([])
+  const [draftAnlRunStatuses, setDraftAnlRunStatuses] = useState<string[]>([])
 
   // ── Trends state ──────────────────────────────────────────
   const [statusTrend,      setStatusTrend]      = useState<any[]>([])
@@ -128,10 +141,15 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
     setLgDatasets([])
     setLgProcTypes([])
     setLgStatuses([])
+    setDraftSource('')
+    setDraftDatasets([])
+    setDraftProcTypes([])
+    setDraftStatuses([])
     setAnalytics(null)
     setAnalyticsMetaLoaded(false)
     setAnalyticsMeta(null)
     setAnlSrcType(null); setAnlTgtTypes([]); setAnlStepNames([]); setAnlRunStatuses([])
+    setDraftAnlSrcType(null); setDraftAnlTgtTypes([]); setDraftAnlStepNames([]); setDraftAnlRunStatuses([])
     setTrendsLoaded(false)
     setStatusTrend([])
     setRowsTrend([])
@@ -153,13 +171,6 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
     setStepFailureTrend([])
   }, [dateRange])
 
-
-  // ── Reset sub-filters when source changes ──────────────────────
-  useEffect(() => {
-    setLgDatasets([])
-    setLgProcTypes([])
-    setLgStatuses([])
-  }, [lgSourceCode])
 
   // ── Lazy-load Lineage meta + counts (never loads all jobs) ─
   useEffect(() => {
@@ -250,6 +261,43 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
   const successCount = displayByStatus.find(x => x.status === 'success')?.count ?? 0
   const successRate  = displayTotal > 0 ? Math.round(successCount / displayTotal * 100) : 0
   const hasSubFilters = lgDatasets.length > 0 || lgProcTypes.length > 0 || lgStatuses.length > 0
+
+  const hasDraft = !!draftSource || draftDatasets.length > 0 || draftProcTypes.length > 0 || draftStatuses.length > 0
+  const isDirty =
+    draftSource !== lgSourceCode ||
+    JSON.stringify([...draftDatasets].sort()) !== JSON.stringify([...lgDatasets].sort()) ||
+    JSON.stringify([...draftProcTypes].sort()) !== JSON.stringify([...lgProcTypes].sort()) ||
+    JSON.stringify([...draftStatuses].sort()) !== JSON.stringify([...lgStatuses].sort())
+
+  const handleApplyFilters = () => {
+    setLgSourceCode(draftSource)
+    setLgDatasets(draftDatasets)
+    setLgProcTypes(draftProcTypes)
+    setLgStatuses(draftStatuses)
+  }
+
+  const handleClearAll = () => {
+    setDraftSource(''); setDraftDatasets([]); setDraftProcTypes([]); setDraftStatuses([])
+    setLgSourceCode(''); setLgDatasets([]); setLgProcTypes([]); setLgStatuses([])
+  }
+
+  const anlIsDirty =
+    draftAnlSrcType !== anlSrcType ||
+    JSON.stringify([...draftAnlTgtTypes].sort()) !== JSON.stringify([...anlTgtTypes].sort()) ||
+    JSON.stringify([...draftAnlStepNames].sort()) !== JSON.stringify([...anlStepNames].sort()) ||
+    JSON.stringify([...draftAnlRunStatuses].sort()) !== JSON.stringify([...anlRunStatuses].sort())
+
+  const handleApplyAnalytics = () => {
+    setAnlSrcType(draftAnlSrcType)
+    setAnlTgtTypes(draftAnlTgtTypes)
+    setAnlStepNames(draftAnlStepNames)
+    setAnlRunStatuses(draftAnlRunStatuses)
+  }
+
+  const handleClearAnalytics = () => {
+    setDraftAnlSrcType(null); setDraftAnlTgtTypes([]); setDraftAnlStepNames([]); setDraftAnlRunStatuses([])
+    setAnlSrcType(null);      setAnlTgtTypes([]);      setAnlStepNames([]);      setAnlRunStatuses([])
+  }
 
   useEffect(() => {
     if (!lineageLoaded || !lgSourceCode) {
@@ -450,114 +498,146 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
         ) : (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
 
-              {/* ── 1. Source selector ────────────────────────────────────── */}
               {/* ── 1. Combined Filters ────────────────────────────────────── */}
-              <Box sx={{ backgroundColor: '#fff', border: '1px solid #e0e0e0', borderRadius: 2, p: 1 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
-                  <FilterListIcon sx={{ fontSize: 15, color: '#1565c0' }} />
-                  <Typography sx={{ fontWeight: 700, fontSize: '12px', color: '#37474f' }}>Filters</Typography>
-                  <Typography sx={{ fontSize: '11px', color: '#aaa', ml: 0.5 }}>
-                    {!isFiltered
-                      ? `${lineageMeta?.sourceCodes.length ?? 0} sources · ${(lineageCounts?.total ?? 0).toLocaleString()} total jobs`
-                      : lineageJobsLoading
-                        ? 'Loading filtered jobs…'
-                        : `${filteredJobs.length} of ${lineageJobs.length} matching jobs`}
-                  </Typography>
-                  {(isFiltered || hasSubFilters) && (
-                    <Button
-                      size="small"
-                      onClick={() => { setLgSourceCode(''); setLgDatasets([]); setLgProcTypes([]); setLgStatuses([]) }}
-                      sx={{ ml: 'auto', fontSize: '11px', color: '#d32f2f', textTransform: 'none', height: 22, minWidth: 'auto', px: 1 }}
-                    >
-                      Clear All
-                    </Button>
-                  )}
-                </Box>
-                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-                  {/* Source — searchable, clearable single-select */}
-                  <Autocomplete
-                    options={lineageMeta?.sourceCodes ?? []}
-                    value={lgSourceCode || null}
-                    onChange={(_, v) => setLgSourceCode(v ?? '')}
-                    size="small"
-                    sx={{ minWidth: 160, '& .MuiInputBase-root': { fontSize: '11px' }, '& .MuiInputLabel-root': { fontSize: '11px' } }}
-                    renderInput={(params) => (
-                      <TextField {...params} label="Source" placeholder="All" size="small" InputLabelProps={{ shrink: true }} />
-                    )}
-                    ListboxProps={{ sx: { fontSize: '12px' } }}
-                  />
-                  {/* Dataset — multi-select */}
-                  <Autocomplete
-                    multiple
-                    limitTags={2}
-                    disableCloseOnSelect
-                    options={lineageMeta?.datasetNames ?? []}
-                    value={lgDatasets}
-                    onChange={(_, v) => setLgDatasets(v)}
-                    size="small"
-                    sx={{ minWidth: 180, '& .MuiInputBase-root': { fontSize: '11px' }, '& .MuiInputLabel-root': { fontSize: '11px' } }}
-                    renderInput={(params) => (
-                      <TextField {...params} label="Dataset" placeholder="All" size="small" InputLabelProps={{ shrink: true }} />
-                    )}
-                    renderTags={(val, getTagProps) =>
-                      val.map((opt, idx) => (
-                        <Chip {...getTagProps({ index: idx })} key={opt} label={opt} size="small" sx={{ fontSize: '10px', height: 18 }} />
-                      ))
-                    }
-                    ListboxProps={{ sx: { fontSize: '12px' } }}
-                  />
-                  {/* Process Type — multi-select */}
-                  <Autocomplete
-                    multiple
-                    limitTags={2}
-                    disableCloseOnSelect
-                    options={['ING', 'ENR', 'DIS', 'INT']}
-                    value={lgProcTypes}
-                    onChange={(_, v) => setLgProcTypes(v)}
-                    size="small"
-                    sx={{ minWidth: 140, '& .MuiInputBase-root': { fontSize: '11px' }, '& .MuiInputLabel-root': { fontSize: '11px' } }}
-                    renderInput={(params) => (
-                      <TextField {...params} label="Process Type" placeholder="All" size="small" InputLabelProps={{ shrink: true }} />
-                    )}
-                    renderTags={(val, getTagProps) =>
-                      val.map((opt, idx) => (
-                        <Chip {...getTagProps({ index: idx })} key={opt} label={opt} size="small" sx={{ fontSize: '10px', height: 18 }} />
-                      ))
-                    }
-                    ListboxProps={{ sx: { fontSize: '12px' } }}
-                  />
-                  {/* Status — multi-select */}
-                  <Autocomplete
-                    multiple
-                    limitTags={2}
-                    disableCloseOnSelect
-                    options={['success', 'failed']}
-                    value={lgStatuses}
-                    onChange={(_, v) => setLgStatuses(v)}
-                    size="small"
-                    sx={{ minWidth: 120, '& .MuiInputBase-root': { fontSize: '11px' }, '& .MuiInputLabel-root': { fontSize: '11px' } }}
-                    renderInput={(params) => (
-                      <TextField {...params} label="Status" placeholder="All" size="small" InputLabelProps={{ shrink: true }} />
-                    )}
-                    renderTags={(val, getTagProps) =>
-                      val.map((opt, idx) => (
-                        <Chip
-                          {...getTagProps({ index: idx })}
-                          key={opt}
-                          label={opt}
+              <Box sx={{ backgroundColor: '#fff', border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
+                <Box sx={{ p: 1 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
+                    <FilterListIcon sx={{ fontSize: 15, color: '#1565c0' }} />
+                    <Typography sx={{ fontWeight: 700, fontSize: '12px', color: '#37474f' }}>Filters</Typography>
+                    <Typography sx={{ fontSize: '11px', color: '#aaa', ml: 0.5 }}>
+                      {!isFiltered
+                        ? `${lineageMeta?.sourceCodes.length ?? 0} sources · ${(lineageCounts?.total ?? 0).toLocaleString()} total jobs`
+                        : lineageJobsLoading
+                          ? 'Loading filtered jobs…'
+                          : `${filteredJobs.length} of ${lineageJobs.length} matching jobs`}
+                    </Typography>
+                    <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1 }}>
+                      {(hasDraft || isFiltered || hasSubFilters) && (
+                        <Button
                           size="small"
-                          sx={{
-                            fontSize: '10px', height: 18,
-                            backgroundColor: opt === 'success' ? '#e8f5e9' : '#fce4ec',
-                            color: opt === 'success' ? '#2e7d32' : '#c62828',
-                          }}
-                        />
-                      ))
-                    }
-                    ListboxProps={{ sx: { fontSize: '12px' } }}
-                  />
-                  {lineageJobsLoading && <CircularProgress size={16} sx={{ mt: 1 }} />}
+                          onClick={handleClearAll}
+                          sx={{ fontSize: '11px', color: '#d32f2f', textTransform: 'none', height: 26, minWidth: 'auto', px: 1 }}
+                        >
+                          Clear All
+                        </Button>
+                      )}
+                      <Button
+                        size="small"
+                        variant="contained"
+                        disabled={!isDirty}
+                        onClick={handleApplyFilters}
+                        sx={{
+                          fontSize: '11px', fontWeight: 700, height: 26, px: 1.5,
+                          textTransform: 'none',
+                          backgroundColor: isDirty ? '#1565c0' : undefined,
+                          '&:hover': { backgroundColor: '#0d47a1' },
+                        }}
+                      >
+                        Apply Filters
+                      </Button>
+                    </Box>
+                  </Box>
+                  <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                    {/* Source — searchable, clearable single-select */}
+                    <Autocomplete
+                      options={lineageMeta?.sourceCodes ?? []}
+                      value={draftSource || null}
+                      onChange={(_, v) => {
+                        setDraftSource(v ?? '')
+                        // reset sub-filters when source changes
+                        setDraftDatasets([])
+                        setDraftProcTypes([])
+                        setDraftStatuses([])
+                      }}
+                      size="small"
+                      sx={{ minWidth: 160, '& .MuiInputBase-root': { fontSize: '11px' }, '& .MuiInputLabel-root': { fontSize: '11px' } }}
+                      renderInput={(params) => (
+                        <TextField {...params} label="Source" placeholder="All" size="small" InputLabelProps={{ shrink: true }} />
+                      )}
+                      ListboxProps={{ sx: { fontSize: '12px' } }}
+                    />
+                    {/* Dataset — multi-select */}
+                    <Autocomplete
+                      multiple
+                      limitTags={2}
+                      disableCloseOnSelect
+                      options={lineageMeta?.datasetNames ?? []}
+                      value={draftDatasets}
+                      onChange={(_, v) => setDraftDatasets(v)}
+                      size="small"
+                      sx={{ minWidth: 180, '& .MuiInputBase-root': { fontSize: '11px' }, '& .MuiInputLabel-root': { fontSize: '11px' } }}
+                      renderInput={(params) => (
+                        <TextField {...params} label="Dataset" placeholder="All" size="small" InputLabelProps={{ shrink: true }} />
+                      )}
+                      renderTags={(val, getTagProps) =>
+                        val.map((opt, idx) => (
+                          <Chip {...getTagProps({ index: idx })} key={opt} label={opt} size="small" sx={{ fontSize: '10px', height: 18 }} />
+                        ))
+                      }
+                      ListboxProps={{ sx: { fontSize: '12px' } }}
+                    />
+                    {/* Process Type — multi-select */}
+                    <Autocomplete
+                      multiple
+                      limitTags={2}
+                      disableCloseOnSelect
+                      options={['ING', 'ENR', 'DIS', 'INT']}
+                      value={draftProcTypes}
+                      onChange={(_, v) => setDraftProcTypes(v)}
+                      size="small"
+                      sx={{ minWidth: 140, '& .MuiInputBase-root': { fontSize: '11px' }, '& .MuiInputLabel-root': { fontSize: '11px' } }}
+                      renderInput={(params) => (
+                        <TextField {...params} label="Process Type" placeholder="All" size="small" InputLabelProps={{ shrink: true }} />
+                      )}
+                      renderTags={(val, getTagProps) =>
+                        val.map((opt, idx) => (
+                          <Chip {...getTagProps({ index: idx })} key={opt} label={opt} size="small" sx={{ fontSize: '10px', height: 18 }} />
+                        ))
+                      }
+                      ListboxProps={{ sx: { fontSize: '12px' } }}
+                    />
+                    {/* Status — multi-select */}
+                    <Autocomplete
+                      multiple
+                      limitTags={2}
+                      disableCloseOnSelect
+                      options={['success', 'failed']}
+                      value={draftStatuses}
+                      onChange={(_, v) => setDraftStatuses(v)}
+                      size="small"
+                      sx={{ minWidth: 120, '& .MuiInputBase-root': { fontSize: '11px' }, '& .MuiInputLabel-root': { fontSize: '11px' } }}
+                      renderInput={(params) => (
+                        <TextField {...params} label="Status" placeholder="All" size="small" InputLabelProps={{ shrink: true }} />
+                      )}
+                      renderTags={(val, getTagProps) =>
+                        val.map((opt, idx) => (
+                          <Chip
+                            {...getTagProps({ index: idx })}
+                            key={opt}
+                            label={opt}
+                            size="small"
+                            sx={{
+                              fontSize: '10px', height: 18,
+                              backgroundColor: opt === 'success' ? '#e8f5e9' : '#fce4ec',
+                              color: opt === 'success' ? '#2e7d32' : '#c62828',
+                            }}
+                          />
+                        ))
+                      }
+                      ListboxProps={{ sx: { fontSize: '12px' } }}
+                    />
+                  </Box>
                 </Box>
+                {/* Full-width loading bar — much more visible than inline spinner */}
+                {lineageJobsLoading && (
+                  <LinearProgress
+                    sx={{
+                      height: 3,
+                      backgroundColor: '#bbdefb',
+                      '& .MuiLinearProgress-bar': { backgroundColor: '#1565c0' },
+                    }}
+                  />
+                )}
               </Box>
 
               {/* ── 2. KPI strip ───────────────────────────────────────────── */}
@@ -736,106 +816,132 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
         ) : (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {/* Analytics Filter Bar */}
-            <Box sx={{ backgroundColor: '#fff', border: '1px solid #e0e0e0', borderRadius: 2, p: 1 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
-                <FilterListIcon sx={{ fontSize: 15, color: '#1976d2' }} />
-                <Typography sx={{ fontWeight: 700, fontSize: '12px', color: '#37474f' }}>Filters</Typography>
-                <Typography sx={{ fontSize: '11px', color: '#aaa', ml: 0.5 }}>Charts refresh on filter change</Typography>
-                {(anlSrcType !== null || anlTgtTypes.length > 0 || anlStepNames.length > 0 || anlRunStatuses.length > 0) && (
-                  <Button
-                    size="small"
-                    onClick={() => { setAnlSrcType(null); setAnlTgtTypes([]); setAnlStepNames([]); setAnlRunStatuses([]) }}
-                    sx={{ ml: 'auto', fontSize: '11px', color: '#d32f2f', textTransform: 'none', height: 22, minWidth: 'auto', px: 1 }}
-                  >
-                    Clear All
-                  </Button>
-                )}
-              </Box>
-              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-                {/* Source Type — single-select searchable */}
-                <Autocomplete
-                  options={analyticsMeta?.sourceTypes ?? []}
-                  value={anlSrcType}
-                  onChange={(_, v) => setAnlSrcType(v)}
-                  size="small"
-                  sx={{ minWidth: 160, '& .MuiInputBase-root': { fontSize: '11px' }, '& .MuiInputLabel-root': { fontSize: '11px' } }}
-                  renderInput={(params) => (
-                    <TextField {...params} label="Source Type" placeholder="All" size="small" InputLabelProps={{ shrink: true }} />
-                  )}
-                  ListboxProps={{ sx: { fontSize: '12px' } }}
-                />
-                {/* Target Type — multi-select */}
-                <Autocomplete
-                  multiple
-                  limitTags={2}
-                  disableCloseOnSelect
-                  options={analyticsMeta?.targetTypes ?? []}
-                  value={anlTgtTypes}
-                  onChange={(_, v) => setAnlTgtTypes(v)}
-                  size="small"
-                  sx={{ minWidth: 160, '& .MuiInputBase-root': { fontSize: '11px' }, '& .MuiInputLabel-root': { fontSize: '11px' } }}
-                  renderInput={(params) => (
-                    <TextField {...params} label="Target Type" placeholder="All" size="small" InputLabelProps={{ shrink: true }} />
-                  )}
-                  renderTags={(val, getTagProps) =>
-                    val.map((opt, idx) => (
-                      <Chip {...getTagProps({ index: idx })} key={opt} label={opt} size="small" sx={{ fontSize: '10px', height: 18 }} />
-                    ))
-                  }
-                  ListboxProps={{ sx: { fontSize: '12px' } }}
-                />
-                {/* Step Name — multi-select, searchable */}
-                <Autocomplete
-                  multiple
-                  limitTags={2}
-                  disableCloseOnSelect
-                  options={analyticsMeta?.stepNames ?? []}
-                  value={anlStepNames}
-                  onChange={(_, v) => setAnlStepNames(v)}
-                  size="small"
-                  sx={{ minWidth: 180, '& .MuiInputBase-root': { fontSize: '11px' }, '& .MuiInputLabel-root': { fontSize: '11px' } }}
-                  renderInput={(params) => (
-                    <TextField {...params} label="Step Name" placeholder="All" size="small" InputLabelProps={{ shrink: true }} />
-                  )}
-                  renderTags={(val, getTagProps) =>
-                    val.map((opt, idx) => (
-                      <Chip {...getTagProps({ index: idx })} key={opt} label={opt} size="small" sx={{ fontSize: '10px', height: 18 }} />
-                    ))
-                  }
-                  ListboxProps={{ sx: { fontSize: '12px' } }}
-                />
-                {/* Run Status — multi-select */}
-                <Autocomplete
-                  multiple
-                  limitTags={2}
-                  disableCloseOnSelect
-                  options={analyticsMeta?.runStatuses ?? []}
-                  value={anlRunStatuses}
-                  onChange={(_, v) => setAnlRunStatuses(v)}
-                  size="small"
-                  sx={{ minWidth: 140, '& .MuiInputBase-root': { fontSize: '11px' }, '& .MuiInputLabel-root': { fontSize: '11px' } }}
-                  renderInput={(params) => (
-                    <TextField {...params} label="Run Status" placeholder="All" size="small" InputLabelProps={{ shrink: true }} />
-                  )}
-                  renderTags={(val, getTagProps) =>
-                    val.map((opt, idx) => (
-                      <Chip
-                        {...getTagProps({ index: idx })}
-                        key={opt}
-                        label={opt}
+            <Box sx={{ backgroundColor: '#fff', border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
+              <Box sx={{ p: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
+                  <FilterListIcon sx={{ fontSize: 15, color: '#1976d2' }} />
+                  <Typography sx={{ fontWeight: 700, fontSize: '12px', color: '#37474f' }}>Filters</Typography>
+                  <Typography sx={{ fontSize: '11px', color: '#aaa', ml: 0.5 }}>Select filters then hit Apply</Typography>
+                  <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1 }}>
+                    {(draftAnlSrcType !== null || draftAnlTgtTypes.length > 0 || draftAnlStepNames.length > 0 || draftAnlRunStatuses.length > 0 || anlSrcType !== null || anlTgtTypes.length > 0 || anlStepNames.length > 0 || anlRunStatuses.length > 0) && (
+                      <Button
                         size="small"
-                        sx={{
-                          fontSize: '10px', height: 18,
-                          backgroundColor: opt === 'success' ? '#e8f5e9' : opt === 'failed' ? '#fce4ec' : '#f3e5f5',
-                          color: opt === 'success' ? '#2e7d32' : opt === 'failed' ? '#c62828' : '#7b1fa2',
-                        }}
-                      />
-                    ))
-                  }
-                  ListboxProps={{ sx: { fontSize: '12px' } }}
-                />
-                {anlLoading && <CircularProgress size={16} sx={{ mt: 1 }} />}
+                        onClick={handleClearAnalytics}
+                        sx={{ fontSize: '11px', color: '#d32f2f', textTransform: 'none', height: 26, minWidth: 'auto', px: 1 }}
+                      >
+                        Clear All
+                      </Button>
+                    )}
+                    <Button
+                      size="small"
+                      variant="contained"
+                      disabled={!anlIsDirty}
+                      onClick={handleApplyAnalytics}
+                      sx={{
+                        fontSize: '11px', fontWeight: 700, height: 26, px: 1.5,
+                        textTransform: 'none',
+                        backgroundColor: anlIsDirty ? '#1976d2' : undefined,
+                        '&:hover': { backgroundColor: '#1565c0' },
+                      }}
+                    >
+                      Apply Filters
+                    </Button>
+                  </Box>
+                </Box>
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                  {/* Source Type — single-select searchable */}
+                  <Autocomplete
+                    options={analyticsMeta?.sourceTypes ?? []}
+                    value={draftAnlSrcType}
+                    onChange={(_, v) => setDraftAnlSrcType(v)}
+                    size="small"
+                    sx={{ minWidth: 160, '& .MuiInputBase-root': { fontSize: '11px' }, '& .MuiInputLabel-root': { fontSize: '11px' } }}
+                    renderInput={(params) => (
+                      <TextField {...params} label="Source Type" placeholder="All" size="small" InputLabelProps={{ shrink: true }} />
+                    )}
+                    ListboxProps={{ sx: { fontSize: '12px' } }}
+                  />
+                  {/* Target Type — multi-select */}
+                  <Autocomplete
+                    multiple
+                    limitTags={2}
+                    disableCloseOnSelect
+                    options={analyticsMeta?.targetTypes ?? []}
+                    value={draftAnlTgtTypes}
+                    onChange={(_, v) => setDraftAnlTgtTypes(v)}
+                    size="small"
+                    sx={{ minWidth: 160, '& .MuiInputBase-root': { fontSize: '11px' }, '& .MuiInputLabel-root': { fontSize: '11px' } }}
+                    renderInput={(params) => (
+                      <TextField {...params} label="Target Type" placeholder="All" size="small" InputLabelProps={{ shrink: true }} />
+                    )}
+                    renderTags={(val, getTagProps) =>
+                      val.map((opt, idx) => (
+                        <Chip {...getTagProps({ index: idx })} key={opt} label={opt} size="small" sx={{ fontSize: '10px', height: 18 }} />
+                      ))
+                    }
+                    ListboxProps={{ sx: { fontSize: '12px' } }}
+                  />
+                  {/* Step Name — multi-select, searchable */}
+                  <Autocomplete
+                    multiple
+                    limitTags={2}
+                    disableCloseOnSelect
+                    options={analyticsMeta?.stepNames ?? []}
+                    value={draftAnlStepNames}
+                    onChange={(_, v) => setDraftAnlStepNames(v)}
+                    size="small"
+                    sx={{ minWidth: 180, '& .MuiInputBase-root': { fontSize: '11px' }, '& .MuiInputLabel-root': { fontSize: '11px' } }}
+                    renderInput={(params) => (
+                      <TextField {...params} label="Step Name" placeholder="All" size="small" InputLabelProps={{ shrink: true }} />
+                    )}
+                    renderTags={(val, getTagProps) =>
+                      val.map((opt, idx) => (
+                        <Chip {...getTagProps({ index: idx })} key={opt} label={opt} size="small" sx={{ fontSize: '10px', height: 18 }} />
+                      ))
+                    }
+                    ListboxProps={{ sx: { fontSize: '12px' } }}
+                  />
+                  {/* Run Status — multi-select */}
+                  <Autocomplete
+                    multiple
+                    limitTags={2}
+                    disableCloseOnSelect
+                    options={analyticsMeta?.runStatuses ?? []}
+                    value={draftAnlRunStatuses}
+                    onChange={(_, v) => setDraftAnlRunStatuses(v)}
+                    size="small"
+                    sx={{ minWidth: 140, '& .MuiInputBase-root': { fontSize: '11px' }, '& .MuiInputLabel-root': { fontSize: '11px' } }}
+                    renderInput={(params) => (
+                      <TextField {...params} label="Run Status" placeholder="All" size="small" InputLabelProps={{ shrink: true }} />
+                    )}
+                    renderTags={(val, getTagProps) =>
+                      val.map((opt, idx) => (
+                        <Chip
+                          {...getTagProps({ index: idx })}
+                          key={opt}
+                          label={opt}
+                          size="small"
+                          sx={{
+                            fontSize: '10px', height: 18,
+                            backgroundColor: opt === 'success' ? '#e8f5e9' : opt === 'failed' ? '#fce4ec' : '#f3e5f5',
+                            color: opt === 'success' ? '#2e7d32' : opt === 'failed' ? '#c62828' : '#7b1fa2',
+                          }}
+                        />
+                      ))
+                    }
+                    ListboxProps={{ sx: { fontSize: '12px' } }}
+                  />
+                </Box>
               </Box>
+              {anlLoading && (
+                <LinearProgress
+                  sx={{
+                    height: 3,
+                    backgroundColor: '#bbdefb',
+                    '& .MuiLinearProgress-bar': { backgroundColor: '#1976d2' },
+                  }}
+                />
+              )}
             </Box>
 
           {analytics && (
@@ -1059,3 +1165,5 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
     </Box>
   )
 }
+
+export const DMFPipelineWidget = React.memo(DMFPipelineWidgetInner)

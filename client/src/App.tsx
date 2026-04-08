@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { SESSION_ID } from './services/session'
 import { ThemeProvider, createTheme, CssBaseline } from '@mui/material'
 import { Box } from '@mui/material'
@@ -68,6 +68,10 @@ function App() {
   const [preferences, setPreferences] = useState<WidgetPreferences>(DEFAULT_PREFERENCES)
   const [widgetOrder, setWidgetOrder] = useState<string[]>(DEFAULT_WIDGET_ORDER)
 
+  const handleOpenAgent = useCallback((agentId: string) => setOpenAgentId(agentId), [])
+  const handleCloseAgent = useCallback(() => setOpenAgentId(null), [])
+  const handleChatClick = useCallback(() => setOpenAgentId('knowledge'), [])
+
   // Load preferences and widget order from localStorage on mount
   useEffect(() => {
     const savedPreferences = localStorage.getItem(`dashboardPreferences:${SESSION_ID}`)
@@ -131,7 +135,7 @@ function App() {
           <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             {activeMenu === 'dashboard' && (
               <Dashboard
-                onChatClick={() => setOpenAgentId('knowledge')}
+                onChatClick={handleChatClick}
                 preferences={preferences}
                 widgetOrder={widgetOrder}
                 onWidgetOrderChange={setWidgetOrder}
@@ -139,8 +143,8 @@ function App() {
             )}
             {activeMenu === 'executive' && (
               <ExecutiveDashboard
-                onChatClick={() => setOpenAgentId('knowledge')}
-                onOpenAgent={(agentId) => setOpenAgentId(agentId)}
+                onChatClick={handleChatClick}
+                onOpenAgent={handleOpenAgent}
               />
             )}
             {activeMenu === 'quicksight-demo' && (
@@ -155,7 +159,7 @@ function App() {
             <ChatPanel
               isOpen={true}
               agentConfig={AGENTS[openAgentId] ?? AGENTS.knowledge}
-              onClose={() => setOpenAgentId(null)}
+              onClose={handleCloseAgent}
             />
           )}
         </Box>
