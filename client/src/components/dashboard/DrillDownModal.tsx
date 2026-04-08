@@ -313,7 +313,7 @@ const SnIncidentDetail: React.FC<{ data: { priority: string; count: number; sour
   const pc = PRIORITY_COLORS[data.priority] ?? { bg: '#f5f5f5', color: '#555', border: '#ccc' }
 
   return (
-    <Box>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
       {/* Summary header */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2, p: 1.5,
         backgroundColor: pc.bg, border: `1px solid ${pc.border}`, borderRadius: 2 }}>
@@ -357,9 +357,9 @@ const SnIncidentDetail: React.FC<{ data: { priority: string; count: number; sour
               </span>
             </Tooltip>
           </Box>
-          <Box sx={{ overflowX: 'auto', border: '1px solid #e0e0e0', borderRadius: 2 }}>
+          <Box sx={{ overflowX: 'auto', overflowY: 'auto', maxHeight: 360, border: '1px solid #e0e0e0', borderRadius: 2 }}>
           <Table size="small" sx={{ minWidth: 580 }}>
-            <TableHead>
+            <TableHead sx={{ position: 'sticky', top: 0, zIndex: 1 }}>
               <TableRow sx={{ backgroundColor: '#f5f5f5' }}>
                 {['Incident #', 'Priority', 'Capability', 'Description', 'Assignment Group'].map(h => (
                   <TableCell key={h} sx={{ fontWeight: 700, fontSize: '12px', color: '#555', whiteSpace: 'nowrap' }}>{h}</TableCell>
@@ -393,7 +393,7 @@ const SnIncidentDetail: React.FC<{ data: { priority: string; count: number; sour
       )}
 
       {/* Action row */}
-      <Box sx={{ display: 'flex', gap: 1, mt: 2.5, flexWrap: 'wrap' }}>
+      <Box sx={{ display: 'flex', gap: 1, mt: 2, pt: 1.5, borderTop: '1px solid #f0f0f0', flexWrap: 'wrap', flexShrink: 0 }}>
         <Button size="small" variant="contained" disabled
           sx={{ textTransform: 'none', fontSize: '12px' }}>
           Escalate Priority
@@ -432,7 +432,7 @@ export const DrillDownModal: React.FC<DrillDownModalProps> = ({ open, onClose, d
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth
-      PaperProps={{ sx: { borderRadius: 3, overflow: 'hidden' } }}>
+      PaperProps={{ sx: { borderRadius: 3, overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '85vh' } }}>
       <DialogTitle sx={{
         background: 'linear-gradient(120deg, #1565c0 0%, #1976d2 100%)',
         color: '#fff', display: 'flex', alignItems: 'center', gap: 1.5, py: 2,
@@ -444,7 +444,7 @@ export const DrillDownModal: React.FC<DrillDownModalProps> = ({ open, onClose, d
         </IconButton>
       </DialogTitle>
 
-      <DialogContent sx={{ p: 3, backgroundColor: '#fdfdfd' }}>
+      <DialogContent sx={{ p: 3, backgroundColor: '#fdfdfd', overflowY: 'auto', flex: 1 }}>
         {drillDown.type === 'pipeline'    && <PipelineDetail    data={drillDown.data} />}
         {drillDown.type === 'error'       && <ErrorDetail       data={drillDown.data} />}
         {drillDown.type === 'ticket'      && <TicketDetail      data={drillDown.data} />}

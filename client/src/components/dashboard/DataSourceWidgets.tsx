@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { Box, Typography, Chip, Paper, TextField, InputAdornment, Button, Autocomplete, CircularProgress } from '@mui/material'
+import { Box, Typography, Chip, Paper, TextField, InputAdornment, Button, Autocomplete, CircularProgress, Snackbar, Alert } from '@mui/material'
 import BugReportIcon from '@mui/icons-material/BugReport'
 import SearchIcon from '@mui/icons-material/Search'
 import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber'
@@ -29,6 +29,9 @@ const SEV_CONFIG: Record<string, { color: string; bg: string; dot: string }> = {
   medium:   { color: '#f57c00', bg: '#fff8e1', dot: '#fdd835' },
   low:      { color: '#2e7d32', bg: '#e8f5e9', dot: '#66bb6a' },
 }
+
+/** Block drilldown when no platform is selected and total incidents exceed this threshold */
+const DRILLDOWN_LIMIT = 1000
 
 const fmt = (iso: string) =>
   new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -500,6 +503,7 @@ export const IncidentsWidget: React.FC<{ platform?: string | null }> = ({ platfo
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [drillDown, setDrillDown] = useState<DrillDownData | null>(null)
+  const [hint, setHint] = useState(false)
   const { useMock } = useMockData()
 
   useEffect(() => {
@@ -550,9 +554,11 @@ export const IncidentsWidget: React.FC<{ platform?: string | null }> = ({ platfo
                 compact
                 onCardClick={(item, idx) => {
                   if (idx < incidents.length) {
+                    const count = item.value as number
+                    if (!platform && count > DRILLDOWN_LIMIT) { setHint(true); return }
                     setDrillDown({
                       type: 'sn_priority',
-                      data: { priority: item.label, count: item.value as number, source: 'Open Incidents', platform: platform ?? undefined },
+                      data: { priority: item.label, count, source: 'Open Incidents', platform: platform ?? undefined },
                     })
                   }
                 }}
@@ -572,6 +578,12 @@ export const IncidentsWidget: React.FC<{ platform?: string | null }> = ({ platfo
         )}
       </WidgetShell>
       <DrillDownModal open={!!drillDown} onClose={() => setDrillDown(null)} drillDown={drillDown} />
+      <Snackbar open={hint} autoHideDuration={5000} onClose={() => setHint(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+        <Alert severity="info" onClose={() => setHint(false)} sx={{ fontSize: '13px' }}>
+          Too many records to display. Select a <strong>platform</strong> using the filter above to drill down into incidents.
+        </Alert>
+      </Snackbar>
     </>
   )
 }
@@ -583,6 +595,7 @@ export const MissedIncidentsWidget: React.FC<{ platform?: string | null }> = ({ 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [drillDown, setDrillDown] = useState<DrillDownData | null>(null)
+  const [hint, setHint] = useState(false)
   const { useMock } = useMockData()
 
   useEffect(() => {
@@ -626,9 +639,11 @@ export const MissedIncidentsWidget: React.FC<{ platform?: string | null }> = ({ 
                 compact
                 onCardClick={(item, idx) => {
                   if (idx < data.length) {
+                    const count = item.value as number
+                    if (!platform && count > DRILLDOWN_LIMIT) { setHint(true); return }
                     setDrillDown({
                       type: 'sn_priority',
-                      data: { priority: item.label, count: item.value as number, source: 'Missed SLA', platform: platform ?? undefined },
+                      data: { priority: item.label, count, source: 'Missed SLA', platform: platform ?? undefined },
                     })
                   }
                 }}
@@ -640,10 +655,13 @@ export const MissedIncidentsWidget: React.FC<{ platform?: string | null }> = ({ 
                 const color = INCIDENT_COLORS[r.priority_field] || '#757575'
                 return (
                   <Box key={r.priority_field}
-                    onClick={() => setDrillDown({
-                      type: 'sn_priority',
-                      data: { priority: r.priority_field, count: r.incident_count, source: 'Missed SLA', platform: platform ?? undefined },
-                    })}
+                    onClick={() => {
+                      if (!platform && r.incident_count > DRILLDOWN_LIMIT) { setHint(true); return }
+                      setDrillDown({
+                        type: 'sn_priority',
+                        data: { priority: r.priority_field, count: r.incident_count, source: 'Missed SLA', platform: platform ?? undefined },
+                      })
+                    }}
                     sx={{ cursor: 'pointer', borderRadius: 1, p: 0.5, '&:hover': { backgroundColor: '#f5f5f5' } }}
                   >
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.4 }}>
@@ -661,6 +679,12 @@ export const MissedIncidentsWidget: React.FC<{ platform?: string | null }> = ({ 
         )}
       </WidgetShell>
       <DrillDownModal open={!!drillDown} onClose={() => setDrillDown(null)} drillDown={drillDown} />
+      <Snackbar open={hint} autoHideDuration={5000} onClose={() => setHint(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+        <Alert severity="info" onClose={() => setHint(false)} sx={{ fontSize: '13px' }}>
+          Too many records to display. Select a <strong>platform</strong> using the filter above to drill down into incidents.
+        </Alert>
+      </Snackbar>
     </>
   )
 }
