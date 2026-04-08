@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useDeferredValue } from 'react'
 import {
   Box,
   Typography,
@@ -186,50 +186,66 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
   // ── Memoised lineage derivations — prevent blocking paint on filter selection ──
   const isFiltered = hasAnyFilter
 
+  // Defer sub-filter arrays so chip removal is instantaneous; expensive
+  // filtering/chart re-renders happen in a lower-priority React pass.
+  const deferredDatasets  = useDeferredValue(lgDatasets)
+  const deferredProcTypes = useDeferredValue(lgProcTypes)
+  const deferredStatuses  = useDeferredValue(lgStatuses)
+
   const filteredJobs = useMemo(() =>
     isFiltered
       ? lineageJobs.filter(j =>
-          (lgDatasets.length === 0  || lgDatasets.includes(j.datasetName)) &&
-          (lgProcTypes.length === 0 || lgProcTypes.includes(j.processTypeCode)) &&
-          (lgStatuses.length === 0  || lgStatuses.includes(j.status))
+          (deferredDatasets.length === 0  || deferredDatasets.includes(j.datasetName)) &&
+          (deferredProcTypes.length === 0 || deferredProcTypes.includes(j.processTypeCode)) &&
+          (deferredStatuses.length === 0  || deferredStatuses.includes(j.status))
         )
       : [],
-    [isFiltered, lineageJobs, lgDatasets, lgProcTypes, lgStatuses]
+    [isFiltered, lineageJobs, deferredDatasets, deferredProcTypes, deferredStatuses]
   )
 
   const displayTotal = isFiltered ? filteredJobs.length : (lineageCounts?.total ?? 0)
 
-  const displayByStatus = useMemo(() =>
-    isFiltered
-      ? [
-          { status: 'success' as const, count: filteredJobs.filter(j => j.status === 'success').length },
-          { status: 'failed'  as const, count: filteredJobs.filter(j => j.status === 'failed').length },
-        ].filter(x => x.count > 0)
-      : (lineageCounts?.byStatus ?? []),
-    [isFiltered, filteredJobs, lineageCounts]
-  )
+  const displayByStatus = useMemo(() => {
+    if (!isFiltered) return lineageCounts?.byStatus ?? []
+    let success = 0, failed = 0
+    for (const j of filteredJobs) {
+      if (j.status === 'success') success++
+      else failed++
+    }
+    return [
+      ...(success > 0 ? [{ status: 'success' as const, count: success }] : []),
+      ...(failed  > 0 ? [{ status: 'failed'  as const, count: failed  }] : []),
+    ]
+  }, [isFiltered, filteredJobs, lineageCounts])
 
-  const displayByProcType = useMemo(() =>
-    isFiltered
-      ? ['ING','ENR','DIS','INT'].map(t => ({
-          procTypeCode: t,
-          count: filteredJobs.filter(j => j.processTypeCode === t).length,
-        })).filter(x => x.count > 0)
-      : (lineageCounts?.byProcType ?? []),
-    [isFiltered, filteredJobs, lineageCounts]
-  )
+  const displayByProcType = useMemo(() => {
+    if (!isFiltered) return lineageCounts?.byProcType ?? []
+    const counts: Record<string, number> = {}
+    for (const j of filteredJobs) counts[j.processTypeCode] = (counts[j.processTypeCode] ?? 0) + 1
+    return ['ING','ENR','DIS','INT']
+      .map(t => ({ procTypeCode: t, count: counts[t] ?? 0 }))
+      .filter(x => x.count > 0)
+  }, [isFiltered, filteredJobs, lineageCounts])
 
-  const displayByTgtNm = useMemo(() =>
-    isFiltered
-      ? Object.entries(
-          filteredJobs.reduce((acc, j) => {
-            acc[j.targetName] = (acc[j.targetName] ?? 0) + 1
-            return acc
-          }, {} as Record<string, number>)
-        ).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([targetName, count]) => ({ targetName, count }))
-      : (lineageCounts?.byTgtNm ?? []),
-    [isFiltered, filteredJobs, lineageCounts]
-  )
+  const displayByTgtNm = useMemo(() => {
+    if (!isFiltered) return lineageCounts?.byTgtNm ?? []
+    const counts: Record<string, number> = {}
+    for (const j of filteredJobs) counts[j.targetName] = (counts[j.targetName] ?? 0) + 1
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([targetName, count]) => ({ targetName, count }))
+  }, [isFiltered, filteredJobs, lineageCounts])
+
+  const datasetBarData = useMemo(() => {
+    if (!isFiltered) return []
+    const counts: Record<string, number> = {}
+    for (const j of filteredJobs) counts[j.datasetName] = (counts[j.datasetName] ?? 0) + 1
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([name, count]) => ({ name: name.length > 16 ? name.slice(0, 16) + '\u2026' : name, count }))
+  }, [isFiltered, filteredJobs])
 
   const successCount = displayByStatus.find(x => x.status === 'success')?.count ?? 0
   const successRate  = displayTotal > 0 ? Math.round(successCount / displayTotal * 100) : 0
@@ -632,15 +648,7 @@ export const DMFPipelineWidget: React.FC<{ onOpenAgent?: (agentId: string) => vo
                           <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress size={24} /></Box>
                         ) : (
                           <ComposedBarLineChart
-                            data={Object.entries(
-                              filteredJobs.reduce((acc, j) => {
-                                acc[j.datasetName] = (acc[j.datasetName] ?? 0) + 1
-                                return acc
-                              }, {} as Record<string, number>)
-                            ).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([name, count]) => ({
-                              name: name.length > 16 ? name.slice(0, 16) + '…' : name,
-                              count,
-                            }))}
+                            data={datasetBarData}
                             xKey="name"
                             bars={[{ key: 'count', label: 'Jobs', color: '#1565c0' }]}
                             lines={[]}

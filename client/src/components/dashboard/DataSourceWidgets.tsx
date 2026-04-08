@@ -31,7 +31,7 @@ const SEV_CONFIG: Record<string, { color: string; bg: string; dot: string }> = {
 }
 
 /** Block drilldown when no platform is selected and total incidents exceed this threshold */
-const DRILLDOWN_LIMIT = 1000
+const DRILLDOWN_LIMIT = 10000
 
 const fmt = (iso: string) =>
   new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
