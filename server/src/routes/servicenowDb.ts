@@ -80,8 +80,7 @@ router.get('/incident-list', async (req: Request, res: Response) => {
         ON   sn.sninc_priority = sg.snow_priority
       WHERE  sg.short_priority IN ('P3','P4')
         ${platformClause}
-      ORDER BY sn.sninc_inc_num, sn.sninc_updated_on DESC
-      LIMIT 200
+      ORDER BY sn.sninc_inc_num, sn.sninc_last_updt_dttm DESC
     `, params);
     res.json(result.rows);
   } catch (err: any) {
@@ -142,8 +141,7 @@ router.get('/incident-detail', async (req: Request, res: Response) => {
         ON   sn.sninc_priority = sg.snow_priority
       WHERE  sg.short_priority = ANY($1)
         ${platformClause}
-      ORDER BY sn.sninc_inc_num, sn.sninc_updated_on DESC
-      LIMIT 500
+      ORDER BY sn.sninc_inc_num, sn.sninc_last_updt_dttm DESC
     `, params);
     res.json(result.rows);
   } catch (err: any) {

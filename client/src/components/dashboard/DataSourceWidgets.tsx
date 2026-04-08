@@ -669,13 +669,18 @@ export const MissedIncidentsWidget: React.FC<{ platform?: string | null }> = ({ 
 
 export const IncidentListWidget: React.FC<{ platform?: string | null }> = ({ platform }) => {
   const [data, setData] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [priorityFilter, setPriorityFilter] = useState('All')
   const [search, setSearch] = useState('')
   const { useMock } = useMockData()
 
   useEffect(() => {
+    // Require a platform selection before loading
+    if (!platform && !useMock) {
+      setData([]); setLoading(false); setError(null)
+      return
+    }
     setLoading(true); setData([]); setError(null)
     if (useMock) {
       setData(MOCK_SERVICENOW_INCIDENT_LIST)
@@ -722,7 +727,13 @@ export const IncidentListWidget: React.FC<{ platform?: string | null }> = ({ pla
       loading={loading}
       error={error ?? undefined}
     >
-      {!error && (
+      {!platform && !useMock ? (
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 4, gap: 1, color: '#bbb' }}>
+          <WarningAmberIcon sx={{ fontSize: 32, color: '#ddd' }} />
+          <Typography sx={{ fontSize: '13px', color: '#bbb', fontWeight: 500 }}>Select a platform to load incident list</Typography>
+          <Typography sx={{ fontSize: '11px', color: '#ccc' }}>Use the platform filter above to scope results</Typography>
+        </Box>
+      ) : !error && (
         <>
           <Box sx={{ px: 1.5, pt: 0.5, pb: 0.5, display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap', borderBottom: '1px solid #f0f0f0' }}>
             <TextField
