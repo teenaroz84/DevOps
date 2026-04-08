@@ -109,6 +109,43 @@ export const chatService = {
   },
 
   /**
+   * Load chat history for a session + agent from DynamoDB.
+   * Returns an empty array if the session does not exist or the request fails.
+   */
+  loadSession: async (agentId: string): Promise<Array<{ role: 'user' | 'agent'; content: string; type?: string; data?: any; timestamp?: number; suggestedActions?: any }>> => {
+    try {
+      const url = `${config.apiBaseUrl}/api/sessions/${encodeURIComponent(SESSION_ID)}/${encodeURIComponent(agentId)}`
+      const res = await fetch(url)
+      if (!res.ok) return []
+      const json = await res.json()
+      return Array.isArray(json.messages) ? json.messages : []
+    } catch {
+      return []
+    }
+  },
+
+  /**
+   * Persist the current message list for a session + agent to DynamoDB.
+   * Fire-and-forget — failures are silently swallowed so they never block the UI.
+   */
+  saveSession: (agentId: string, messages: unknown[]): void => {
+    const url = `${config.apiBaseUrl}/api/sessions/${encodeURIComponent(SESSION_ID)}/${encodeURIComponent(agentId)}`
+    fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages }),
+    }).catch(() => { /* silent */ })
+  },
+
+  /**
+   * Delete the stored history for a session + agent from DynamoDB.
+   */
+  clearSession: (agentId: string): void => {
+    const url = `${config.apiBaseUrl}/api/sessions/${encodeURIComponent(SESSION_ID)}/${encodeURIComponent(agentId)}`
+    fetch(url, { method: 'DELETE' }).catch(() => { /* silent */ })
+  },
+
+  /**
    * Stream a response token-by-token.
    * Pass a custom streamEndpoint to target a specific dashboard agent.
    */

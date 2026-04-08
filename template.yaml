@@ -265,6 +265,60 @@ Resources:
             Path: /api/health
             Method: GET
 
+  # ─── Chat Sessions Lambda ────────────────────────────────
+  ChatSessionsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: devops-chat-sessions
+      Handler: sessions/handler.handler
+      CodeUri: lambdas/
+      Description: Persist chat agent session history in DynamoDB
+      Environment:
+        Variables:
+          SESSIONS_TABLE: !Ref ChatSessionsTable
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ChatSessionsTable
+      Events:
+        GetSession:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DevOpsApi
+            Path: /api/sessions/{sessionId}/{agentId}
+            Method: GET
+        SaveSession:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DevOpsApi
+            Path: /api/sessions/{sessionId}/{agentId}
+            Method: POST
+        DeleteSession:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DevOpsApi
+            Path: /api/sessions/{sessionId}/{agentId}
+            Method: DELETE
+
+  # ─── DynamoDB — Chat Sessions ────────────────────────────
+  ChatSessionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: ChatSessions
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: session_id
+          AttributeType: S
+        - AttributeName: agent_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: session_id
+          KeyType: HASH
+        - AttributeName: agent_id
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
 # ── Outputs ────────────────────────────────────────────────
 Outputs:
   ApiUrl:

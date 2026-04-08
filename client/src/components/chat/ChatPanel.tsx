@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 import {
   Box,
   Paper,
@@ -13,6 +13,7 @@ import {
   TableHead,
   TableRow,
   Chip,
+  CircularProgress,
   Tooltip,
 } from '@mui/material'
 import SendIcon from '@mui/icons-material/Send'
@@ -113,14 +114,13 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
 
   const STORAGE_KEY = `chat_history_${agent.id}`
 
-  // Restore chat history from localStorage on first mount,
-  // but always use the current welcome message as the first entry.
+  // ── Session state ────────────────────────────────────────────────────────
+  // Start with localStorage for instant paint, then hydrate from DynamoDB.
   const [messages, setMessages] = useState<Message[]>(() => {
     try {
       const saved = localStorage.getItem(`chat_history_${agent.id}`)
       if (saved) {
         const parsed = JSON.parse(saved) as Message[]
-        // Replace stored welcome (index 0) with the up-to-date one
         return [WELCOME_MESSAGE, ...parsed.slice(1)]
       }
     } catch {
@@ -128,20 +128,48 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
     }
     return [WELCOME_MESSAGE]
   })
+  const [sessionLoading, setSessionLoading] = useState(false)
+
+  // Load DynamoDB session for the current agent
+  const loadAgentSession = useCallback(async (agentId: string, welcome: Message) => {
+    setSessionLoading(true)
+    try {
+      const remote = await chatService.loadSession(agentId)
+      if (remote.length > 0) {
+        const typed = remote.map(m => ({
+          ...m,
+          type: m.type as Message['type'],
+        })) as Message[]
+        setMessages([welcome, ...typed.slice(1)])
+        // Sync to localStorage so next mount is instant
+        localStorage.setItem(`chat_history_${agentId}`, JSON.stringify([welcome, ...typed.slice(1)]))
+      } else {
+        // Nothing in DynamoDB yet — keep whatever was in localStorage
+        setMessages(prev => prev.length > 0 ? prev : [welcome])
+      }
+    } catch {
+      // DynamoDB unreachable — keep localStorage version
+    } finally {
+      setSessionLoading(false)
+    }
+  }, [])
 
   // When the agent changes, reload the correct history and welcome message
   useEffect(() => {
+    // Immediately paint localStorage version
     try {
       const saved = localStorage.getItem(`chat_history_${agent.id}`)
       if (saved) {
         const parsed = JSON.parse(saved) as Message[]
         setMessages([WELCOME_MESSAGE, ...parsed.slice(1)])
-        return
+      } else {
+        setMessages([WELCOME_MESSAGE])
       }
     } catch {
-      // fall through
+      setMessages([WELCOME_MESSAGE])
     }
-    setMessages([WELCOME_MESSAGE])
+    // Then hydrate from DynamoDB in the background
+    loadAgentSession(agent.id, WELCOME_MESSAGE)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agent.id])
 
@@ -151,14 +179,18 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
   const [historyIdx, setHistoryIdx] = useState(-1)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  // Persist history to localStorage whenever messages change
+  // Persist to localStorage + DynamoDB whenever messages change
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(messages))
     } catch {
       // storage quota exceeded — ignore
     }
-  }, [messages, STORAGE_KEY])
+    // Skip DynamoDB sync while the initial load is still in flight
+    if (!sessionLoading) {
+      chatService.saveSession(agent.id, messages)
+    }
+  }, [messages, STORAGE_KEY, agent.id, sessionLoading])
 
   const HEALTH_CHECK_QUERY = '__health_check__'
 
@@ -247,6 +279,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
 
   const resetToMainMenu = () => {
     localStorage.removeItem(STORAGE_KEY)
+    chatService.clearSession(agent.id)
     setMessages([WELCOME_MESSAGE])
     setInput('')
   }
@@ -338,6 +371,13 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
               gap: 2,
             }}
           >
+            {/* Session loading from DynamoDB */}
+            {sessionLoading && (
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, py: 1 }}>
+                <CircularProgress size={14} sx={{ color: '#90a4ae' }} />
+                <Typography sx={{ fontSize: '11px', color: '#90a4ae' }}>Restoring history…</Typography>
+              </Box>
+            )}
             {messages.map((msg, idx) => (
               <Box key={idx} sx={{ display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start', flexDirection: 'column', alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start', gap: 1 }}>
                 <Paper
@@ -674,6 +714,13 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
           gap: 2,
         }}
       >
+        {/* Session loading from DynamoDB */}
+        {sessionLoading && (
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, py: 1 }}>
+            <CircularProgress size={14} sx={{ color: '#90a4ae' }} />
+            <Typography sx={{ fontSize: '11px', color: '#90a4ae' }}>Restoring history…</Typography>
+          </Box>
+        )}
         {messages.map((msg, idx) => (
           <Box key={idx} sx={{ display: 'flex', alignItems: 'flex-end', gap: 0.75, justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
             {msg.role === 'agent' && (

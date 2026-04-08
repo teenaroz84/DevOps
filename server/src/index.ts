@@ -3,7 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { generateAWSResponse } from './awsAgent';
 import { mockKPIs, mockCostBreakdown, mockErrors, mockLogs, mockTickets, mockDMFSummary, mockDMFStages, mockDMFRunStatus, mockDMFFailedByStage, mockDMFRunsOverTime, mockDMFErrorReasons, mockDMFRecentFailures, mockDMFStatusTrend, mockDMFRowsTrend, mockDMFJobsTrend, mockDMFStepFailureTrend, mockDMFAnalytics, mockDMFLineageMeta, mockDMFLineageJobs } from './mockData';
-import { espRoutes, servicenowDbRoutes, dmfDbRoutes, postgresDbRoutes, talendDbRoutes } from './routes';
+import { espRoutes, servicenowDbRoutes, dmfDbRoutes, postgresDbRoutes, talendDbRoutes, sessionRoutes } from './routes';
 
 dotenv.config();
 
@@ -20,6 +20,7 @@ app.use('/api/servicenow', servicenowDbRoutes); // GET /api/servicenow/incidents
 app.use('/api/dmf',        dmfDbRoutes);        // GET /api/dmf/run-status
 app.use('/api/postgres',   postgresDbRoutes);   // GET /api/postgres/pipelines
 app.use('/api/talend',     talendDbRoutes);     // GET /api/talend/summary
+app.use('/api/sessions',   sessionRoutes);      // GET/POST/DELETE /api/sessions/:sid/:aid
 
 // ─── Existing chat route ───────────────────────────────────
 app.get('/api/health', (req: Request, res: Response) => {
