@@ -78,7 +78,7 @@ router.get('/incident-list', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
     const platform = req.query.platform as string | undefined;
-    const platformClause = platform ? `AND sn.sninc_applkp_pltf_nm = $1` : '';
+    const platformClause = platform ? `AND latest.sninc_applkp_pltf_nm = $1` : '';
     const params = platform ? [platform] : [];
     const result = await pool.query(`
       SELECT sninc_inc_num, priority_field, sninc_capability, sninc_short_desc, sninc_assignment_grp
@@ -143,7 +143,7 @@ router.get('/incident-detail', async (req: Request, res: Response) => {
     let platformClause = '';
     if (platform) {
       params.push(platform);
-      platformClause = `AND sn.sninc_applkp_pltf_nm = $${params.length}`;
+      platformClause = `AND latest.sninc_applkp_pltf_nm = $${params.length}`;
     }
     const result = await pool.query(`
       SELECT sninc_inc_num, priority_field, sninc_capability, sninc_short_desc, sninc_assignment_grp

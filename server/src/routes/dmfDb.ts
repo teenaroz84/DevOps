@@ -20,19 +20,34 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 /**
- * Converts a date_range query param ("1m","3m","6m","1y") into a
- * SQL fragment like "AND proc_dt >= CURRENT_DATE - INTERVAL '3 months'".
- * Returns an empty string when date_range is absent / "all".
+ * Converts a date_range query param into a SQL fragment.
+ * Presets: "1m","3m","6m","1y","2y"
+ * Custom:  "custom:YYYY-MM-DD:YYYY-MM-DD"  e.g. "custom:2024-01-01:2025-03-31"
+ * Returns an empty string when date_range is absent / unrecognised.
  */
 function dateRangeClause(dateRange: any, col = 'proc_dt'): string {
-  const map: Record<string, string> = {
-    '1m': `1 month`,
-    '3m': `3 months`,
-    '6m': `6 months`,
-    '1y': `1 year`,
+  const val = String(dateRange ?? '').toLowerCase();
+  const presets: Record<string, string> = {
+    '1m': '1 month',
+    '3m': '3 months',
+    '6m': '6 months',
+    '1y': '1 year',
+    '2y': '2 years',
   };
-  const interval = map[String(dateRange ?? '').toLowerCase()];
-  return interval ? `AND ${col}::date >= CURRENT_DATE - INTERVAL '${interval}'` : '';
+  if (presets[val]) {
+    return `AND ${col}::date >= CURRENT_DATE - INTERVAL '${presets[val]}'`;
+  }
+  // custom:YYYY-MM-DD:YYYY-MM-DD
+  if (val.startsWith('custom:')) {
+    const parts = val.split(':');
+    const from = parts[1] ?? '';
+    const to   = parts[2] ?? '';
+    // Validate simple date format to prevent injection
+    if (/^\d{4}-\d{2}-\d{2}$/.test(from) && /^\d{4}-\d{2}-\d{2}$/.test(to)) {
+      return `AND ${col}::date BETWEEN '${from}' AND '${to}'`;
+    }
+  }
+  return '';
 }
 
 // ─── GET /api/dmf/failed-by-stage ─────────────────────────
@@ -209,8 +224,20 @@ router.get('/lineage/jobs', async (req: Request, res: Response) => {
     const offset   = pageNum * pageSz;
 
     const params: any[] = [String(src_cd)];
-    const drMap: Record<string, string> = { '1m': '1 month', '3m': '3 months', '6m': '6 months', '1y': '1 year' };
-    const interval = drMap[String(date_range ?? '').toLowerCase()] ?? '3 months';
+    const drMap: Record<string, string> = { '1m': '1 month', '3m': '3 months', '6m': '6 months', '1y': '1 year', '2y': '2 years' };
+    let dateFilter: string;
+    const drVal = String(date_range ?? '').toLowerCase();
+    if (drVal.startsWith('custom:')) {
+      const parts = drVal.split(':');
+      const from = parts[1] ?? '';
+      const to   = parts[2] ?? '';
+      dateFilter = /^\d{4}-\d{2}-\d{2}$/.test(from) && /^\d{4}-\d{2}-\d{2}$/.test(to)
+        ? `proc_dt::date BETWEEN '${from}' AND '${to}'`
+        : `proc_dt::date >= CURRENT_DATE - INTERVAL '3 months'`;
+    } else {
+      const interval = drMap[drVal] ?? '3 months';
+      dateFilter = `proc_dt::date >= CURRENT_DATE - INTERVAL '${interval}'`;
+    }
 
     // COUNT(*) OVER() returns the true total in the same pass — no second query needed.
     const { rows } = await pool.query(`
@@ -218,7 +245,7 @@ router.get('/lineage/jobs', async (req: Request, res: Response) => {
              src_nm, tgt_nm, run_strt_tm, run_end_tm, run_status,
              COUNT(*) OVER() AS total_rows
       FROM edoops.DMF_RUN_MASTER
-      WHERE proc_dt::date >= CURRENT_DATE - INTERVAL '${interval}'
+      WHERE ${dateFilter}
         AND src_cd = $1
       ORDER BY proc_dt DESC
       LIMIT ${pageSz} OFFSET ${offset}

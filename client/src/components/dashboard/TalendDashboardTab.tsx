@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { Box, Typography, Chip, Paper, CircularProgress, TextField, InputAdornment, Button } from '@mui/material'
+import { Box, Typography, Chip, Paper, CircularProgress, TextField, InputAdornment, Button, Slider } from '@mui/material'
 import IntegrationInstructionsIcon from '@mui/icons-material/IntegrationInstructions'
 import SearchIcon from '@mui/icons-material/Search'
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline'
@@ -53,6 +53,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
   const [taskSearch,   setTaskSearch]   = useState('')
   const [statusFilter, setStatusFilter] = useState('All')
   const [levelFilter,  setLevelFilter]  = useState('All')
+  const [days,         setDays]         = useState(7)
 
   useEffect(() => {
     setLoading(true)
@@ -70,10 +71,10 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
       return
     }
     Promise.all([
-      talendService.getSummary(),
-      talendService.getLevelCounts(),
-      talendService.getRecentTasks(),
-      talendService.getRecentErrors(),
+      talendService.getSummary(days),
+      talendService.getLevelCounts(days),
+      talendService.getRecentTasks(days),
+      talendService.getRecentErrors(days),
     ])
       .then(([s, lc, rt, re]) => {
         setSummary(s)
@@ -83,7 +84,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
         setLoading(false)
       })
       .catch(err => { setError(err.message || 'Failed to load Talend data'); setLoading(false) })
-  }, [useMock])
+  }, [useMock, days])
 
   // ── Filtered rows ──────────────────────────────────────────
   const filteredTasks = useMemo(() =>
@@ -206,6 +207,27 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
           <Typography sx={{ fontSize: '11px', color: '#aaa', ml: 'auto' }}>
             Source: PostgreSQL · edoops.talend_logs
           </Typography>
+
+          {/* ── Date range slider ── */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, ml: 2, minWidth: 220 }}>
+            <Typography sx={{ fontSize: '11px', color: '#777', whiteSpace: 'nowrap' }}>Last {days}d</Typography>
+            <Slider
+              value={days}
+              min={1}
+              max={15}
+              step={1}
+              onChange={(_e, v) => setDays(v as number)}
+              size="small"
+              sx={{
+                color: '#e65100',
+                width: 140,
+                '& .MuiSlider-thumb': { width: 12, height: 12 },
+                '& .MuiSlider-rail': { opacity: 0.3 },
+              }}
+            />
+            <Typography sx={{ fontSize: '10px', color: '#bbb', whiteSpace: 'nowrap' }}>15d</Typography>
+          </Box>
+
           {onOpenAgent && (
             <Button
               size="small"

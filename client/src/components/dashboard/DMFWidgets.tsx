@@ -83,12 +83,22 @@ const DMF_DATE_RANGE_OPTIONS = [
   { value: '3m', label: 'Last 3 Months' },
   { value: '6m', label: 'Last 6 Months' },
   { value: '1y', label: 'Last 1 Year' },
+  { value: '2y', label: 'Last 2 Years' },
+  { value: 'custom', label: 'Custom' },
 ]
 
 const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void }> = ({ onOpenAgent }) => {
   const { useMock } = useMockData()
   const [activeTab, setActiveTab] = useState<DMFTab>('lineage')
-  const [dateRange, setDateRange] = useState<string>('3m')
+  const [dateRange,   setDateRange]   = useState<string>('3m')
+  const [customFrom,  setCustomFrom]  = useState('')
+  const [customTo,    setCustomTo]    = useState('')
+  const [showCustom,  setShowCustom]  = useState(false)
+
+  // Sent to server — preset key or 'custom:YYYY-MM-DD:YYYY-MM-DD'
+  const resolvedDateRange = showCustom && customFrom && customTo
+    ? `custom:${customFrom}:${customTo}`
+    : dateRange
 
 
   // ── Lineage state ─────────────────────────────────────────
@@ -176,7 +186,7 @@ const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void
     setRowsTrend([])
     setJobsTrend([])
     setStepFailureTrend([])
-  }, [dateRange])
+  }, [resolvedDateRange])
 
   // Reset to page 0 when source changes
   useEffect(() => {
@@ -191,8 +201,8 @@ const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void
       return
     }
     Promise.all([
-      dmfService.getLineageMeta(dateRange),
-      dmfService.getLineageCounts({ date_range: dateRange }),
+      dmfService.getLineageMeta(resolvedDateRange),
+      dmfService.getLineageCounts({ date_range: resolvedDateRange }),
     ]).then(([meta, counts]) => {
       setLineageMeta(meta)
       setLineageCounts(counts)
@@ -254,7 +264,7 @@ const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void
     if (!useMock) {
       dmfService.getLineageCounts({
         src_cd:      draftSource || undefined,
-        date_range:  dateRange,
+        date_range:  resolvedDateRange,
         proc_typ_cd: draftProcTypes.length ? draftProcTypes : undefined,
         run_status:  draftStatuses.length  ? draftStatuses  : undefined,
         dataset_nm:  draftDatasets.length  ? draftDatasets  : undefined,
@@ -295,7 +305,7 @@ const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void
       return
     }
     setLineageJobsLoading(true)
-    dmfService.getLineageJobs({ src_cd: lgSourceCode, date_range: dateRange, page: lineageJobsPage, pageSize: lineageJobsPageSize })
+    dmfService.getLineageJobs({ src_cd: lgSourceCode, date_range: resolvedDateRange, page: lineageJobsPage, pageSize: lineageJobsPageSize })
       .then((result: any) => {
         setLineageJobs(result.rows ?? [])
         setLineageJobsTotal(result.total ?? 0)
@@ -319,7 +329,7 @@ const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void
       setAnalytics(MOCK_DMF_ANALYTICS)
       return
     }
-    dmfService.getAnalyticsMeta(dateRange)
+    dmfService.getAnalyticsMeta(resolvedDateRange)
       .then(d => { setAnalyticsMeta(d); setAnalyticsMetaLoaded(true) })
       .catch(() => setAnalyticsMetaLoaded(true))
   }, [activeTab, analyticsMetaLoaded, useMock])
@@ -359,7 +369,7 @@ const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void
       tgt_typ:    anlTgtTypes.length   ? anlTgtTypes.join(',')   : 'All',
       step_nm:    anlStepNames.length  ? anlStepNames.join(',')  : 'All',
       run_status: anlRunStatuses.length ? anlRunStatuses.join(',') : 'All',
-      date_range: dateRange,
+      date_range: resolvedDateRange,
     })
       .then(d => setAnalytics(d))
       .catch(() => {})
@@ -378,10 +388,10 @@ const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void
       return
     }
     Promise.all([
-      dmfService.getStatusTrend(dateRange),
-      dmfService.getRowsTrend(dateRange),
-      dmfService.getJobsTrend(dateRange),
-      dmfService.getStepFailureTrend(dateRange),
+      dmfService.getStatusTrend(resolvedDateRange),
+      dmfService.getRowsTrend(resolvedDateRange),
+      dmfService.getJobsTrend(resolvedDateRange),
+      dmfService.getStepFailureTrend(resolvedDateRange),
     ]).then(([st, rt, jt, sft]) => {
       setStatusTrend(st); setRowsTrend(rt); setJobsTrend(jt); setStepFailureTrend(sft)
       setTrendsLoaded(true)
@@ -443,9 +453,17 @@ const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <Typography sx={{ fontSize: '11px', color: '#546e7a', fontWeight: 600, mr: 0.5 }}>Duration:</Typography>
           <ToggleButtonGroup
-            value={dateRange}
+            value={showCustom ? 'custom' : dateRange}
             exclusive
-            onChange={(_, v) => { if (v) setDateRange(v) }}
+            onChange={(_, v) => {
+              if (!v) return
+              if (v === 'custom') {
+                setShowCustom(true)
+              } else {
+                setShowCustom(false)
+                setDateRange(v)
+              }
+            }}
             size="small"
             sx={{ '& .MuiToggleButton-root': { fontSize: '11px', py: 0.3, px: 1.2, textTransform: 'none', borderColor: '#cfd8dc', color: '#546e7a', '&.Mui-selected': { backgroundColor: '#1976d2', color: '#fff', borderColor: '#1976d2', '&:hover': { backgroundColor: '#1565c0' } } } }}
           >
@@ -453,6 +471,31 @@ const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void
               <ToggleButton key={o.value} value={o.value}>{o.label}</ToggleButton>
             ))}
           </ToggleButtonGroup>
+          {showCustom && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, ml: 0.5 }}>
+              <TextField
+                type="date"
+                size="small"
+                label="From"
+                value={customFrom}
+                onChange={e => setCustomFrom(e.target.value)}
+                inputProps={{ max: customTo || new Date().toISOString().slice(0, 10) }}
+                InputLabelProps={{ shrink: true }}
+                sx={{ width: 145, '& .MuiInputBase-input': { fontSize: '11px', py: 0.5 }, '& .MuiInputLabel-root': { fontSize: '11px' } }}
+              />
+              <Typography sx={{ fontSize: '12px', color: '#546e7a' }}>—</Typography>
+              <TextField
+                type="date"
+                size="small"
+                label="To"
+                value={customTo}
+                onChange={e => setCustomTo(e.target.value)}
+                inputProps={{ min: customFrom, max: new Date().toISOString().slice(0, 10) }}
+                InputLabelProps={{ shrink: true }}
+                sx={{ width: 145, '& .MuiInputBase-input': { fontSize: '11px', py: 0.5 }, '& .MuiInputLabel-root': { fontSize: '11px' } }}
+              />
+            </Box>
+          )}
         </Box>
         {onOpenAgent && (
           <Button

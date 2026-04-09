@@ -6,6 +6,15 @@ import { getPgPool } from '../db/postgres';
 
 const router = Router();
 
+// Parse ?days= query param (1–15, default 7)
+function daysClause(query: any): { clause: string; params: any[] } {
+  const days = Math.min(15, Math.max(1, parseInt(String(query.days ?? '7'), 10) || 7));
+  return {
+    clause: `AND execution_timestamp >= NOW() - INTERVAL '${days} days'`,
+    params: [],
+  };
+}
+
 async function safeQuery(sql: string, params: any[] = [], fallback: any[] = []): Promise<any[]> {
   const pool = getPgPool();
   try {
@@ -19,13 +28,14 @@ async function safeQuery(sql: string, params: any[] = [], fallback: any[] = []):
 
 // ─── GET /api/talend/summary ──────────────────────────────
 // Execution status counts + top workspace/engine info
-router.get('/summary', async (_req: Request, res: Response) => {
+router.get('/summary', async (req: Request, res: Response) => {
   try {
+    const { clause: dc } = daysClause(req.query);
     const [statusRows, workspaceRows, engineRows] = await Promise.all([
       safeQuery(`
         SELECT execution_status, COUNT(*)::int AS cnt
         FROM edoops.talend_logs
-        WHERE execution_status IS NOT NULL
+        WHERE execution_status IS NOT NULL ${dc}
         GROUP BY execution_status
         ORDER BY cnt DESC
         LIMIT 20
@@ -33,7 +43,7 @@ router.get('/summary', async (_req: Request, res: Response) => {
       safeQuery(`
         SELECT workspace_name, COUNT(*)::int AS cnt
         FROM edoops.talend_logs
-        WHERE workspace_name IS NOT NULL
+        WHERE workspace_name IS NOT NULL ${dc}
         GROUP BY workspace_name
         ORDER BY cnt DESC
         LIMIT 10
@@ -41,7 +51,7 @@ router.get('/summary', async (_req: Request, res: Response) => {
       safeQuery(`
         SELECT remote_engine_name, COUNT(*)::int AS cnt
         FROM edoops.talend_logs
-        WHERE remote_engine_name IS NOT NULL
+        WHERE remote_engine_name IS NOT NULL ${dc}
         GROUP BY remote_engine_name
         ORDER BY cnt DESC
         LIMIT 10
@@ -73,12 +83,13 @@ router.get('/summary', async (_req: Request, res: Response) => {
 
 // ─── GET /api/talend/level-counts ────────────────────────
 // Log level distribution (FATAL, ERROR, WARN, INFO, etc.)
-router.get('/level-counts', async (_req: Request, res: Response) => {
+router.get('/level-counts', async (req: Request, res: Response) => {
   try {
+    const { clause: dc } = daysClause(req.query);
     const rows = await safeQuery(`
       SELECT level_text, COUNT(*)::int AS cnt
       FROM edoops.talend_logs
-      WHERE level_text IS NOT NULL
+      WHERE level_text IS NOT NULL ${dc}
       GROUP BY level_text
       ORDER BY cnt DESC
       LIMIT 20
@@ -105,8 +116,9 @@ router.get('/level-counts', async (_req: Request, res: Response) => {
 
 // ─── GET /api/talend/recent-tasks ────────────────────────
 // Latest 50 task executions — de-duped by task_execution_id
-router.get('/recent-tasks', async (_req: Request, res: Response) => {
+router.get('/recent-tasks', async (req: Request, res: Response) => {
   try {
+    const { clause: dc } = daysClause(req.query);
     const rows = await safeQuery(`
       SELECT DISTINCT ON (task_execution_id)
         task_execution_id,
@@ -122,7 +134,7 @@ router.get('/recent-tasks', async (_req: Request, res: Response) => {
         execution_timestamp,
         trigger_timestamp
       FROM edoops.talend_logs
-      WHERE task_execution_id IS NOT NULL
+      WHERE task_execution_id IS NOT NULL ${dc}
       ORDER BY task_execution_id, execution_timestamp DESC NULLS LAST
       LIMIT 50
     `);
@@ -134,8 +146,9 @@ router.get('/recent-tasks', async (_req: Request, res: Response) => {
 
 // ─── GET /api/talend/recent-errors ──────────────────────
 // Latest 50 FATAL / ERROR log entries with truncated message
-router.get('/recent-errors', async (_req: Request, res: Response) => {
+router.get('/recent-errors', async (req: Request, res: Response) => {
   try {
+    const { clause: dc } = daysClause(req.query);
     const rows = await safeQuery(`
       SELECT
         execution_timestamp,
@@ -149,7 +162,7 @@ router.get('/recent-errors', async (_req: Request, res: Response) => {
         thread
       FROM edoops.talend_logs
       WHERE level_text IN ('FATAL', 'ERROR')
-        AND message_text IS NOT NULL
+        AND message_text IS NOT NULL ${dc}
       ORDER BY execution_timestamp DESC NULLS LAST
       LIMIT 50
     `);
