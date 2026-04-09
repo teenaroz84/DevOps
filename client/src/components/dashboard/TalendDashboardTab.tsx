@@ -95,7 +95,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
 
   const filteredErrors = useMemo(() =>
     recentErrors
-      .filter(e => levelFilter === 'All' || String(e.level_text || '').toUpperCase() === levelFilter)
+      .filter(e => levelFilter === 'All' || String(e.derived_level || '').toUpperCase() === levelFilter)
       .filter(e => !taskSearch || (e.task_name || '').toLowerCase().includes(taskSearch.toLowerCase())),
   [recentErrors, levelFilter, taskSearch])
 
@@ -154,17 +154,17 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
     { key: 'remote_engine_name',header: 'Engine',      width: 130, render: row => <Typography sx={{ fontSize: '11px', color: '#666' }}>{row.remote_engine_name || '—'}</Typography> },
     { key: 'run_type',          header: 'Run Type',    width: 80,  render: row => <Typography sx={{ fontSize: '11px', color: '#888' }}>{row.run_type || '—'}</Typography> },
     { key: 'count_of_attempts', header: 'Attempts',   width: 70,  align: 'right', render: row => <Typography sx={{ fontSize: '11px', color: '#888' }}>{row.count_of_attempts ?? '—'}</Typography> },
-    { key: 'execution_timestamp', header: 'Executed',  width: 130, render: row => <Typography sx={{ fontSize: '11px', color: '#888' }}>{fmtTs(row.execution_timestamp)}</Typography> },
+    { key: 'start_timestamp', header: 'Executed',  width: 130, render: row => <Typography sx={{ fontSize: '11px', color: '#888' }}>{fmtTs(row.start_timestamp)}</Typography> },
   ]
 
   // ── Error log table columns ───────────────────────────────
   const errorCols: ColumnDef[] = [
     {
-      key: 'level_text', header: 'Level', width: 70,
+      key: 'derived_level', header: 'Level', width: 70,
       render: row => {
-        const cfg = LEVEL_COLOR[String(row.level_text).toUpperCase()] || { color: '#546e7a', bg: '#eceff1' }
+        const cfg = LEVEL_COLOR[String(row.derived_level || '').toUpperCase()] || { color: '#546e7a', bg: '#eceff1' }
         return (
-          <Chip label={row.level_text} size="small"
+          <Chip label={row.derived_level || '—'} size="small"
             sx={{ height: 20, fontSize: '10px', fontWeight: 700, color: cfg.color, backgroundColor: cfg.bg }} />
         )
       },
@@ -179,16 +179,40 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
       ),
     },
     {
-      key: 'message_text', header: 'Message', flex: 1,
+      key: 'fatal_count', header: 'Fatal', width: 60, align: 'right',
       render: row => (
-        <Typography sx={{ fontSize: '11px', color: '#444', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '420px' }}
-          title={row.message_text}>
-          {row.message_text || '—'}
+        <Typography sx={{ fontSize: '11px', fontWeight: row.fatal_count > 0 ? 700 : 400, color: row.fatal_count > 0 ? '#c62828' : '#ccc' }}>
+          {row.fatal_count ?? 0}
         </Typography>
       ),
     },
-    { key: 'remote_engine_name', header: 'Engine', width: 130, render: row => <Typography sx={{ fontSize: '10px', color: '#888' }}>{row.remote_engine_name || '—'}</Typography> },
-    { key: 'execution_timestamp', header: 'Time', width: 130, render: row => <Typography sx={{ fontSize: '10px', color: '#aaa' }}>{fmtTs(row.execution_timestamp)}</Typography> },
+    {
+      key: 'error_count', header: 'Error', width: 60, align: 'right',
+      render: row => (
+        <Typography sx={{ fontSize: '11px', fontWeight: row.error_count > 0 ? 700 : 400, color: row.error_count > 0 ? '#e53935' : '#ccc' }}>
+          {row.error_count ?? 0}
+        </Typography>
+      ),
+    },
+    {
+      key: 'warn_count', header: 'Warn', width: 60, align: 'right',
+      render: row => (
+        <Typography sx={{ fontSize: '11px', fontWeight: row.warn_count > 0 ? 700 : 400, color: row.warn_count > 0 ? '#f57c00' : '#ccc' }}>
+          {row.warn_count ?? 0}
+        </Typography>
+      ),
+    },
+    {
+      key: 'info_count', header: 'Info', width: 60, align: 'right',
+      render: row => (
+        <Typography sx={{ fontSize: '11px', color: row.info_count > 0 ? '#1565c0' : '#ccc' }}>
+          {row.info_count ?? 0}
+        </Typography>
+      ),
+    },
+    { key: 'workspace_name',    header: 'Workspace', width: 110, render: row => <Typography sx={{ fontSize: '10px', color: '#888' }}>{row.workspace_name || '—'}</Typography> },
+    { key: 'remote_engine_name', header: 'Engine',   width: 130, render: row => <Typography sx={{ fontSize: '10px', color: '#888' }}>{row.remote_engine_name || '—'}</Typography> },
+    { key: 'start_timestamp',   header: 'Time',      width: 130, render: row => <Typography sx={{ fontSize: '10px', color: '#aaa' }}>{fmtTs(row.start_timestamp)}</Typography> },
   ]
 
   return (
@@ -205,7 +229,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
             <Chip label="MOCK DATA" size="small" sx={{ fontSize: '9px', height: 18, bgcolor: '#fff3e0', color: '#f57c00', fontWeight: 700, border: '1px solid #f57c0040' }} />
           )}
           <Typography sx={{ fontSize: '11px', color: '#aaa', ml: 'auto' }}>
-            Source: PostgreSQL · edoops.talend_logs
+            Source: PostgreSQL · edoops.talend_logs_dashboard
           </Typography>
 
           {/* ── Date range slider ── */}
@@ -271,7 +295,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
             <WidgetShell
               title="Talend Execution Summary"
               titleIcon={<IntegrationInstructionsIcon sx={{ color: '#e65100', fontSize: 18 }} />}
-              source="edoops.talend_logs"
+              source="edoops.talend_logs_dashboard"
             >
               <Box sx={{ px: 1.5, py: 1 }}>
                 <StatCardGrid items={statCards} columns={6} compact />
@@ -285,7 +309,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
               <WidgetShell
                 title="Execution Status Breakdown"
                 titleIcon={<CheckCircleOutlineIcon sx={{ color: '#2e7d32', fontSize: 18 }} />}
-                source="edoops.talend_logs"
+                source="edoops.talend_logs_dashboard"
               >
                 <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
                   <DonutChart data={donutData} centerLabel={total} showLegend size={150} />
@@ -297,7 +321,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
               <WidgetShell
                 title="Log Level Distribution"
                 titleIcon={<ErrorOutlineIcon sx={{ color: '#c62828', fontSize: 18 }} />}
-                source="edoops.talend_logs · level_text"
+                source="edoops.talend_logs_dashboard · fatal_count / error_count / warn_count / info_count"
               >
                 <Box sx={{ px: 1, py: 1 }}>
                   <ComposedBarLineChart
@@ -317,7 +341,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
             <WidgetShell
               title="Recent Task Executions"
               titleIcon={<ListAltIcon sx={{ color: '#1565c0', fontSize: 18 }} />}
-              source="edoops.talend_logs · latest 50"
+              source="edoops.talend_logs_dashboard · latest 50"
             >
               <Box sx={{ px: 1.5, pt: 1, pb: 0, display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
                 <TextField
@@ -363,7 +387,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
             <WidgetShell
               title="Recent Errors & Fatal Logs"
               titleIcon={<ErrorOutlineIcon sx={{ color: '#c62828', fontSize: 18 }} />}
-              source="edoops.talend_logs · FATAL / ERROR · latest 50"
+              source="edoops.talend_logs_dashboard · fatal/error/warn/info count > 0 · latest 200"
             >
               <Box sx={{ px: 1.5, pt: 1, pb: 0, display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
                 {['All', 'FATAL', 'ERROR', 'WARN', 'INFO'].map(l => (
@@ -388,7 +412,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
                 <DataTable
                   columns={errorCols}
                   rows={filteredErrors}
-                  rowKey="execution_timestamp"
+                  rowKey="start_timestamp"
                   compact
                   accentColor="#c62828"
                 />

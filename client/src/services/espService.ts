@@ -49,6 +49,13 @@ export const espService = {
   getJobRunTable: (applName: string) =>
     apiClient.get(`/api/esp/job-run-table/${encodeURIComponent(applName)}`),
 
+  /**
+   * Returns hourly run/fail trend for a single job.
+   * days: 1–7 (default 2). Response: [{ day, hour, job_count, job_fail_count }]
+   */
+  getJobRunTrendByJob: (jobname: string, days: number = 2) =>
+    apiClient.get(`/api/esp/run-trend-by-job/${encodeURIComponent(jobname)}?days=${days}`),
+
   // Legacy individual endpoints kept for backwards compatibility
   getJobCounts: () => apiClient.get('/api/esp/job-counts'),
   getJobList: () => apiClient.get('/api/esp/job-list'),

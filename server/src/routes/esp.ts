@@ -103,6 +103,7 @@ router.get('/platform-applications/:platform', async (req: Request, res: Respons
   try {
     const pool = getPgPool();
     const platformName = decodeURIComponent(req.params.platform);
+    console.log('[ESP] platform-applications → platform:', platformName);
     const def = PLATFORM_CONFIG[platformName];
     if (!def) return res.status(404).json({ error: 'Unknown platform' });
     const cond = buildPlatformCondition(def);
@@ -121,6 +122,7 @@ router.get('/platform-detail/:platform', async (req: Request, res: Response) => 
   try {
     const pool = getPgPool();
     const platformName = decodeURIComponent(req.params.platform);
+    console.log('[ESP] platform-detail → platform:', platformName);
     const def = PLATFORM_CONFIG[platformName];
     if (!def) return res.status(404).json({ error: 'Unknown platform' });
     const cond = buildPlatformCondition(def);
@@ -139,19 +141,19 @@ router.get('/platform-detail/:platform', async (req: Request, res: Response) => 
         .then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
       safe(() => pool.query(`SELECT COUNT(DISTINCT jobname) AS cnt FROM esp_job_cmnd WHERE ${cond} AND (jobname LIKE '%JSDELAY%' OR jobname LIKE '%RETRIG%')`)
         .then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
-      safe(() => pool.query(`SELECT COALESCE(agent, 'Null') AS name, COUNT(*) AS count FROM esp_job_cmnd WHERE ${cond} GROUP BY agent ORDER BY count DESC LIMIT 10`)
+      safe(() => pool.query(`SELECT COALESCE(agent, 'Null') AS name, COUNT(*) AS count FROM esp_job_cmnd WHERE ${cond} GROUP BY agent ORDER BY count DESC`)
         .then(r => r.rows.map((x: any) => ({ name: x.name, count: parseInt(x.count) }))), []),
       safe(() => pool.query(`SELECT COALESCE(jobtype, 'Null') AS name, COUNT(*) AS count FROM esp_job_cmnd WHERE ${cond} GROUP BY jobtype ORDER BY count DESC`)
         .then(r => r.rows.map((x: any) => ({ name: x.name, count: parseInt(x.count) }))), []),
       safe(() => pool.query(`SELECT COALESCE(CAST(cmpl_cd AS TEXT), 'Null') AS name, COUNT(*) AS count FROM esp_job_cmnd WHERE ${cond} GROUP BY cmpl_cd ORDER BY count DESC`)
         .then(r => r.rows.map((x: any) => ({ name: x.name, count: parseInt(x.count) }))), []),
-      safe(() => pool.query(`SELECT COALESCE(user_job, 'Null') AS name, COUNT(*) AS count FROM esp_job_cmnd WHERE ${cond} GROUP BY user_job ORDER BY count DESC LIMIT 10`)
+      safe(() => pool.query(`SELECT COALESCE(user_job, 'Null') AS name, COUNT(*) AS count FROM esp_job_cmnd WHERE ${cond} GROUP BY user_job ORDER BY count DESC`)
         .then(r => r.rows.map((x: any) => ({ name: x.name, count: parseInt(x.count) }))), []),
-      safe(() => pool.query(`SELECT jobname, appl_name, last_run_date FROM esp_job_cmnd WHERE ${cond} ORDER BY jobname LIMIT 500`)
+      safe(() => pool.query(`SELECT jobname, appl_name, last_run_date FROM esp_job_cmnd WHERE ${cond} ORDER BY jobname`)
         .then(r => r.rows.map((x: any) => ({ jobname: x.jobname, appl_name: x.appl_name, last_run_date: x.last_run_date }))), []),
-      safe(() => pool.query(`SELECT d.jobname, d.release AS successor_job FROM esp_job_dpndnt d JOIN esp_job_cmnd c ON d.appl_name = c.appl_name WHERE ${buildPlatformCondition(def, 'c.appl_name')} ORDER BY d.jobname LIMIT 100`)
+      safe(() => pool.query(`SELECT d.jobname, d.release AS successor_job FROM esp_job_dpndnt d JOIN esp_job_cmnd c ON d.appl_name = c.appl_name WHERE ${buildPlatformCondition(def, 'c.appl_name')} ORDER BY d.jobname`)
         .then(r => r.rows.map((x: any) => ({ jobname: x.jobname, successor_job: x.successor_job }))), []),
-      safe(() => pool.query(`SELECT d.jobname, d.release AS predecessor_job FROM esp_job_dpndnt d WHERE d.release IN (SELECT DISTINCT appl_name FROM esp_job_cmnd WHERE ${cond}) ORDER BY d.jobname LIMIT 100`)
+      safe(() => pool.query(`SELECT d.jobname, d.release AS predecessor_job FROM esp_job_dpndnt d WHERE d.release IN (SELECT DISTINCT appl_name FROM esp_job_cmnd WHERE ${cond}) ORDER BY d.jobname`)
         .then(r => r.rows.map((x: any) => ({ jobname: x.jobname, predecessor_job: x.predecessor_job }))), []),
     ]);
 
@@ -179,6 +181,7 @@ router.get('/platform-run-trend/:platform', async (req: Request, res: Response) 
     const cond = buildPlatformCondition(def);
     const rawDays = parseInt(String(req.query.days ?? '2'), 10);
     const days = Math.min(Math.max(rawDays, 1), 7);
+    console.log('[ESP] platform-run-trend → platform:', platformName, '| days:', days);
 
     const result = await pool.query(`
       WITH base AS (
@@ -217,6 +220,7 @@ router.get('/platform-metadata/:platform', async (req: Request, res: Response) =
   try {
     const pool = getPgPool();
     const platformName = decodeURIComponent(req.params.platform);
+    console.log('[ESP] platform-metadata → platform:', platformName);
     const def = PLATFORM_CONFIG[platformName];
     if (!def) return res.status(404).json({ error: 'Unknown platform' });
     const cond = buildPlatformCondition(def);
@@ -225,7 +229,6 @@ router.get('/platform-metadata/:platform', async (req: Request, res: Response) =
       FROM esp_job_cmnd
       WHERE ${cond}
       ORDER BY jobname
-      LIMIT 500
     `);
     res.json(result.rows.map((r: any) => ({
       jobname: r.jobname, command: r.command ?? null, argument: r.argument ?? null,
@@ -242,6 +245,7 @@ router.get('/platform-job-run-table/:platform', async (req: Request, res: Respon
   try {
     const pool = getPgPool();
     const platformName = decodeURIComponent(req.params.platform);
+    console.log('[ESP] platform-job-run-table → platform:', platformName);
     const def = PLATFORM_CONFIG[platformName];
     if (!def) return res.status(404).json({ error: 'Unknown platform' });
     const cond = buildPlatformCondition(def, 'ec.appl_name');
@@ -253,7 +257,6 @@ router.get('/platform-job-run-table/:platform', async (req: Request, res: Respon
       JOIN esp_job_stats_recent es ON ec.appl_name = es.appl_name AND ec.jobname = es.job_longname
       WHERE ${cond}
       ORDER BY es.end_date DESC, es.end_time DESC
-      LIMIT 500
     `);
     res.json(result.rows.map((r: any) => ({
       job_longname: r.job_longname, command: r.command ?? null, argument: r.argument ?? null,
@@ -460,8 +463,8 @@ router.get('/metadata/:appl_name', async (req: Request, res: Response) => {
               user_job
        FROM esp_job_cmnd
        WHERE appl_name = $1
-       ORDER BY jobname
-       LIMIT 200`,
+       ORDER BY jobname`,
+
       [appl_name]
     );
     res.json(result.rows.map((r: any) => ({
@@ -486,6 +489,7 @@ router.get('/job-run-table/:appl_name', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
     const appl_name = decodeURIComponent(req.params.appl_name);
+    console.log('[ESP] job-run-table → appl_name:', appl_name);
     const result = await pool.query(
       `SELECT ec.appl_name,
               es.job_longname,
@@ -504,8 +508,7 @@ router.get('/job-run-table/:appl_name', async (req: Request, res: Response) => {
          ON ec.appl_name = es.appl_name
         AND ec.jobname   = es.job_longname
        WHERE ec.appl_name = $1
-       ORDER BY es.end_date DESC, es.end_time DESC
-       LIMIT 500`,
+       ORDER BY es.end_date DESC, es.end_time DESC`,
       [appl_name]
     );
     res.json(result.rows.map((r: any) => ({
@@ -535,6 +538,7 @@ router.get('/job-run-trend/:appl_name', async (req: Request, res: Response) => {
     const appl_name = decodeURIComponent(req.params.appl_name);
     const rawDays = parseInt(String(req.query.days ?? '2'), 10);
     const days = Math.min(Math.max(rawDays, 1), 7);
+    console.log('[ESP] job-run-trend → appl_name:', appl_name, '| days:', days);
 
     const result = await pool.query(
       `WITH base AS (
@@ -569,6 +573,105 @@ router.get('/job-run-trend/:appl_name', async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/esp/run-trend-by-job/:jobname?days=N
+// Returns hourly run/fail counts for a single job across all applications
+router.get('/run-trend-by-job/:jobname', async (req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const jobname = decodeURIComponent(req.params.jobname);
+    const rawDays = parseInt(String(req.query.days ?? '2'), 10);
+    const days = Math.min(Math.max(rawDays, 1), 7);
+    console.log('[ESP] run-trend-by-job → jobname:', jobname, '| days:', days);
+
+    const result = await pool.query(
+      `WITH base AS (
+         SELECT
+           end_date,
+           end_time::time AS et,
+           job_longname,
+           ccfail
+         FROM esp_job_stats_recent
+         WHERE job_longname = $1
+           AND end_date >= CURRENT_DATE - INTERVAL '${days} days'
+       )
+       SELECT
+         end_date                                               AS day,
+         EXTRACT(HOUR FROM et)::int                            AS hour,
+         COUNT(job_longname)::int                              AS job_count,
+         SUM(CASE WHEN ccfail = 'YES' THEN 1 ELSE 0 END)::int AS job_fail_count
+       FROM base
+       GROUP BY end_date, EXTRACT(HOUR FROM et)
+       ORDER BY end_date, EXTRACT(HOUR FROM et)`,
+      [jobname]
+    );
+
+    res.json(result.rows.map((r: any) => ({
+      day:            r.day ? String(r.day).split('T')[0] : null,
+      hour:           parseInt(r.hour, 10),
+      job_count:      parseInt(r.job_count, 10),
+      job_fail_count: parseInt(r.job_fail_count, 10),
+    })));
+  } catch (err: any) {
+    console.error('ESP run-trend-by-job error:', err.message);
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
+// GET /api/esp/run-trend-by-appl-job?appl_name=X&field=agent|job_type|user_job&value=Y&days=N
+// Returns hourly run/fail counts for all jobs matching a widget-filter dimension within an app/platform
+router.get('/run-trend-by-dimension', async (req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const field = String(req.query.field ?? '');
+    const value = String(req.query.value ?? '');
+    const rawDays = parseInt(String(req.query.days ?? '2'), 10);
+    const days = Math.min(Math.max(rawDays, 1), 7);
+
+    const ALLOWED_FIELDS: Record<string, string> = { agent: 'agent', job_type: 'jobtype', user_job: 'user_job' };
+    const col = ALLOWED_FIELDS[field];
+    if (!col) return res.status(400).json({ error: 'Invalid field' });
+
+    const safeValue = value === 'Null' ? null : value;
+    const whereClause = safeValue === null
+      ? `ec.${col} IS NULL`
+      : `ec.${col} = $2`;
+    const params: any[] = safeValue === null ? [days] : [days, safeValue];
+
+    const result = await pool.query(
+      `WITH base AS (
+         SELECT
+           es.end_date,
+           es.end_time::time AS et,
+           es.job_longname,
+           es.ccfail
+         FROM esp_job_stats_recent es
+         JOIN esp_job_cmnd ec ON ec.appl_name = es.appl_name AND ec.jobname = es.job_longname
+         WHERE ${whereClause}
+           AND es.end_date >= CURRENT_DATE - INTERVAL '$1 days'
+       )
+       SELECT
+         end_date                                               AS day,
+         EXTRACT(HOUR FROM et)::int                            AS hour,
+         COUNT(job_longname)::int                              AS job_count,
+         SUM(CASE WHEN ccfail = 'YES' THEN 1 ELSE 0 END)::int AS job_fail_count
+       FROM base
+       GROUP BY end_date, EXTRACT(HOUR FROM et)
+       ORDER BY end_date, EXTRACT(HOUR FROM et)`,
+      params
+    );
+
+    res.json(result.rows.map((r: any) => ({
+      day:            r.day ? String(r.day).split('T')[0] : null,
+      hour:           parseInt(r.hour, 10),
+      job_count:      parseInt(r.job_count, 10),
+      job_fail_count: parseInt(r.job_fail_count, 10),
+    })));
+  } catch (err: any) {
+    console.error('ESP run-trend-by-dimension error:', err.message);
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
 // GET /api/esp/job-run-trend  (legacy — no appl_name, kept for compat)
 router.get('/job-run-trend', async (_req: Request, res: Response) => {
   try {
@@ -597,6 +700,7 @@ router.get('/summary/:appl_name', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
     const appl_name = decodeURIComponent(req.params.appl_name);
+    console.log('[ESP] summary → appl_name:', appl_name);
 
     // Helper: run query safely; return fallback on any DB error
     const safe = async <T>(fn: () => Promise<T>, fallback: T): Promise<T> => {
@@ -624,7 +728,7 @@ router.get('/summary/:appl_name', async (req: Request, res: Response) => {
         [appl_name]).then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
 
       safe(() => pool.query(
-        `SELECT COALESCE(agent, 'Null') AS name, COUNT(*) AS count FROM esp_job_cmnd WHERE appl_name = $1 GROUP BY agent ORDER BY count DESC LIMIT 10`,
+        `SELECT COALESCE(agent, 'Null') AS name, COUNT(*) AS count FROM esp_job_cmnd WHERE appl_name = $1 GROUP BY agent ORDER BY count DESC`,
         [appl_name]).then(r => r.rows.map((x: any) => ({ name: x.name, count: parseInt(x.count) }))), []),
 
       safe(() => pool.query(
@@ -636,7 +740,7 @@ router.get('/summary/:appl_name', async (req: Request, res: Response) => {
         [appl_name]).then(r => r.rows.map((x: any) => ({ name: x.name, count: parseInt(x.count) }))), []),
 
       safe(() => pool.query(
-        `SELECT COALESCE(user_job, 'Null') AS name, COUNT(*) AS count FROM esp_job_cmnd WHERE appl_name = $1 GROUP BY user_job ORDER BY count DESC LIMIT 10`,
+        `SELECT COALESCE(user_job, 'Null') AS name, COUNT(*) AS count FROM esp_job_cmnd WHERE appl_name = $1 GROUP BY user_job ORDER BY count DESC`,
         [appl_name]).then(r => r.rows.map((x: any) => ({ name: x.name, count: parseInt(x.count) }))), []),
 
       safe(() => pool.query(
@@ -650,15 +754,15 @@ router.get('/summary/:appl_name', async (req: Request, res: Response) => {
         [appl_name]).then(r => r.rows.map((x: any) => ({ day: String(x.day), hour: parseInt(x.hour), count: parseInt(x.count) }))), []),
 
       safe(() => pool.query(
-        `SELECT jobname, release AS successor_job FROM esp_job_dpndnt WHERE appl_name = $1 ORDER BY jobname LIMIT 50`,
+        `SELECT jobname, release AS successor_job FROM esp_job_dpndnt WHERE appl_name = $1 ORDER BY jobname`,
         [appl_name]).then(r => r.rows.map((x: any) => ({ jobname: x.jobname, successor_job: x.successor_job }))), []),
 
       safe(() => pool.query(
-        `SELECT jobname, release AS predecessor_job FROM esp_job_dpndnt WHERE release = $1 ORDER BY jobname LIMIT 50`,
+        `SELECT jobname, release AS predecessor_job FROM esp_job_dpndnt WHERE release = $1 ORDER BY jobname`,
         [appl_name]).then(r => r.rows.map((x: any) => ({ jobname: x.jobname, predecessor_job: x.predecessor_job }))), []),
 
       safe(() => pool.query(
-        `SELECT jobname, command, argument FROM esp_job_cmnd WHERE appl_name = $1 ORDER BY jobname LIMIT 100`,
+        `SELECT jobname, command, argument FROM esp_job_cmnd WHERE appl_name = $1 ORDER BY jobname`,
         [appl_name]).then(r => r.rows.map((x: any) => ({ jobname: x.jobname, command: x.command ?? null, argument: x.argument ?? null }))), []),
     ]);
 

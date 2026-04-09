@@ -41,6 +41,10 @@ interface DonutChartProps {
   title?: string
   /** When set, wraps the whole thing in a titled section card */
   showTitle?: boolean
+  /** Called when a slice or legend item is clicked; receives the slice name */
+  onSliceClick?: (name: string) => void
+  /** Highlighted slice name (shows ring) */
+  activeSlice?: string | null
 }
 
 export const DonutChart: React.FC<DonutChartProps> = ({
@@ -52,6 +56,8 @@ export const DonutChart: React.FC<DonutChartProps> = ({
   centerLabel,
   title,
   showTitle = false,
+  onSliceClick,
+  activeSlice,
 }) => {
   const cx = size / 2
   const cy = size / 2
@@ -80,9 +86,17 @@ export const DonutChart: React.FC<DonutChartProps> = ({
               dataKey="value"
               startAngle={90}
               endAngle={-270}
+              onClick={onSliceClick ? (_, index) => onSliceClick(data[index]?.name ?? '') : undefined}
+              cursor={onSliceClick ? 'pointer' : undefined}
             >
               {data.map((entry, i) => (
-                <Cell key={i} fill={entry.color} />
+                <Cell
+                  key={i}
+                  fill={entry.color}
+                  opacity={activeSlice && activeSlice !== entry.name ? 0.4 : 1}
+                  stroke={activeSlice === entry.name ? '#333' : 'none'}
+                  strokeWidth={activeSlice === entry.name ? 2 : 0}
+                />
               ))}
             </Pie>
             <RechartsTooltip
@@ -129,7 +143,14 @@ export const DonutChart: React.FC<DonutChartProps> = ({
                 arrow
               >
                 <Box
-                  sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5, cursor: 'default' }}
+                  onClick={onSliceClick ? () => onSliceClick(item.name) : undefined}
+                  sx={{
+                    display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5,
+                    cursor: onSliceClick ? 'pointer' : 'default',
+                    opacity: activeSlice && activeSlice !== item.name ? 0.5 : 1,
+                    fontWeight: activeSlice === item.name ? 700 : 400,
+                    '&:hover': onSliceClick ? { opacity: 0.8 } : {},
+                  }}
                 >
                   <Box
                     sx={{

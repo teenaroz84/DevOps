@@ -1,5 +1,5 @@
 import React from 'react'
-import { Box, Typography, CircularProgress, Paper, Chip, Autocomplete, TextField, Button, Checkbox, Select, MenuItem, FormControl, Tooltip } from '@mui/material'
+import { Box, Typography, CircularProgress, Paper, Chip, Autocomplete, TextField, Button, Checkbox, Select, MenuItem, FormControl, Tooltip, IconButton } from '@mui/material'
 import WorkIcon from '@mui/icons-material/Work'
 import ScheduleIcon from '@mui/icons-material/Schedule'
 import AccountTreeIcon from '@mui/icons-material/AccountTree'
@@ -8,10 +8,11 @@ import TrendingUpIcon from '@mui/icons-material/TrendingUp'
 import TableChartIcon from '@mui/icons-material/TableChart'
 import PeopleIcon from '@mui/icons-material/People'
 import AppsIcon from '@mui/icons-material/Apps'
+import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 
 import SmartToyIcon from '@mui/icons-material/SmartToy'
 import {
-  WidgetShell, StatCardGrid, MetricBarList, DataTable, TrendLineChart, DonutChart, ComposedBarLineChart,
+  WidgetShell, StatCardGrid, MetricBarList, DataTable, TrendLineChart, DonutChart,
 } from '../widgets'
 import type { ColumnDef } from '../widgets'
 import { espService } from '../../services'
@@ -30,7 +31,7 @@ interface AppData {
   job_types: NameCount[]
   completion_codes: NameCount[]
   user_jobs: NameCount[]
-  job_list: Array<{ jobname: string; last_run_date: string | null }>
+  job_list: Array<{ jobname: string; last_run_date: string | null; appl_name?: string }>
   job_run_trend: Array<{ day: string; hour: number; job_count: number; job_fail_count: number }>
   successor_jobs: Array<{ jobname: string; successor_job: string }>
   predecessor_jobs: Array<{ jobname: string; predecessor_job: string }>
@@ -54,17 +55,7 @@ const PLATFORM_FULL_NAMES: Record<string, string> = {
   'Permissible Call':  'Permissible Call Jobs',
 }
 
-// Helper: turn NameCount[] → MetricBarItem[] with alternating bar colors
 const BAR_COLORS = ['#1976d2', '#f57c00', '#c62828', '#2e7d32', '#6a1b9a', '#00838f']
-const toBarItems = (items: NameCount[]) => {
-  const max = Math.max(...items.map(i => i.count), 1)
-  return items.map((item, idx) => ({
-    label: item.name,
-    value: item.count,
-    max,
-    color: BAR_COLORS[idx % BAR_COLORS.length],
-  }))
-}
 
 // ─── Main Component ───────────────────────────────────────
 export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void }> = ({ onOpenAgent }) => {
@@ -82,13 +73,21 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   const [tableLoading, setTableLoading] = React.useState(false)
   const [selectedJobs, setSelectedJobs] = React.useState<string[]>([])
 
+  // ── Drill-down state ─────────────────────────────────────
+  // drillJob: jobname clicked in job list → shows per-job trend
+  const [drillJob, setDrillJob] = React.useState<string | null>(null)
+  const [drillJobTrend, setDrillJobTrend] = React.useState<Array<{ day: string; hour: number; job_count: number; job_fail_count: number }>>([])
+  const [drillJobTrendLoading, setDrillJobTrendLoading] = React.useState(false)
+  // widgetFilter: agent/job_type/user_job clicked in widget → filters tables
+  const [widgetFilter, setWidgetFilter] = React.useState<{ field: 'agent' | 'job_type' | 'user_job'; value: string } | null>(null)
+
   // ── Platform state ───────────────────────────────────────
   const [platformSummary, setPlatformSummary] = React.useState<{ platform: string; total: number; idle: number; special: number; app_count: number }[]>([])
   const [selectedPlatform, setSelectedPlatform] = React.useState<string | null>(null)
   const [platformApplications, setPlatformApplications] = React.useState<string[]>([])
 
-  // Reset job filter when application or platform changes
-  React.useEffect(() => { setSelectedJobs([]) }, [selected, selectedPlatform])
+  // Reset job filter + drill-down when application or platform changes
+  React.useEffect(() => { setSelectedJobs([]); setDrillJob(null); setWidgetFilter(null) }, [selected, selectedPlatform])
 
   // Load platform summary once on mount (and when mock changes)
   // Auto-selects the first platform so the dashboard is populated on load
@@ -244,32 +243,73 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       .finally(() => setTrendLoading(false))
   }, [selected, selectedPlatform, trendDays, useMock])
 
+  // Load per-job trend when drillJob or trendDays changes
+  React.useEffect(() => {
+    if (!drillJob) { setDrillJobTrend([]); return }
+    setDrillJobTrendLoading(true)
+    espService.getJobRunTrendByJob(drillJob, trendDays)
+      .then((res: any) => setDrillJobTrend(Array.isArray(res) ? res : []))
+      .catch(() => setDrillJobTrend([]))
+      .finally(() => setDrillJobTrendLoading(false))
+  }, [drillJob, trendDays])
+
   // Transform trend data for recharts: keys ${day}_count and ${day}_fail per hour
-  const trendChart = React.useMemo(() => {
-    if (!trendData.length) return { rows: [], days: [] }
-    const days = [...new Set(trendData.map(t => t.day))].sort()
+  const buildTrendChart = (rows: Array<{ day: string; hour: number; job_count: number; job_fail_count: number }>) => {
+    if (!rows.length) return { rows: [], days: [] as string[] }
+    const days = [...new Set(rows.map(t => t.day))].sort()
     const byHour: Record<number, Record<string, number>> = {}
-    trendData.forEach(({ day, hour, job_count, job_fail_count }) => {
+    rows.forEach(({ day, hour, job_count, job_fail_count }) => {
       if (!byHour[hour]) byHour[hour] = {}
       byHour[hour][`${day}_count`] = job_count
       byHour[hour][`${day}_fail`] = job_fail_count
     })
-    const rows = Object.entries(byHour)
+    const chartRows = Object.entries(byHour)
       .sort(([a], [b]) => Number(a) - Number(b))
       .map(([hour, vals]) => ({ hour: `${hour}:00`, ...vals }))
-    return { rows, days }
-  }, [trendData])
+    return { rows: chartRows, days }
+  }
+  const trendChart     = React.useMemo(() => buildTrendChart(trendData),    [trendData])
+  const drillJobChart  = React.useMemo(() => buildTrendChart(drillJobTrend), [drillJobTrend])
 
   // Available job options for the job selector dropdown
   const jobOptions = React.useMemo(() => (data?.job_list ?? []).map(j => j.jobname), [data])
 
-  // Filtered rows — driven by selectedJobs (multi-select, empty = all jobs)
-  const filteredJobList     = React.useMemo(() => (data?.job_list ?? []).filter(r           => !selectedJobs.length || selectedJobs.includes(r.jobname)),           [data, selectedJobs])
-  const filteredMeta        = React.useMemo(() => (data?.metadata ?? []).filter(r           => !selectedJobs.length || selectedJobs.includes(r.jobname)),           [data, selectedJobs])
-  const filteredPred        = React.useMemo(() => (data?.predecessor_jobs ?? []).filter(r   => !selectedJobs.length || selectedJobs.includes(r.jobname)),           [data, selectedJobs])
-  const filteredSucc        = React.useMemo(() => (data?.successor_jobs ?? []).filter(r     => !selectedJobs.length || selectedJobs.includes(r.jobname)),           [data, selectedJobs])
-  const filteredMetaDetail  = React.useMemo(() => metadataDetail.filter(r                  => !selectedJobs.length || selectedJobs.includes(r.jobname)),           [metadataDetail, selectedJobs])
-  const filteredJobRunTable = React.useMemo(() => jobRunTable.filter(r                     => !selectedJobs.length || selectedJobs.includes(r.job_longname)),      [jobRunTable, selectedJobs])
+  // Jobnames matching widgetFilter (derived from metadataDetail)
+  const widgetFilteredJobnames = React.useMemo(() => {
+    if (!widgetFilter) return null
+    const matching = new Set(
+      metadataDetail
+        .filter(r => {
+          const val: string | null = widgetFilter.field === 'agent'    ? r.agent
+            : widgetFilter.field === 'job_type' ? r.job_type
+            : widgetFilter.field === 'user_job' ? r.user_job
+            : null
+          return (val ?? 'Null') === widgetFilter.value
+        })
+        .map(r => r.jobname)
+    )
+    return matching
+  }, [widgetFilter, metadataDetail])
+
+  // Filtered rows — driven by selectedJobs + widgetFilter (empty = all jobs)
+  const filteredJobList     = React.useMemo(() => (data?.job_list ?? [])
+    .filter(r => !selectedJobs.length || selectedJobs.includes(r.jobname))
+    .filter(r => !widgetFilteredJobnames || widgetFilteredJobnames.has(r.jobname)),        [data, selectedJobs, widgetFilteredJobnames])
+  const filteredMeta        = React.useMemo(() => (data?.metadata ?? [])
+    .filter(r => !selectedJobs.length || selectedJobs.includes(r.jobname))
+    .filter(r => !widgetFilteredJobnames || widgetFilteredJobnames.has(r.jobname)),        [data, selectedJobs, widgetFilteredJobnames])
+  const filteredPred        = React.useMemo(() => (data?.predecessor_jobs ?? [])
+    .filter(r => !selectedJobs.length || selectedJobs.includes(r.jobname))
+    .filter(r => !widgetFilteredJobnames || widgetFilteredJobnames.has(r.jobname)),        [data, selectedJobs, widgetFilteredJobnames])
+  const filteredSucc        = React.useMemo(() => (data?.successor_jobs ?? [])
+    .filter(r => !selectedJobs.length || selectedJobs.includes(r.jobname))
+    .filter(r => !widgetFilteredJobnames || widgetFilteredJobnames.has(r.jobname)),        [data, selectedJobs, widgetFilteredJobnames])
+  const filteredMetaDetail  = React.useMemo(() => metadataDetail
+    .filter(r => !selectedJobs.length || selectedJobs.includes(r.jobname))
+    .filter(r => !widgetFilteredJobnames || widgetFilteredJobnames.has(r.jobname)),        [metadataDetail, selectedJobs, widgetFilteredJobnames])
+  const filteredJobRunTable = React.useMemo(() => jobRunTable
+    .filter(r => !selectedJobs.length || selectedJobs.includes(r.job_longname))
+    .filter(r => !widgetFilteredJobnames || widgetFilteredJobnames.has(r.job_longname)),   [jobRunTable, selectedJobs, widgetFilteredJobnames])
 
   // Metadata detail columns (full esp_job_cmnd data)
   const metaCols: ColumnDef[] = [
@@ -302,37 +342,71 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
     { key: 'argument',     header: 'Argument',    flex: 1.5, render: r => r.argument  ?? '—' },
   ]
 
-  const jobListCols: ColumnDef[] = [
-    { key: 'jobname', header: 'Job Name', flex: 1, noWrap: true },
-    {
-      key: 'last_run_date',
-      header: 'Last Run',
-      width: 130,
-      render: r => {
-        if (!r.last_run_date) {
-          return (
-            <Chip label="Never run" size="small" sx={{ height: 18, fontSize: '10px', fontWeight: 600, bgcolor: '#fffbeb', color: '#b45309', border: '1px solid #fde68a' }} />
-          )
-        }
-        const daysSince = (Date.now() - new Date(r.last_run_date).getTime()) / 86_400_000
-        const stale = daysSince > 3
-        return (
-          <Chip
-            label={new Date(r.last_run_date).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-            size="small"
+  const jobListCols: ColumnDef[] = React.useMemo(() => {
+    const applCol: ColumnDef = selectedPlatform ? {
+      key: 'appl_name',
+      header: 'Application',
+      width: 120,
+      noWrap: true,
+      render: r => r.appl_name ? (
+        <Typography
+          component="span"
+          onClick={(e: React.MouseEvent) => { e.stopPropagation(); setSelected(r.appl_name); setSelectedPlatform(null) }}
+          sx={{ fontSize: '11px', color: '#1976d2', cursor: 'pointer', '&:hover': { textDecoration: 'underline' }, fontWeight: 600 }}
+        >
+          {r.appl_name}
+        </Typography>
+      ) : '—',
+    } : null as unknown as ColumnDef
+    const baseCols: ColumnDef[] = [
+      {
+        key: 'jobname',
+        header: 'Job Name',
+        flex: 1,
+        noWrap: true,
+        render: r => (
+          <Typography
+            component="span"
             sx={{
-              height: 18,
-              fontSize: '10px',
-              fontWeight: 600,
-              bgcolor: stale ? '#fce4ec' : '#e8f5e9',
-              color:   stale ? '#c62828' : '#2e7d32',
-              border:  stale ? '1px solid #ef9a9a' : '1px solid #a5d6a7',
+              fontSize: '11px',
+              fontWeight: drillJob === r.jobname ? 700 : 400,
+              color: drillJob === r.jobname ? '#1565c0' : 'inherit',
             }}
-          />
-        )
+          >
+            {r.jobname}
+          </Typography>
+        ),
       },
-    },
-  ]
+      {
+        key: 'last_run_date',
+        header: 'Last Run',
+        width: 130,
+        render: r => {
+          if (!r.last_run_date) {
+            return (
+              <Chip label="Never run" size="small" sx={{ height: 18, fontSize: '10px', fontWeight: 600, bgcolor: '#fffbeb', color: '#b45309', border: '1px solid #fde68a' }} />
+            )
+          }
+          const daysSince = (Date.now() - new Date(r.last_run_date).getTime()) / 86_400_000
+          const stale = daysSince > 3
+          return (
+            <Chip
+              label={new Date(r.last_run_date).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              size="small"
+              sx={{
+                height: 18, fontSize: '10px', fontWeight: 600,
+                bgcolor: stale ? '#fce4ec' : '#e8f5e9',
+                color:   stale ? '#c62828' : '#2e7d32',
+                border:  stale ? '1px solid #ef9a9a' : '1px solid #a5d6a7',
+              }}
+            />
+          )
+        },
+      },
+    ]
+    return selectedPlatform ? [applCol, ...baseCols] : baseCols
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPlatform, drillJob])
 
   const depCols: ColumnDef[] = [
     { key: 'jobname', header: 'Job Name', flex: 1, noWrap: true },
@@ -438,7 +512,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                   renderInput={(params) => (
                     <TextField
                       {...params}
-                      placeholder={`${platformApplications.length} apps — pick one…`}
+                      placeholder={`${platformApplications.length} app(s)`}
                       sx={{
                         '& .MuiOutlinedInput-root': {
                           fontSize: '12px', fontWeight: 600, borderRadius: 1, bgcolor: '#fff',
@@ -617,7 +691,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
             <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
               <WidgetShell
                 title="Job List"
-                source={`${data.job_list.length} jobs`}
+                source={`${filteredJobList.length}${filteredJobList.length !== data.job_list.length ? ` / ${data.job_list.length}` : ''} jobs · click a job to view its trend`}
                 titleIcon={<WorkIcon sx={{ color: '#1976d2', fontSize: 18 }} />}
               >
                 <Box sx={{ flex: 1, overflowY: 'auto', px: 1.5, pb: 1 }}>
@@ -629,6 +703,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                     maxHeight={280}
                     accentColor="#2e7d32"
                     emptyMessage="No jobs found"
+                    onRowClick={row => setDrillJob(prev => prev === row.jobname ? null : row.jobname)}
                   />
                 </Box>
               </WidgetShell>
@@ -636,11 +711,23 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
 
             <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
               <WidgetShell
-                title={`Job Run Trend — Last ${trendDays} Day${trendDays > 1 ? 's' : ''}`}
-                source="ESP · esp_job_stats_recent"
+                title={drillJob
+                  ? `Job Trend — ${drillJob}`
+                  : `Job Run Trend — Last ${trendDays} Day${trendDays > 1 ? 's' : ''}`}
+                source={drillJob ? 'esp_job_stats_recent · click job again or × to reset' : 'ESP · esp_job_stats_recent'}
                 titleIcon={<TrendingUpIcon sx={{ color: '#1565c0', fontSize: 18 }} />}
                 actions={
-                  <Box sx={{ display: 'flex', gap: 0.5 }}>
+                  <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
+                    {drillJob && (
+                      <IconButton
+                        size="small"
+                        onClick={() => setDrillJob(null)}
+                        sx={{ p: 0.25, color: '#888', '&:hover': { color: '#333' } }}
+                        title="Back to platform / app trend"
+                      >
+                        <ArrowBackIcon sx={{ fontSize: 14 }} />
+                      </IconButton>
+                    )}
                     {[1, 2, 3, 5, 7].map(d => (
                       <Chip
                         key={d}
@@ -660,7 +747,28 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                 }
               >
                 <Box sx={{ px: 2, pb: 2, pt: 0.5 }}>
-                  {trendLoading ? (
+                  {drillJob ? (
+                    drillJobTrendLoading ? (
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 260 }}>
+                        <CircularProgress size={24} sx={{ color: '#1565c0' }} />
+                      </Box>
+                    ) : drillJobChart.rows.length > 0 ? (
+                      <TrendLineChart
+                        data={drillJobChart.rows}
+                        xKey="hour"
+                        lines={drillJobChart.days.flatMap((day, i) => [
+                          { key: `${day}_count`, label: `${day} Runs`, color: TREND_RUN_COLORS[i % TREND_RUN_COLORS.length], strokeWidth: 2 },
+                          { key: `${day}_fail`,  label: `${day} Fail`, color: TREND_FAIL_COLORS[i % TREND_FAIL_COLORS.length], dashed: true, strokeWidth: 1.5 },
+                        ])}
+                        height={260}
+                        margin={{ top: 8, right: 16, left: -10, bottom: 4 }}
+                      />
+                    ) : (
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 260 }}>
+                        <Typography sx={{ fontSize: '12px', color: '#bbb' }}>No run history for <strong>{drillJob}</strong></Typography>
+                      </Box>
+                    )
+                  ) : trendLoading ? (
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 260 }}>
                       <CircularProgress size={24} sx={{ color: '#1565c0' }} />
                     </Box>
@@ -685,23 +793,44 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
             </Paper>
           </Box>
 
-          {/* ── Row 3: Agent (bar) | Job Type (donut) | Completion Code (donut) | User Job (bar) ── */}
+          {/* ── Widget filter active indicator ── */}
+          {widgetFilter && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 0.5 }}>
+              <Typography sx={{ fontSize: '11px', color: '#555' }}>Filtered by:</Typography>
+              <Chip
+                label={`${widgetFilter.field.replace('_', ' ')}: ${widgetFilter.value}`}
+                size="small"
+                onDelete={() => setWidgetFilter(null)}
+                sx={{ fontSize: '11px', height: 22, fontWeight: 700, bgcolor: '#e3f2fd', color: '#1565c0', border: '1px solid #1976d240' }}
+              />
+              <Typography sx={{ fontSize: '11px', color: '#888' }}>
+                ({filteredJobList.length} jobs shown)
+              </Typography>
+            </Box>
+          )}
+
+          {/* ── Row 3: Agent | Job Type (donut) | Completion Code (donut) | User Job ── */}
           <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2 }}>
 
-            {/* Agent — horizontal bar */}
+            {/* Agent — clickable bar list */}
             <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #1976d222', borderTop: '3px solid #1976d2', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-              <WidgetShell title="Agent" source={`${data.agents.length} entries`} titleIcon={<PeopleIcon sx={{ color: '#1976d2', fontSize: 18 }} />}>
+              <WidgetShell title="Agent" source={`${data.agents.length} entries · click to filter`} titleIcon={<PeopleIcon sx={{ color: '#1976d2', fontSize: 18 }} />}>
                 <Box sx={{ px: 1.5, pb: 1.5, pt: 0.5 }}>
                   {data.agents.length === 0 ? (
                     <Typography sx={{ fontSize: '11px', color: '#bbb', textAlign: 'center', py: 2 }}>No data</Typography>
                   ) : (
-                    <ComposedBarLineChart
-                      data={data.agents.map(a => ({ name: a.name, count: a.count }))}
-                      xKey="name"
-                      bars={[{ key: 'count', label: 'Jobs', color: '#1976d2' }]}
-                      lines={[]}
-                      height={180}
-                      margin={{ top: 8, right: 8, left: -20, bottom: 40 }}
+                    <MetricBarList
+                      items={data.agents.map((a, idx) => ({
+                        label: a.name,
+                        value: a.count,
+                        max: Math.max(...data.agents.map(x => x.count), 1),
+                        color: widgetFilter?.field === 'agent' && widgetFilter.value === a.name ? '#1565c0' : BAR_COLORS[idx % BAR_COLORS.length],
+                        onClick: () => setWidgetFilter(prev =>
+                          prev?.field === 'agent' && prev.value === a.name ? null : { field: 'agent', value: a.name }
+                        ),
+                      }))}
+                      barHeight={8}
+                      compact
                     />
                   )}
                 </Box>
@@ -710,7 +839,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
 
             {/* Job Type — donut */}
             <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #6a1b9a22', borderTop: '3px solid #6a1b9a', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-              <WidgetShell title="Job Type" source={`${data.job_types.length} types`} titleIcon={<StorageIcon sx={{ color: '#6a1b9a', fontSize: 18 }} />}>
+              <WidgetShell title="Job Type" source={`${data.job_types.length} types · click to filter`} titleIcon={<StorageIcon sx={{ color: '#6a1b9a', fontSize: 18 }} />}>
                 <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
                   {data.job_types.length === 0 ? (
                     <Typography sx={{ fontSize: '11px', color: '#bbb', py: 2 }}>No data</Typography>
@@ -724,6 +853,10 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                       size={140}
                       centerLabel={data.job_types.reduce((s, t) => s + t.count, 0)}
                       showLegend
+                      onSliceClick={name => setWidgetFilter(prev =>
+                        prev?.field === 'job_type' && prev.value === name ? null : { field: 'job_type', value: name }
+                      )}
+                      activeSlice={widgetFilter?.field === 'job_type' ? widgetFilter.value : null}
                     />
                   )}
                 </Box>
@@ -732,7 +865,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
 
             {/* Completion Code — donut */}
             <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #2e7d3222', borderTop: '3px solid #2e7d32', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-              <WidgetShell title="Completion Code" source={`${data.completion_codes.length} codes`} titleIcon={<ScheduleIcon sx={{ color: '#2e7d32', fontSize: 18 }} />}>
+              <WidgetShell title="Completion Code" source={`${data.completion_codes.length} codes · click to filter`} titleIcon={<ScheduleIcon sx={{ color: '#2e7d32', fontSize: 18 }} />}>
                 <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
                   {data.completion_codes.length === 0 ? (
                     <Typography sx={{ fontSize: '11px', color: '#bbb', py: 2 }}>No data</Typography>
@@ -746,20 +879,36 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                       size={140}
                       centerLabel={data.completion_codes.reduce((s, c) => s + c.count, 0)}
                       showLegend
+                      onSliceClick={name => setWidgetFilter(prev =>
+                        prev?.field === 'user_job' && prev.value === name ? null : { field: 'user_job', value: name }
+                      )}
+                      activeSlice={widgetFilter?.field === 'user_job' ? widgetFilter.value : null}
                     />
                   )}
                 </Box>
               </WidgetShell>
             </Paper>
 
-            {/* User Job — horizontal bar */}
+            {/* User Job — clickable bar list */}
             <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #f57c0022', borderTop: '3px solid #f57c00', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-              <WidgetShell title="User Job" source={`${data.user_jobs.length} entries`} titleIcon={<PeopleIcon sx={{ color: '#f57c00', fontSize: 18 }} />}>
+              <WidgetShell title="User Job" source={`${data.user_jobs.length} entries · click to filter`} titleIcon={<PeopleIcon sx={{ color: '#f57c00', fontSize: 18 }} />}>
                 <Box sx={{ p: 1.5 }}>
                   {data.user_jobs.length === 0 ? (
                     <Typography sx={{ fontSize: '11px', color: '#bbb', textAlign: 'center', py: 2 }}>No data</Typography>
                   ) : (
-                    <MetricBarList items={toBarItems(data.user_jobs)} barHeight={8} compact />
+                    <MetricBarList
+                      items={data.user_jobs.map((u, idx) => ({
+                        label: u.name,
+                        value: u.count,
+                        max: Math.max(...data.user_jobs.map(x => x.count), 1),
+                        color: widgetFilter?.field === 'user_job' && widgetFilter.value === u.name ? '#e65100' : BAR_COLORS[idx % BAR_COLORS.length],
+                        onClick: () => setWidgetFilter(prev =>
+                          prev?.field === 'user_job' && prev.value === u.name ? null : { field: 'user_job', value: u.name }
+                        ),
+                      }))}
+                      barHeight={8}
+                      compact
+                    />
                   )}
                 </Box>
               </WidgetShell>
