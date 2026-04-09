@@ -1,5 +1,5 @@
 import React from 'react'
-import { Box, Typography, CircularProgress, Paper, Chip, Autocomplete, TextField, Button, Checkbox, Select, MenuItem, FormControl } from '@mui/material'
+import { Box, Typography, CircularProgress, Paper, Chip, Autocomplete, TextField, Button, Checkbox, Select, MenuItem, FormControl, Tooltip } from '@mui/material'
 import WorkIcon from '@mui/icons-material/Work'
 import ScheduleIcon from '@mui/icons-material/Schedule'
 import AccountTreeIcon from '@mui/icons-material/AccountTree'
@@ -42,6 +42,18 @@ interface AppData {
 const TREND_RUN_COLORS  = ['#1565c0', '#2e7d32', '#6a1b9a', '#00838f']
 const TREND_FAIL_COLORS = ['#e53935', '#f57c00', '#d81b60', '#ff6f00']
 
+// Full display names shown on hover of platform dropdown items
+const PLATFORM_FULL_NAMES: Record<string, string> = {
+  'PowerCenter':       'Informatica PowerCenter (SPO)',
+  'Abinitio':          'Ab Initio — Data Processing Platform',
+  'EDL':               'Enterprise Data Lake (EDL)',
+  'IICS/SF':           'Informatica Intelligent Cloud Services / Salesforce',
+  'Talend':            'Talend Data Integration Platform',
+  'PPCM':              'Pipeline Process Control Management (PPCM)',
+  'PDA':               'Predictive Data Analytics (PDA)',
+  'Permissible Call':  'Permissible Call Jobs',
+}
+
 // Helper: turn NameCount[] → MetricBarItem[] with alternating bar colors
 const BAR_COLORS = ['#1976d2', '#f57c00', '#c62828', '#2e7d32', '#6a1b9a', '#00838f']
 const toBarItems = (items: NameCount[]) => {
@@ -79,10 +91,15 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   React.useEffect(() => { setSelectedJobs([]) }, [selected, selectedPlatform])
 
   // Load platform summary once on mount (and when mock changes)
+  // Auto-selects the first platform so the dashboard is populated on load
   React.useEffect(() => {
     if (useMock) return  // no mock data for platforms
     espService.getPlatformSummary()
-      .then((res: any) => setPlatformSummary(Array.isArray(res) ? res : []))
+      .then((res: any) => {
+        const list = Array.isArray(res) ? res : []
+        setPlatformSummary(list)
+        if (list.length > 0) setSelectedPlatform(list[0].platform)
+      })
       .catch(() => {})
   }, [useMock])
 
@@ -332,205 +349,16 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
         elevation={0}
         sx={{ borderRadius: 2, border: '1px solid #e8ecf1', bgcolor: '#f8f9fb', overflow: 'hidden', position: 'sticky', top: 0, zIndex: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.07)' }}
       >
-        <Box sx={{ px: 2, py: 1.25, display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-          <AppsIcon sx={{ fontSize: 16, color: '#2e7d32' }} />
+        {/* ── Row 1: Title ── */}
+        <Box sx={{ px: 2, py: 1, display: 'flex', alignItems: 'center', gap: 1.5, borderBottom: '1px solid #e8ecf1' }}>
+          <AppsIcon sx={{ fontSize: 15, color: '#2e7d32' }} />
           <Typography sx={{ fontWeight: 700, fontSize: '11px', color: '#555', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
             ESP — Enterprise Scheduler Platform
           </Typography>
           {useMock && (
             <Chip label="MOCK DATA" size="small" sx={{ fontSize: '9px', height: 18, bgcolor: '#fff3e0', color: '#f57c00', fontWeight: 700, border: '1px solid #f57c0040' }} />
           )}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: 'auto' }}>
-            <Typography sx={{ fontSize: '11px', color: '#555', fontWeight: 600 }}>Platform:</Typography>
-            <FormControl size="small">
-              <Select
-                value={selectedPlatform ?? ''}
-                onChange={(e) => {
-                  const val = (e.target.value as string) || null
-                  setSelectedPlatform(val)
-                  if (!val) setData(null)
-                }}
-                displayEmpty
-                sx={{
-                  fontSize: '12px', fontWeight: 600, minWidth: 160, bgcolor: '#fff',
-                  '& .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d3240' },
-                  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
-                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
-                }}
-              >
-                <MenuItem value="" sx={{ fontSize: '12px', color: '#888' }}><em>All</em></MenuItem>
-                {platformSummary.map(p => (
-                  <MenuItem key={p.platform} value={p.platform} sx={{ fontSize: '12px' }}>
-                    {p.platform}&ensp;<span style={{ fontSize: '10px', color: '#999' }}>({p.app_count} apps)</span>
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Typography sx={{ fontSize: '12px', color: '#666', fontWeight: 500 }}>Application:</Typography>
-              {selectedPlatform ? (
-                platformApplications.length === 0 ? (
-                  <CircularProgress size={12} sx={{ color: '#2e7d32' }} />
-                ) : (
-                  <Autocomplete
-                    options={platformApplications}
-                    value={null}
-                    onChange={(_, val) => {
-                      if (val) {
-                        setSelected(val)
-                        setSelectedPlatform(null)
-                      }
-                    }}
-                    size="small"
-                    sx={{ minWidth: 260 }}
-                    renderInput={(params) => (
-                      <TextField
-                        {...params}
-                        placeholder={`${platformApplications.length} apps — pick one to drill in…`}
-                        sx={{
-                          '& .MuiOutlinedInput-root': {
-                            fontSize: '12px',
-                            fontWeight: 600,
-                            borderRadius: 1,
-                            bgcolor: '#fff',
-                            '& .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d3240' },
-                            '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
-                            '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
-                          },
-                        }}
-                      />
-                    )}
-                  />
-                )
-              ) : appsLoading ? (
-                <CircularProgress size={14} sx={{ color: '#2e7d32' }} />
-              ) : (
-                <Autocomplete
-                  options={applications}
-                  value={selected}
-                  onChange={(_, val) => setSelected(val ?? '')}
-                  disableClearable={false}
-                  size="small"
-                  sx={{ minWidth: 260 }}
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      placeholder="Search application…"
-                      sx={{
-                        '& .MuiOutlinedInput-root': {
-                          fontSize: '12px',
-                          fontWeight: 600,
-                          borderRadius: 1,
-                          bgcolor: '#fff',
-                          '& .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d3240' },
-                          '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
-                          '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
-                        },
-                      }}
-                    />
-                  )}
-                />
-              )}
-            </Box>
-
-            {/* ── Job selector (populated after app data loads) ── */}
-            {(selectedPlatform || selected) && (
-              <>
-                <Typography sx={{ fontSize: '12px', color: '#666', fontWeight: 500 }}>Job:</Typography>
-                <Autocomplete
-                  multiple
-                  options={['__SELECT_ALL__', ...jobOptions]}
-                  value={selectedJobs}
-                  disableCloseOnSelect
-                  clearOnEscape
-                  disabled={loading || !data}
-                  size="small"
-                  sx={{ minWidth: 260, maxWidth: 480 }}
-                  getOptionLabel={(option) => option === '__SELECT_ALL__' ? 'Select All' : option}
-                  onChange={(_, val) => {
-                    if (val.includes('__SELECT_ALL__')) {
-                      // toggle: if all already selected, clear; otherwise select all
-                      setSelectedJobs(selectedJobs.length === jobOptions.length ? [] : [...jobOptions])
-                    } else {
-                      setSelectedJobs(val)
-                    }
-                  }}
-                  renderOption={(props, option, { selected }) => {
-                    const { key, ...rest } = props as any
-                    if (option === '__SELECT_ALL__') {
-                      const allSelected = selectedJobs.length === jobOptions.length
-                      return (
-                        <li key="__SELECT_ALL__" {...rest} style={{ borderBottom: '1px solid #e8ecf1', fontWeight: 700 }}>
-                          <Checkbox
-                            size="small"
-                            checked={allSelected}
-                            indeterminate={selectedJobs.length > 0 && !allSelected}
-                            sx={{ mr: 1, p: 0.5, color: '#1976d2', '&.Mui-checked': { color: '#1976d2' }, '&.MuiCheckbox-indeterminate': { color: '#1976d2' } }}
-                          />
-                          <Typography sx={{ fontSize: '12px', fontWeight: 700, color: '#1976d2' }}>Select All</Typography>
-                        </li>
-                      )
-                    }
-                    return (
-                      <li key={option} {...rest}>
-                        <Checkbox
-                          size="small"
-                          checked={selected}
-                          sx={{ mr: 1, p: 0.5, color: '#1976d2', '&.Mui-checked': { color: '#1976d2' } }}
-                        />
-                        <Typography sx={{ fontSize: '12px' }}>{option}</Typography>
-                      </li>
-                    )
-                  }}
-                  renderTags={(value, getTagProps) =>
-                    value.map((option, index) => {
-                      const { key, ...tagProps } = getTagProps({ index })
-                      return (
-                        <Chip
-                          key={key}
-                          label={option}
-                          size="small"
-                          {...tagProps}
-                          sx={{ fontSize: '10px', height: 18, color: '#1976d2', backgroundColor: '#e3f2fd', border: '1px solid #1976d240' }}
-                        />
-                      )
-                    })
-                  }
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      placeholder={loading ? 'Loading…' : selectedJobs.length ? '' : 'All jobs'}
-                      sx={{
-                        '& .MuiOutlinedInput-root': {
-                          fontSize: '12px',
-                          fontWeight: 600,
-                          borderRadius: 1,
-                          bgcolor: '#fff',
-                          '& .MuiOutlinedInput-notchedOutline': { borderColor: '#1976d240' },
-                          '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#1976d2' },
-                          '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#1976d2' },
-                        },
-                      }}
-                    />
-                  )}
-                />
-              </>
-            )}
-
-            {(selectedPlatform || selectedJobs.length > 0 || selected) && (
-              <Button
-                size="small"
-                onClick={() => {
-                  setSelectedPlatform(null)
-                  setSelectedJobs([])
-                  setData(null)
-                  setPlatformApplications([])
-                }}
-                sx={{ fontSize: '10px', color: '#d32f2f', textTransform: 'none', height: 24, minWidth: 'auto', px: 1, border: '1px solid #ef9a9a', borderRadius: 1, '&:hover': { bgcolor: '#fce4ec' } }}
-              >
-                Clear Filters
-              </Button>
-            )}
+          <Box sx={{ ml: 'auto' }}>
             {onOpenAgent && (
               <Button
                 size="small"
@@ -542,7 +370,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                   textTransform: 'none',
                   fontSize: '11px',
                   fontWeight: 700,
-                  height: 28,
+                  height: 26,
                   px: 1.5,
                   '&:hover': { backgroundColor: '#2e7d32', filter: 'brightness(0.9)' },
                 }}
@@ -551,6 +379,194 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
               </Button>
             )}
           </Box>
+        </Box>
+
+        {/* ── Row 2: Filters ── */}
+        <Box sx={{ px: 2, py: 1, display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+
+          {/* Platform */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+            <Typography sx={{ fontSize: '11px', color: '#555', fontWeight: 600, whiteSpace: 'nowrap' }}>Platform:</Typography>
+            <FormControl size="small">
+              <Select
+                value={selectedPlatform ?? ''}
+                onChange={(e) => {
+                  const val = (e.target.value as string) || null
+                  setSelectedPlatform(val)
+                  if (!val) setData(null)
+                }}
+                displayEmpty
+                sx={{
+                  fontSize: '12px', fontWeight: 600, minWidth: 150, bgcolor: '#fff',
+                  '& .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d3240' },
+                  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
+                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
+                }}
+              >
+                <MenuItem value="" sx={{ fontSize: '12px', color: '#888' }}><em>All</em></MenuItem>
+                {platformSummary.map(p => (
+                  <Tooltip
+                    key={p.platform}
+                    title={PLATFORM_FULL_NAMES[p.platform] ?? p.platform}
+                    placement="right"
+                    arrow
+                  >
+                    <MenuItem value={p.platform} sx={{ fontSize: '12px' }}>
+                      {p.platform}&ensp;<span style={{ fontSize: '10px', color: '#999' }}>({p.app_count} apps)</span>
+                    </MenuItem>
+                  </Tooltip>
+                ))}
+              </Select>
+            </FormControl>
+          </Box>
+
+          {/* Application */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+            <Typography sx={{ fontSize: '11px', color: '#666', fontWeight: 500, whiteSpace: 'nowrap' }}>Application:</Typography>
+            {selectedPlatform ? (
+              platformApplications.length === 0 ? (
+                <CircularProgress size={12} sx={{ color: '#2e7d32' }} />
+              ) : (
+                <Autocomplete
+                  options={platformApplications}
+                  value={null}
+                  onChange={(_, val) => {
+                    if (val) {
+                      setSelected(val)
+                      setSelectedPlatform(null)
+                    }
+                  }}
+                  size="small"
+                  sx={{ minWidth: 240 }}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      placeholder={`${platformApplications.length} apps — pick one…`}
+                      sx={{
+                        '& .MuiOutlinedInput-root': {
+                          fontSize: '12px', fontWeight: 600, borderRadius: 1, bgcolor: '#fff',
+                          '& .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d3240' },
+                          '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
+                          '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
+                        },
+                      }}
+                    />
+                  )}
+                />
+              )
+            ) : appsLoading ? (
+              <CircularProgress size={14} sx={{ color: '#2e7d32' }} />
+            ) : (
+              <Autocomplete
+                options={applications}
+                value={selected}
+                onChange={(_, val) => setSelected(val ?? '')}
+                disableClearable={false}
+                size="small"
+                sx={{ minWidth: 240 }}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    placeholder="Search application…"
+                    sx={{
+                      '& .MuiOutlinedInput-root': {
+                        fontSize: '12px', fontWeight: 600, borderRadius: 1, bgcolor: '#fff',
+                        '& .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d3240' },
+                        '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
+                        '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
+                      },
+                    }}
+                  />
+                )}
+              />
+            )}
+          </Box>
+
+          {/* Job selector */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+              <Typography sx={{ fontSize: '11px', color: '#666', fontWeight: 500, whiteSpace: 'nowrap' }}>Job:</Typography>
+              <Autocomplete
+                multiple
+                options={['__SELECT_ALL__', ...jobOptions]}
+                value={selectedJobs}
+                disableCloseOnSelect
+                clearOnEscape
+                disabled={loading || !data}
+                size="small"
+                sx={{ minWidth: 220, maxWidth: 340 }}
+                getOptionLabel={(option) => option === '__SELECT_ALL__' ? 'Select All' : option}
+                onChange={(_, val) => {
+                  if (val.includes('__SELECT_ALL__')) {
+                    setSelectedJobs(selectedJobs.length === jobOptions.length ? [] : [...jobOptions])
+                  } else {
+                    setSelectedJobs(val)
+                  }
+                }}
+                renderOption={(props, option, { selected }) => {
+                  const { key, ...rest } = props as any
+                  if (option === '__SELECT_ALL__') {
+                    const allSelected = selectedJobs.length === jobOptions.length
+                    return (
+                      <li key="__SELECT_ALL__" {...rest} style={{ borderBottom: '1px solid #e8ecf1', fontWeight: 700 }}>
+                        <Checkbox size="small" checked={allSelected} indeterminate={selectedJobs.length > 0 && !allSelected}
+                          sx={{ mr: 1, p: 0.5, color: '#1976d2', '&.Mui-checked': { color: '#1976d2' }, '&.MuiCheckbox-indeterminate': { color: '#1976d2' } }} />
+                        <Typography sx={{ fontSize: '12px', fontWeight: 700, color: '#1976d2' }}>Select All</Typography>
+                      </li>
+                    )
+                  }
+                  return (
+                    <li key={option} {...rest}>
+                      <Checkbox size="small" checked={selected}
+                        sx={{ mr: 1, p: 0.5, color: '#1976d2', '&.Mui-checked': { color: '#1976d2' } }} />
+                      <Typography sx={{ fontSize: '12px' }}>{option}</Typography>
+                    </li>
+                  )
+                }}
+                renderTags={(value) =>
+                  value.length === 1 ? (
+                    <Chip label={value[0]} size="small" onDelete={() => setSelectedJobs([])}
+                      sx={{ fontSize: '10px', height: 18, color: '#1976d2', backgroundColor: '#e3f2fd', border: '1px solid #1976d240' }} />
+                  ) : (
+                    <Chip
+                      label={`${value.length} jobs`}
+                      size="small"
+                      onDelete={() => setSelectedJobs([])}
+                      sx={{ fontSize: '10px', height: 18, fontWeight: 700, color: '#1565c0', backgroundColor: '#e3f2fd', border: '1px solid #1976d240' }}
+                    />
+                  )
+                }
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    placeholder={loading ? 'Loading…' : selectedJobs.length ? '' : 'All jobs'}
+                    sx={{
+                      '& .MuiOutlinedInput-root': {
+                        fontSize: '12px', fontWeight: 600, borderRadius: 1, bgcolor: '#fff',
+                        '& .MuiOutlinedInput-notchedOutline': { borderColor: '#1976d240' },
+                        '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#1976d2' },
+                        '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#1976d2' },
+                      },
+                    }}
+                  />
+                )}
+              />
+            </Box>
+
+          {/* Clear Filters */}
+          {(selectedJobs.length > 0 || (selected && !selectedPlatform) || (selectedPlatform && platformSummary.length > 0 && selectedPlatform !== platformSummary[0].platform)) && (
+            <Button
+              size="small"
+              onClick={() => {
+                const first = platformSummary[0]?.platform ?? null
+                setSelectedJobs([])
+                setSelected('')
+                setSelectedPlatform(first)
+              }}
+              sx={{ fontSize: '10px', color: '#d32f2f', textTransform: 'none', height: 26, whiteSpace: 'nowrap', px: 1.25, border: '1px solid #ef9a9a', borderRadius: 1, '&:hover': { bgcolor: '#fce4ec' } }}
+            >
+              Clear Filters
+            </Button>
+          )}
         </Box>
       </Paper>
 
