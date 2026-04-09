@@ -154,7 +154,6 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   React.useEffect(() => {
     setAppsLoading(true)
     setApplications([])
-    setData(null)
     if (useMock) {
       const apps = MOCK_ESP_APPLICATIONS.map(a => a.appl_name)
       setApplications(apps)
@@ -166,15 +165,15 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       .then((res: any) => {
         const apps: string[] = (res.applications || []).map((a: any) => a.appl_name)
         setApplications(apps)
-        if (apps.length > 0) setSelected(apps[0])
+        // do NOT auto-select apps[0] — platform selection drives default load
       })
       .catch(() => {})
       .finally(() => setAppsLoading(false))
   }, [useMock])
 
-  // Load detail whenever selection or mock mode changes
+  // Load detail whenever selection or mock mode changes (skipped when platform is active)
   React.useEffect(() => {
-    if (!selected) return
+    if (!selected || selectedPlatform) return
     setLoading(true)
     setData(null)
     if (useMock) {
@@ -200,11 +199,11 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       })
       .catch(() => setData(null))
       .finally(() => setLoading(false))
-  }, [selected, useMock])
+  }, [selected, selectedPlatform, useMock])
 
   // Load metadata detail + job run table whenever selection or mock mode changes
   React.useEffect(() => {
-    if (!selected) return
+    if (!selected || selectedPlatform) return
     setTableLoading(true)
     setMetadataDetail([])
     setJobRunTable([])
@@ -222,7 +221,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       setMetadataDetail(Array.isArray(meta) ? meta : [])
       setJobRunTable(Array.isArray(runs) ? runs : [])
     }).finally(() => setTableLoading(false))
-  }, [selected, useMock])
+  }, [selected, selectedPlatform, useMock])
 
   // Load trend data independently — uses platform or app selection
   React.useEffect(() => {
@@ -396,6 +395,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                   if (!val) setData(null)
                 }}
                 displayEmpty
+                renderValue={(val) => val ? String(val) : <em style={{ color: '#888' }}>All</em>}
                 sx={{
                   fontSize: '12px', fontWeight: 600, minWidth: 150, bgcolor: '#fff',
                   '& .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d3240' },

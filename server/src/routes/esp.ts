@@ -12,7 +12,7 @@ const router = Router();
 // exclusions: same pattern — rows matching these are excluded
 interface PlatformDef { includes: string[]; exclusions: string[] }
 const PLATFORM_CONFIG: Record<string, PlatformDef> = {
-  'PowerCenter': {
+  /* 'PowerCenter': {
     includes:   ['ERDP*'],
     exclusions: [],
   },
@@ -27,7 +27,7 @@ const PLATFORM_CONFIG: Record<string, PlatformDef> = {
   'IICS/SF': {
     includes:   ['DTDPCF24', 'DTDPIAM', 'DTDPPART', 'DTDPSFAR', 'DTDPSRA2', 'DTDPTMWD', 'SJDPSFDC', 'SJDFSCR', 'SJDP15RT', 'DTDPLXNR', 'DTDPLMTV', 'DTDPL3*'],
     exclusions: ['DTDPWLT', 'DTDPAZM1'],
-  },
+  } ,*/
   'Talend': {
     includes:   ['SFDPI*', 'SFDPE*', 'SFDPD*'],
     exclusions: [],
