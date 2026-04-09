@@ -7,7 +7,248 @@ import { getPgPool } from '../db/postgres';
 
 const router = Router();
 
-// GET /api/esp/job-counts
+// ─── Platform groupings (wildcards match appl_name) ───────
+// includes: trailing '*' → LIKE prefix; exact otherwise
+// exclusions: same pattern — rows matching these are excluded
+interface PlatformDef { includes: string[]; exclusions: string[] }
+const PLATFORM_CONFIG: Record<string, PlatformDef> = {
+  'PowerCenter': {
+    includes:   ['ERDP*'],
+    exclusions: [],
+  },
+  'Abinitio': {
+    includes:   ['DTDPL3*'],
+    exclusions: [],
+  },
+  'EDL': {
+    includes:   ['DTDPL*', 'DTDPCF24', 'DTDPIAM', 'DTDPPART', 'DTDPSFAR', 'DTDPSRA2', 'DTDPTMWD', 'SJDPSFDC', 'SJDFSCR', 'SJDP15RT'],
+    exclusions: ['DTDPLCMN', 'DTDPLCRN', 'DTDPLXNX', 'DTDPLBP', 'DTDPLCR', 'DTDPLDC', 'DTDPLKDZ', 'DTDPLMK', 'DTDPLOS', 'DTDPLXNR', 'DTDPLMTV', 'DTDPL3*'],
+  },
+  'IICS/SF': {
+    includes:   ['DTDPCF24', 'DTDPIAM', 'DTDPPART', 'DTDPSFAR', 'DTDPSRA2', 'DTDPTMWD', 'SJDPSFDC', 'SJDFSCR', 'SJDP15RT', 'DTDPLXNR', 'DTDPLMTV', 'DTDPL3*'],
+    exclusions: ['DTDPWLT', 'DTDPAZM1'],
+  },
+  'Talend': {
+    includes:   ['SFDPI*', 'SFDPE*', 'SFDPD*'],
+    exclusions: [],
+  },
+  'PPCM': {
+    includes:   ['DTDP36PM'],
+    exclusions: [],
+  },
+  'PDA': {
+    includes:   ['DTDP37PD'],
+    exclusions: [],
+  },
+  'Permissible Call': {
+    includes:   ['DTDP33TA', 'TZDP05EU'],
+    exclusions: [],
+  },
+};
+
+/**
+ * Builds a SQL boolean expression for a platform's include+exclusion rules.
+ * Operates on appl_name. All values come from server-side config — never user input.
+ */
+function buildPlatformCondition(def: PlatformDef, col = 'appl_name'): string {
+  const toSql = (pat: string, negate = false): string => {
+    if (pat.endsWith('*')) {
+      const prefix = pat.slice(0, -1).replace(/'/g, "''");
+      return negate ? `${col} NOT LIKE '${prefix}%'` : `${col} LIKE '${prefix}%'`;
+    }
+    const val = pat.replace(/'/g, "''");
+    return negate ? `${col} <> '${val}'` : `${col} = '${val}'`;
+  };
+  const includes = def.includes.map(p => toSql(p, false));
+  const excludes = def.exclusions.map(p => toSql(p, true));
+  const includeSql = includes.length === 1 ? includes[0] : `(${includes.join(' OR ')})`;
+  return excludes.length > 0
+    ? `(${includeSql} AND ${excludes.join(' AND ')})`
+    : `(${includeSql})`;
+}
+
+// GET /api/esp/platform-summary
+// Returns per-platform totals+idle+special job counts for KPI cards
+router.get('/platform-summary', async (_req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const results = await Promise.all(
+      Object.entries(PLATFORM_CONFIG).map(async ([name, def]) => {
+        const cond = buildPlatformCondition(def);
+        const safe = async <T>(fn: () => Promise<T>, fallback: T): Promise<T> => {
+          try { return await fn(); } catch { return fallback; }
+        };
+        const [total, idle, special] = await Promise.all([
+          safe(() => pool.query(`SELECT COUNT(DISTINCT jobname) AS cnt FROM esp_job_cmnd WHERE ${cond}`)
+            .then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
+          safe(() => pool.query(`SELECT COUNT(DISTINCT jobname) AS cnt FROM esp_job_cmnd WHERE ${cond} AND (last_run_date IS NULL OR last_run_date < NOW() - INTERVAL '2 days')`)
+            .then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
+          safe(() => pool.query(`SELECT COUNT(DISTINCT jobname) AS cnt FROM esp_job_cmnd WHERE ${cond} AND (jobname LIKE '%JSDELAY%' OR jobname LIKE '%RETRIG%')`)
+            .then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
+        ]);
+        return { platform: name, total, idle, special };
+      })
+    );
+    res.json(results);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
+// GET /api/esp/platform-detail/:platform
+// Same shape as /summary/:appl_name but aggregated across all appl_names in the platform group
+router.get('/platform-detail/:platform', async (req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const platformName = decodeURIComponent(req.params.platform);
+    const def = PLATFORM_CONFIG[platformName];
+    if (!def) return res.status(404).json({ error: 'Unknown platform' });
+    const cond = buildPlatformCondition(def);
+
+    const safe = async <T>(fn: () => Promise<T>, fallback: T): Promise<T> => {
+      try { return await fn(); } catch (e: any) {
+        console.warn(`ESP platform query skipped (${e.message?.slice(0, 60)})`);
+        return fallback;
+      }
+    };
+
+    const [jobCount, idleCount, splCount, agents, jobTypes, cmplCodes, accounts, jobList, successors, predecessors] = await Promise.all([
+      safe(() => pool.query(`SELECT COUNT(DISTINCT jobname) AS cnt FROM esp_job_cmnd WHERE ${cond}`)
+        .then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
+      safe(() => pool.query(`SELECT COUNT(DISTINCT jobname) AS cnt FROM esp_job_cmnd WHERE ${cond} AND (last_run_date IS NULL OR last_run_date < NOW() - INTERVAL '2 days')`)
+        .then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
+      safe(() => pool.query(`SELECT COUNT(DISTINCT jobname) AS cnt FROM esp_job_cmnd WHERE ${cond} AND (jobname LIKE '%JSDELAY%' OR jobname LIKE '%RETRIG%')`)
+        .then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
+      safe(() => pool.query(`SELECT COALESCE(agent, 'Null') AS name, COUNT(*) AS count FROM esp_job_cmnd WHERE ${cond} GROUP BY agent ORDER BY count DESC LIMIT 10`)
+        .then(r => r.rows.map((x: any) => ({ name: x.name, count: parseInt(x.count) }))), []),
+      safe(() => pool.query(`SELECT COALESCE(jobtype, 'Null') AS name, COUNT(*) AS count FROM esp_job_cmnd WHERE ${cond} GROUP BY jobtype ORDER BY count DESC`)
+        .then(r => r.rows.map((x: any) => ({ name: x.name, count: parseInt(x.count) }))), []),
+      safe(() => pool.query(`SELECT COALESCE(CAST(cmpl_cd AS TEXT), 'Null') AS name, COUNT(*) AS count FROM esp_job_cmnd WHERE ${cond} GROUP BY cmpl_cd ORDER BY count DESC`)
+        .then(r => r.rows.map((x: any) => ({ name: x.name, count: parseInt(x.count) }))), []),
+      safe(() => pool.query(`SELECT COALESCE(user_job, 'Null') AS name, COUNT(*) AS count FROM esp_job_cmnd WHERE ${cond} GROUP BY user_job ORDER BY count DESC LIMIT 10`)
+        .then(r => r.rows.map((x: any) => ({ name: x.name, count: parseInt(x.count) }))), []),
+      safe(() => pool.query(`SELECT jobname, appl_name, last_run_date FROM esp_job_cmnd WHERE ${cond} ORDER BY jobname LIMIT 500`)
+        .then(r => r.rows.map((x: any) => ({ jobname: x.jobname, appl_name: x.appl_name, last_run_date: x.last_run_date }))), []),
+      safe(() => pool.query(`SELECT d.jobname, d.release AS successor_job FROM esp_job_dpndnt d JOIN esp_job_cmnd c ON d.appl_name = c.appl_name WHERE ${buildPlatformCondition(def, 'c.appl_name')} ORDER BY d.jobname LIMIT 100`)
+        .then(r => r.rows.map((x: any) => ({ jobname: x.jobname, successor_job: x.successor_job }))), []),
+      safe(() => pool.query(`SELECT d.jobname, d.release AS predecessor_job FROM esp_job_dpndnt d WHERE d.release IN (SELECT DISTINCT appl_name FROM esp_job_cmnd WHERE ${cond}) ORDER BY d.jobname LIMIT 100`)
+        .then(r => r.rows.map((x: any) => ({ jobname: x.jobname, predecessor_job: x.predecessor_job }))), []),
+    ]);
+
+    res.json({
+      appl_name: platformName,
+      job_count: jobCount,
+      idle_job_count: idleCount,
+      spl_job_count: splCount,
+      agents, job_types: jobTypes, completion_codes: cmplCodes, user_jobs: accounts,
+      job_list: jobList, job_run_trend: [], successor_jobs: successors, predecessor_jobs: predecessors, metadata: [],
+    });
+  } catch (err: any) {
+    console.error('ESP platform-detail error:', err.message);
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
+// GET /api/esp/platform-run-trend/:platform?days=N
+router.get('/platform-run-trend/:platform', async (req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const platformName = decodeURIComponent(req.params.platform);
+    const def = PLATFORM_CONFIG[platformName];
+    if (!def) return res.status(404).json({ error: 'Unknown platform' });
+    const cond = buildPlatformCondition(def);
+    const rawDays = parseInt(String(req.query.days ?? '2'), 10);
+    const days = Math.min(Math.max(rawDays, 1), 7);
+
+    const result = await pool.query(`
+      WITH base AS (
+        SELECT
+          end_date,
+          end_time::time AS et,
+          s.jobname,
+          s.ccfail
+        FROM esp_job_stats_recent s
+        JOIN esp_job_cmnd c ON c.appl_name = s.appl_name AND c.jobname = s.job_longname
+        WHERE ${buildPlatformCondition(def, 'c.appl_name')}
+          AND end_date >= CURRENT_DATE - INTERVAL '${days} days'
+      )
+      SELECT
+        end_date AS day,
+        EXTRACT(HOUR FROM et)::int AS hour,
+        COUNT(jobname)::int AS job_count,
+        SUM(CASE WHEN ccfail = 'YES' THEN 1 ELSE 0 END)::int AS job_fail_count
+      FROM base
+      GROUP BY end_date, EXTRACT(HOUR FROM et)
+      ORDER BY end_date, EXTRACT(HOUR FROM et)
+    `);
+    res.json(result.rows.map((r: any) => ({
+      day:            r.day ? String(r.day).split('T')[0] : null,
+      hour:           parseInt(r.hour, 10),
+      job_count:      parseInt(r.job_count, 10),
+      job_fail_count: parseInt(r.job_fail_count, 10),
+    })));
+  } catch (err: any) {
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
+// GET /api/esp/platform-metadata/:platform
+router.get('/platform-metadata/:platform', async (req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const platformName = decodeURIComponent(req.params.platform);
+    const def = PLATFORM_CONFIG[platformName];
+    if (!def) return res.status(404).json({ error: 'Unknown platform' });
+    const cond = buildPlatformCondition(def);
+    const result = await pool.query(`
+      SELECT jobname, command, argument, agent, jobtype AS job_type, esp_command AS comp_code, runs, user_job, appl_name
+      FROM esp_job_cmnd
+      WHERE ${cond}
+      ORDER BY jobname
+      LIMIT 500
+    `);
+    res.json(result.rows.map((r: any) => ({
+      jobname: r.jobname, command: r.command ?? null, argument: r.argument ?? null,
+      agent: r.agent ?? null, job_type: r.job_type ?? null, comp_code: r.comp_code ?? null,
+      runs: r.runs != null ? parseInt(r.runs, 10) : null, user_job: r.user_job ?? null, appl_name: r.appl_name ?? null,
+    })));
+  } catch (err: any) {
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
+// GET /api/esp/platform-job-run-table/:platform
+router.get('/platform-job-run-table/:platform', async (req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const platformName = decodeURIComponent(req.params.platform);
+    const def = PLATFORM_CONFIG[platformName];
+    if (!def) return res.status(404).json({ error: 'Unknown platform' });
+    const cond = buildPlatformCondition(def, 'ec.appl_name');
+    const result = await pool.query(`
+      SELECT ec.appl_name, es.job_longname, ec.command, ec.argument, ec.runs,
+             es.start_date, es.start_time, es.end_date, es.end_time,
+             es.exec_qtime, es.ccfail, es.comp_code
+      FROM esp_job_cmnd ec
+      JOIN esp_job_stats_recent es ON ec.appl_name = es.appl_name AND ec.jobname = es.job_longname
+      WHERE ${cond}
+      ORDER BY es.end_date DESC, es.end_time DESC
+      LIMIT 500
+    `);
+    res.json(result.rows.map((r: any) => ({
+      job_longname: r.job_longname, command: r.command ?? null, argument: r.argument ?? null,
+      runs: r.runs != null ? parseInt(r.runs, 10) : null,
+      start_date: r.start_date ? String(r.start_date).split('T')[0] : null,
+      start_time: r.start_time ?? null,
+      end_date: r.end_date ? String(r.end_date).split('T')[0] : null,
+      end_time: r.end_time ?? null,
+      exec_qtime: r.exec_qtime ?? null, ccfail: r.ccfail ?? null, comp_code: r.comp_code ?? null,
+      appl_name: r.appl_name ?? null,
+    })));
+  } catch (err: any) {
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
 
 // GET /api/esp/applications
 router.get('/applications', async (_req: Request, res: Response) => {

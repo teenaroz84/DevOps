@@ -63,15 +63,66 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   const [loading, setLoading] = React.useState(false)
   const [appsLoading, setAppsLoading] = React.useState(true)
   const [trendDays, setTrendDays] = React.useState<number>(2)
-  const [trendData, setTrendData] = React.useState<Array<{ day: string; hour: number; job_count: number; job_fail_count: number }>>([]) 
+  const [trendData, setTrendData] = React.useState<Array<{ day: string; hour: number; job_count: number; job_fail_count: number }>>([])
   const [trendLoading, setTrendLoading] = React.useState(false)
   const [metadataDetail, setMetadataDetail] = React.useState<AppData['metadata_detail']>([])
   const [jobRunTable, setJobRunTable] = React.useState<AppData['job_run_table']>([])
   const [tableLoading, setTableLoading] = React.useState(false)
   const [selectedJobs, setSelectedJobs] = React.useState<string[]>([])
 
-  // Reset job filter when application changes
-  React.useEffect(() => { setSelectedJobs([]) }, [selected])
+  // ── Platform state ───────────────────────────────────────
+  const [platformSummary, setPlatformSummary] = React.useState<{ platform: string; total: number; idle: number; special: number }[]>([])
+  const [selectedPlatform, setSelectedPlatform] = React.useState<string | null>(null)
+
+  // Reset job filter when application or platform changes
+  React.useEffect(() => { setSelectedJobs([]) }, [selected, selectedPlatform])
+
+  // Load platform summary once on mount (and when mock changes)
+  React.useEffect(() => {
+    if (useMock) return  // no mock data for platforms
+    espService.getPlatformSummary()
+      .then((res: any) => setPlatformSummary(Array.isArray(res) ? res : []))
+      .catch(() => {})
+  }, [useMock])
+
+  // When platform selected, load its detail + metadata + run table
+  React.useEffect(() => {
+    if (!selectedPlatform || useMock) return
+    setLoading(true)
+    setData(null)
+    espService.getPlatformDetail(selectedPlatform)
+      .then((res: any) => {
+        if (!res || res.error) { setData(null); return }
+        setData({
+          ...res,
+          agents:           Array.isArray(res.agents)           ? res.agents           : [],
+          job_types:        Array.isArray(res.job_types)        ? res.job_types        : [],
+          completion_codes: Array.isArray(res.completion_codes) ? res.completion_codes : [],
+          user_jobs:        Array.isArray(res.user_jobs)        ? res.user_jobs        : [],
+          job_list:         Array.isArray(res.job_list)         ? res.job_list         : [],
+          job_run_trend:    [],
+          successor_jobs:   Array.isArray(res.successor_jobs)   ? res.successor_jobs   : [],
+          predecessor_jobs: Array.isArray(res.predecessor_jobs) ? res.predecessor_jobs : [],
+          metadata:         Array.isArray(res.metadata)         ? res.metadata         : [],
+        })
+      })
+      .catch(() => setData(null))
+      .finally(() => setLoading(false))
+  }, [selectedPlatform, useMock])
+
+  React.useEffect(() => {
+    if (!selectedPlatform || useMock) return
+    setTableLoading(true)
+    setMetadataDetail([])
+    setJobRunTable([])
+    Promise.all([
+      espService.getPlatformMetadata(selectedPlatform).catch(() => []),
+      espService.getPlatformJobRunTable(selectedPlatform).catch(() => []),
+    ]).then(([meta, runs]: any) => {
+      setMetadataDetail(Array.isArray(meta) ? meta : [])
+      setJobRunTable(Array.isArray(runs) ? runs : [])
+    }).finally(() => setTableLoading(false))
+  }, [selectedPlatform, useMock])
 
   // Load application list on mount or when mock mode changes
   React.useEffect(() => {
@@ -147,9 +198,10 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
     }).finally(() => setTableLoading(false))
   }, [selected, useMock])
 
-  // Load trend data independently so the day-range selector works without re-fetching all data
+  // Load trend data independently — uses platform or app selection
   React.useEffect(() => {
-    if (!selected) return
+    const activeKey = selectedPlatform ?? selected
+    if (!activeKey) return
     setTrendLoading(true)
     setTrendData([])
     if (useMock) {
@@ -158,11 +210,14 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       setTrendLoading(false)
       return
     }
-    espService.getJobRunTrend(selected, trendDays)
+    const req = selectedPlatform
+      ? espService.getPlatformRunTrend(selectedPlatform, trendDays)
+      : espService.getJobRunTrend(selected, trendDays)
+    req
       .then((res: any) => setTrendData(Array.isArray(res) ? res : []))
       .catch(() => setTrendData([]))
       .finally(() => setTrendLoading(false))
-  }, [selected, trendDays, useMock])
+  }, [selected, selectedPlatform, trendDays, useMock])
 
   // Transform trend data for recharts: keys ${day}_count and ${day}_fail per hour
   const trendChart = React.useMemo(() => {
@@ -262,6 +317,53 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
 
   return (
     <Box sx={{ bgcolor: '#f5f6f8', minHeight: '100%', p: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+
+      {/* ── Platform KPI cards ── */}
+      {platformSummary.length > 0 && (
+        <Box sx={{ px: 2, pt: 1.5, pb: 0.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
+            <Typography sx={{ fontWeight: 700, fontSize: '12px', color: '#37474f' }}>Platform</Typography>
+            {selectedPlatform && (
+              <Button size="small" onClick={() => { setSelectedPlatform(null); setData(null) }}
+                sx={{ fontSize: '10px', color: '#d32f2f', textTransform: 'none', height: 20, minWidth: 'auto', px: 1 }}>
+                Clear
+              </Button>
+            )}
+          </Box>
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            {platformSummary.map(p => {
+              const isSelected = selectedPlatform === p.platform
+              return (
+                <Box
+                  key={p.platform}
+                  onClick={() => {
+                    setSelectedPlatform(isSelected ? null : p.platform)
+                    if (isSelected) setData(null)
+                  }}
+                  sx={{
+                    border: isSelected ? '2px solid #2e7d32' : '1px solid #e0e0e0',
+                    borderRadius: 2, p: 1, minWidth: 110, cursor: 'pointer',
+                    backgroundColor: isSelected ? '#e8f5e9' : '#fff',
+                    transition: 'all 0.15s',
+                    '&:hover': { borderColor: '#2e7d32', backgroundColor: '#f1f8f1' },
+                  }}
+                >
+                  <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#37474f', mb: 0.4 }}>{p.platform}</Typography>
+                  <Typography sx={{ fontSize: '14px', fontWeight: 800, color: '#1b5e20' }}>{p.total.toLocaleString()}</Typography>
+                  <Box sx={{ display: 'flex', gap: 0.75, mt: 0.4 }}>
+                    <Chip size="small" label={`${p.idle} idle`}
+                      sx={{ height: 16, fontSize: '9px', fontWeight: 700, bgcolor: '#fff3e0', color: '#e65100' }} />
+                    {p.special > 0 && (
+                      <Chip size="small" label={`${p.special} spl`}
+                        sx={{ height: 16, fontSize: '9px', fontWeight: 700, bgcolor: '#fce4ec', color: '#c62828' }} />
+                    )}
+                  </Box>
+                </Box>
+              )
+            })}
+          </Box>
+        </Box>
+      )}
 
       {/* ── App selector bar ── */}
       <Paper

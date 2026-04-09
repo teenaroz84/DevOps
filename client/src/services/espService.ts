@@ -4,6 +4,25 @@
 import { apiClient } from './apiClient'
 
 export const espService = {
+  /** Returns per-platform KPI stats for platform cards */
+  getPlatformSummary: () => apiClient.get('/api/esp/platform-summary'),
+
+  /** Returns full widget data aggregated for a platform group */
+  getPlatformDetail: (platform: string) =>
+    apiClient.get(`/api/esp/platform-detail/${encodeURIComponent(platform)}`),
+
+  /** Returns job run trend for a platform group */
+  getPlatformRunTrend: (platform: string, days: number = 2) =>
+    apiClient.get(`/api/esp/platform-run-trend/${encodeURIComponent(platform)}?days=${days}`),
+
+  /** Returns metadata rows for a platform group */
+  getPlatformMetadata: (platform: string) =>
+    apiClient.get(`/api/esp/platform-metadata/${encodeURIComponent(platform)}`),
+
+  /** Returns job run table rows for a platform group */
+  getPlatformJobRunTable: (platform: string) =>
+    apiClient.get(`/api/esp/platform-job-run-table/${encodeURIComponent(platform)}`),
+
   /** Returns { applications: [{appl_name}] } — used to populate the dropdown */
   getApplications: () => apiClient.get('/api/esp/applications'),
 
