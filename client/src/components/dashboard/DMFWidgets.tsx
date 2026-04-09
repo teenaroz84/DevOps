@@ -82,8 +82,6 @@ const DMF_DATE_RANGE_OPTIONS = [
   { value: '1m', label: 'Last 1 Month' },
   { value: '3m', label: 'Last 3 Months' },
   { value: '6m', label: 'Last 6 Months' },
-  { value: '1y', label: 'Last 1 Year' },
-  { value: '2y', label: 'Last 2 Years' },
   { value: 'custom', label: 'Custom' },
 ]
 
@@ -110,6 +108,7 @@ const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void
   const [lineageJobsPage,    setLineageJobsPage]    = useState(0)
   const lineageJobsPageSize = 100
   const [lineageLoaded,     setLineageLoaded]     = useState(false)
+  const [lineageMetaLoaded, setLineageMetaLoaded] = useState(false)
   const [lgSourceCode,      setLgSourceCode]      = useState('')
   const [lgDatasets,        setLgDatasets]        = useState<string[]>([])
   const [lgProcTypes,       setLgProcTypes]       = useState<string[]>([])
@@ -165,6 +164,7 @@ const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void
     setAnalytics(null)
     setAnalyticsMetaLoaded(false)
     setAnalyticsMeta(null)
+    setLineageMetaLoaded(false)
     setAnlSrcType(null); setAnlTgtTypes([]); setAnlStepNames([]); setAnlRunStatuses([])
     setDraftAnlSrcType(null); setDraftAnlTgtTypes([]); setDraftAnlStepNames([]); setDraftAnlRunStatuses([])
     setTrendsLoaded(false)
@@ -174,12 +174,11 @@ const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void
     setStepFailureTrend([])
   }, [useMock])
 
-  // Reset all data when dateRange changes
+  // Reset only data (not meta) when date range changes
   useEffect(() => {
     setLineageLoaded(false)
     setLineageCounts(null)
     setLineageJobs([])
-    setAnalyticsMetaLoaded(false)
     setAnalytics(null)
     setTrendsLoaded(false)
     setStatusTrend([])
@@ -192,23 +191,31 @@ const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void
   useEffect(() => {
     setLineageJobsPage(0)
   }, [lgSourceCode])
+  // Fetch meta (sourceCodes, datasetNames) once — not re-fetched on date change
+  useEffect(() => {
+    if (activeTab !== 'lineage' || lineageMetaLoaded) return
+    if (useMock) {
+      setLineageMeta(MOCK_DMF_LINEAGE_META)
+      setLineageMetaLoaded(true)
+      return
+    }
+    dmfService.getLineageMeta(resolvedDateRange)
+      .then(meta => { setLineageMeta(meta); setLineageMetaLoaded(true) })
+      .catch(() => setLineageMetaLoaded(true))
+  }, [activeTab, lineageMetaLoaded, useMock])
+
+  // Fetch counts — re-fetched whenever date range changes
   useEffect(() => {
     if (activeTab !== 'lineage' || lineageLoaded) return
     if (useMock) {
-      setLineageMeta(MOCK_DMF_LINEAGE_META)
       setLineageCounts(MOCK_DMF_LINEAGE_COUNTS as LineageCounts)
       setLineageLoaded(true)
       return
     }
-    Promise.all([
-      dmfService.getLineageMeta(resolvedDateRange),
-      dmfService.getLineageCounts({ date_range: resolvedDateRange }),
-    ]).then(([meta, counts]) => {
-      setLineageMeta(meta)
-      setLineageCounts(counts)
-      setLineageLoaded(true)
-    }).catch(() => setLineageLoaded(true))
-  }, [activeTab, lineageLoaded, useMock, dateRange])
+    dmfService.getLineageCounts({ date_range: resolvedDateRange })
+      .then(counts => { setLineageCounts(counts); setLineageLoaded(true) })
+      .catch(() => setLineageLoaded(true))
+  }, [activeTab, lineageLoaded, useMock])
 
   // ── Load jobs when source is selected (other filters applied client-side) ──────
   const hasAnyFilter = !!lgSourceCode
