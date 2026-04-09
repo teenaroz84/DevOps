@@ -70,6 +70,8 @@ interface DataTableProps<T = any> {
   rowTooltip?: string
   /** Accent color for header left border strip (defaults to #1976d2) */
   accentColor?: string
+  /** Optional minimum width for the inner table to enable horizontal scrolling */
+  tableMinWidth?: number | string
 }
 
 function getKey<T>(row: T, rowKey: DataTableProps<T>['rowKey'], idx: number): string {
@@ -89,6 +91,7 @@ export function DataTable<T = any>({
   headerBg,
   rowTooltip,
   accentColor = '#1976d2',
+  tableMinWidth,
 }: DataTableProps<T>) {
   const cellPy = compact ? 0.6 : 1
   const resolvedHeaderBg = headerBg ?? '#f0f4f8'
@@ -163,6 +166,10 @@ export function DataTable<T = any>({
         return sortDir === 'asc' ? cmp : -cmp
       })
     : filtered
+
+  const resolvedTableMinWidth = typeof tableMinWidth === 'number'
+    ? `${tableMinWidth}px`
+    : tableMinWidth
 
   // ── CSV export ────────────────────────────────────────────
   const exportCsv = () => {
@@ -242,7 +249,15 @@ export function DataTable<T = any>({
           ...(maxHeight ? { maxHeight, overflowY: 'auto' } : {}),
         }}
       >
-        <Table size="small" stickyHeader sx={{ tableLayout: 'fixed' }}>
+        <Table
+          size="small"
+          stickyHeader
+          sx={{
+            tableLayout: 'fixed',
+            width: resolvedTableMinWidth ? `max(100%, ${resolvedTableMinWidth})` : '100%',
+            minWidth: resolvedTableMinWidth,
+          }}
+        >
           <TableHead>
             <TableRow>
               {columns.map((col, colIdx) => {

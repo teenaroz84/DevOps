@@ -90,8 +90,7 @@ router.get('/level-counts', async (req: Request, res: Response) => {
       SELECT
         SUM(COALESCE(fatal_count, 0))::int AS fatal,
         SUM(COALESCE(error_count, 0))::int AS error,
-        SUM(COALESCE(warn_count,  0))::int AS warn,
-        SUM(COALESCE(info_count,  0))::int AS info
+        SUM(COALESCE(warn_count,  0))::int AS warn
       FROM edoops.talend_logs_dashboard
       WHERE 1=1 ${dc}
     `);
@@ -101,7 +100,6 @@ router.get('/level-counts', async (req: Request, res: Response) => {
       { level: 'FATAL', count: raw.fatal, color: '#c62828' },
       { level: 'ERROR', count: raw.error, color: '#e53935' },
       { level: 'WARN',  count: raw.warn,  color: '#f57c00' },
-      { level: 'INFO',  count: raw.info,  color: '#1565c0' },
     ];
     res.json(levels);
   } catch (err: any) {
@@ -151,15 +149,14 @@ router.get('/recent-errors', async (req: Request, res: Response) => {
         workspace_name,
         remote_engine_name,
         artifact_name,
+        NULLIF(BTRIM(err_message_desc), '') AS err_message_desc,
         COALESCE(fatal_count, 0)::int AS fatal_count,
         COALESCE(error_count, 0)::int AS error_count,
         COALESCE(warn_count,  0)::int AS warn_count,
-        COALESCE(info_count,  0)::int AS info_count,
         CASE
           WHEN COALESCE(fatal_count, 0) > 0 THEN 'FATAL'
           WHEN COALESCE(error_count, 0) > 0 THEN 'ERROR'
           WHEN COALESCE(warn_count,  0) > 0 THEN 'WARN'
-          WHEN COALESCE(info_count,  0) > 0 THEN 'INFO'
           ELSE 'UNKNOWN'
         END AS derived_level
       FROM edoops.talend_logs_dashboard

@@ -16,6 +16,8 @@ import {
   MOCK_TALEND_RECENT_ERRORS,
 } from '../../services/talendMockData'
 
+const EXPANDABLE_ERROR_LENGTH = 140
+
 const STATUS_COLOR: Record<string, { color: string; bg: string }> = {
   EXECUTION_SUCCESS: { color: '#2e7d32', bg: '#e8f5e9' },
   SUCCESS:           { color: '#2e7d32', bg: '#e8f5e9' },
@@ -39,6 +41,56 @@ const fmtTs = (ts: string | null) => {
   if (!ts) return '—'
   try { return new Date(ts).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) }
   catch { return ts }
+}
+
+const ExpandableErrorText: React.FC<{ value?: string | null }> = ({ value }) => {
+  const [expanded, setExpanded] = useState(false)
+
+  if (!value) {
+    return <Typography sx={{ fontSize: '11px', color: '#bbb' }}>—</Typography>
+  }
+
+  const isLong = value.length > EXPANDABLE_ERROR_LENGTH
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.5 }}>
+      <Typography
+        sx={{
+          fontSize: '11px',
+          color: '#444',
+          lineHeight: 1.4,
+          whiteSpace: expanded ? 'pre-wrap' : 'normal',
+          wordBreak: 'break-word',
+          ...(expanded || !isLong ? {} : {
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+          }),
+        }}
+      >
+        {value}
+      </Typography>
+      {isLong && (
+        <Button
+          size="small"
+          onClick={() => setExpanded(prev => !prev)}
+          sx={{
+            minWidth: 0,
+            px: 0,
+            py: 0,
+            fontSize: '10px',
+            fontWeight: 700,
+            textTransform: 'none',
+            color: '#1565c0',
+            '&:hover': { backgroundColor: 'transparent', color: '#0d47a1' },
+          }}
+        >
+          {expanded ? 'Show less' : 'Show more'}
+        </Button>
+      )}
+    </Box>
+  )
 }
 
 export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void }> = ({ onOpenAgent }) => {
@@ -177,6 +229,11 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
           <Typography sx={{ fontSize: '10px', color: '#bbb' }}>{row.artifact_name}</Typography>
         </Box>
       ),
+    },
+    {
+      key: 'err_message_desc', header: 'Error Details', width: 320,
+      render: row => <ExpandableErrorText value={row.err_message_desc} />,
+      disableSort: true,
     },
     {
       key: 'fatal_count', header: 'Fatal', width: 60, align: 'right',
@@ -415,6 +472,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
                   rowKey="start_timestamp"
                   compact
                   accentColor="#c62828"
+                  tableMinWidth={1320}
                 />
               </Box>
             </WidgetShell>
