@@ -78,15 +78,17 @@ router.get('/platform-summary', async (_req: Request, res: Response) => {
         const safe = async <T>(fn: () => Promise<T>, fallback: T): Promise<T> => {
           try { return await fn(); } catch { return fallback; }
         };
-        const [total, idle, special] = await Promise.all([
+        const [total, idle, special, app_count] = await Promise.all([
           safe(() => pool.query(`SELECT COUNT(DISTINCT jobname) AS cnt FROM esp_job_cmnd WHERE ${cond}`)
             .then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
           safe(() => pool.query(`SELECT COUNT(DISTINCT jobname) AS cnt FROM esp_job_cmnd WHERE ${cond} AND (last_run_date IS NULL OR last_run_date < NOW() - INTERVAL '2 days')`)
             .then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
           safe(() => pool.query(`SELECT COUNT(DISTINCT jobname) AS cnt FROM esp_job_cmnd WHERE ${cond} AND (jobname LIKE '%JSDELAY%' OR jobname LIKE '%RETRIG%')`)
             .then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
+          safe(() => pool.query(`SELECT COUNT(DISTINCT appl_name) AS cnt FROM esp_job_cmnd WHERE ${cond}`)
+            .then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
         ]);
-        return { platform: name, total, idle, special };
+        return { platform: name, total, idle, special, app_count };
       })
     );
     res.json(results);

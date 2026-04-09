@@ -71,7 +71,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   const [selectedJobs, setSelectedJobs] = React.useState<string[]>([])
 
   // ── Platform state ───────────────────────────────────────
-  const [platformSummary, setPlatformSummary] = React.useState<{ platform: string; total: number; idle: number; special: number }[]>([])
+  const [platformSummary, setPlatformSummary] = React.useState<{ platform: string; total: number; idle: number; special: number; app_count: number }[]>([])
   const [selectedPlatform, setSelectedPlatform] = React.useState<string | null>(null)
   const [platformApplications, setPlatformApplications] = React.useState<string[]>([])
 
@@ -361,36 +361,32 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                 <MenuItem value="" sx={{ fontSize: '12px', color: '#888' }}><em>All</em></MenuItem>
                 {platformSummary.map(p => (
                   <MenuItem key={p.platform} value={p.platform} sx={{ fontSize: '12px' }}>
-                    {p.platform}&ensp;<span style={{ fontSize: '10px', color: '#999' }}>({p.total})</span>
+                    {p.platform}&ensp;<span style={{ fontSize: '10px', color: '#999' }}>({p.app_count} apps)</span>
                   </MenuItem>
                 ))}
               </Select>
             </FormControl>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.4 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Typography sx={{ fontSize: '12px', color: '#666', fontWeight: 500 }}>Application:</Typography>
-                {selectedPlatform ? (
-                  platformApplications.length === 0 ? (
-                    <CircularProgress size={12} sx={{ color: '#2e7d32' }} />
-                  ) : (
-                    <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#2e7d32' }}>
-                      {platformApplications.length} app{platformApplications.length !== 1 ? 's' : ''}
-                    </Typography>
-                  )
-                ) : appsLoading ? (
-                  <CircularProgress size={14} sx={{ color: '#2e7d32' }} />
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography sx={{ fontSize: '12px', color: '#666', fontWeight: 500 }}>Application:</Typography>
+              {selectedPlatform ? (
+                platformApplications.length === 0 ? (
+                  <CircularProgress size={12} sx={{ color: '#2e7d32' }} />
                 ) : (
                   <Autocomplete
-                    options={applications}
-                    value={selected}
-                    onChange={(_, val) => setSelected(val ?? '')}
-                    disableClearable={false}
+                    options={platformApplications}
+                    value={null}
+                    onChange={(_, val) => {
+                      if (val) {
+                        setSelected(val)
+                        setSelectedPlatform(null)
+                      }
+                    }}
                     size="small"
                     sx={{ minWidth: 260 }}
                     renderInput={(params) => (
                       <TextField
                         {...params}
-                        placeholder="Search application…"
+                        placeholder={`${platformApplications.length} apps — pick one to drill in…`}
                         sx={{
                           '& .MuiOutlinedInput-root': {
                             fontSize: '12px',
@@ -405,15 +401,35 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                       />
                     )}
                   />
-                )}
-              </Box>
-              {selectedPlatform && platformApplications.length > 0 && (
-                <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', maxWidth: 480 }}>
-                  {platformApplications.map(app => (
-                    <Chip key={app} label={app} size="small"
-                      sx={{ height: 16, fontSize: '9px', fontWeight: 600, bgcolor: '#e8f5e9', color: '#2e7d32', border: '1px solid #a5d6a7' }} />
-                  ))}
-                </Box>
+                )
+              ) : appsLoading ? (
+                <CircularProgress size={14} sx={{ color: '#2e7d32' }} />
+              ) : (
+                <Autocomplete
+                  options={applications}
+                  value={selected}
+                  onChange={(_, val) => setSelected(val ?? '')}
+                  disableClearable={false}
+                  size="small"
+                  sx={{ minWidth: 260 }}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      placeholder="Search application…"
+                      sx={{
+                        '& .MuiOutlinedInput-root': {
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          borderRadius: 1,
+                          bgcolor: '#fff',
+                          '& .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d3240' },
+                          '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
+                          '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
+                        },
+                      }}
+                    />
+                  )}
+                />
               )}
             </Box>
 
