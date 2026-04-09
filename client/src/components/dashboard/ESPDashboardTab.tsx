@@ -405,16 +405,13 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
               >
                 <MenuItem value="" sx={{ fontSize: '12px', color: '#888' }}><em>All</em></MenuItem>
                 {platformSummary.map(p => (
-                  <Tooltip
-                    key={p.platform}
-                    title={PLATFORM_FULL_NAMES[p.platform] ?? p.platform}
-                    placement="right"
-                    arrow
-                  >
-                    <MenuItem value={p.platform} sx={{ fontSize: '12px' }}>
-                      {p.platform}&ensp;<span style={{ fontSize: '10px', color: '#999' }}>({p.app_count} apps)</span>
-                    </MenuItem>
-                  </Tooltip>
+                  <MenuItem key={p.platform} value={p.platform} sx={{ fontSize: '12px', p: 0 }}>
+                    <Tooltip title={PLATFORM_FULL_NAMES[p.platform] ?? p.platform} placement="right" arrow>
+                      <Box sx={{ width: '100%', px: 2, py: 0.75, display: 'flex', alignItems: 'center' }}>
+                        {p.platform}&ensp;<span style={{ fontSize: '10px', color: '#999' }}>({p.app_count} apps)</span>
+                      </Box>
+                    </Tooltip>
+                  </MenuItem>
                 ))}
               </Select>
             </FormControl>
