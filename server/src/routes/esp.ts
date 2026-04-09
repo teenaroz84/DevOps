@@ -95,6 +95,24 @@ router.get('/platform-summary', async (_req: Request, res: Response) => {
   }
 });
 
+// GET /api/esp/platform-applications/:platform
+// Returns distinct appl_name values matching the platform config (for qualifiers display)
+router.get('/platform-applications/:platform', async (req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const platformName = decodeURIComponent(req.params.platform);
+    const def = PLATFORM_CONFIG[platformName];
+    if (!def) return res.status(404).json({ error: 'Unknown platform' });
+    const cond = buildPlatformCondition(def);
+    const result = await pool.query(
+      `SELECT DISTINCT appl_name FROM esp_job_cmnd WHERE ${cond} ORDER BY appl_name`
+    );
+    res.json(result.rows.map((r: any) => r.appl_name));
+  } catch (err: any) {
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
 // GET /api/esp/platform-detail/:platform
 // Same shape as /summary/:appl_name but aggregated across all appl_names in the platform group
 router.get('/platform-detail/:platform', async (req: Request, res: Response) => {
