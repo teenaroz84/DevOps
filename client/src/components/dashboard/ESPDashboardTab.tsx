@@ -368,17 +368,22 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
         noWrap: true,
         render: r => (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
-            <Typography
-              component="span"
-              sx={{
-                fontSize: '11px',
-                fontWeight: drillJob === r.jobname ? 700 : 400,
-                color: isSpecialEspJob(r.jobname) ? '#8d6e00' : drillJob === r.jobname ? '#1565c0' : 'inherit',
-                minWidth: 0,
-              }}
-            >
-              {r.jobname}
-            </Typography>
+            <Tooltip title={r.jobname} placement="top" arrow>
+              <Typography
+                component="span"
+                sx={{
+                  fontSize: '11px',
+                  fontWeight: drillJob === r.jobname ? 700 : 400,
+                  color: isSpecialEspJob(r.jobname) ? '#2e7d32' : drillJob === r.jobname ? '#1565c0' : 'inherit',
+                  minWidth: 0,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {r.jobname}
+              </Typography>
+            </Tooltip>
             {isSpecialEspJob(r.jobname) && (
               <Chip
                 label="Special"
@@ -387,9 +392,9 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                   height: 18,
                   fontSize: '10px',
                   fontWeight: 700,
-                  bgcolor: '#fff8e1',
-                  color: '#8d6e00',
-                  border: '1px solid #f1d27a',
+                  bgcolor: '#e8f5e9',
+                  color: '#2e7d32',
+                  border: '1px solid #a5d6a7',
                 }}
               />
             )}
