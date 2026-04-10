@@ -723,7 +723,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
               <WidgetShell
                 title="Job List"
                 source={selectedPlatform
-                  ? `${filteredJobList.length}${filteredJobList.length >= ESP_PLATFORM_RECENT_JOB_LIMIT ? '+' : ''} recent jobs · select an application for full detail`
+                  ? `${filteredJobList.length}${filteredJobList.length >= ESP_PLATFORM_RECENT_JOB_LIMIT ? '+' : ''} recent jobs ·`
                   : `${filteredJobList.length}${filteredJobList.length !== data.job_list.length ? ` / ${data.job_list.length}` : ''} jobs`}
                 titleIcon={<WorkIcon sx={{ color: '#1976d2', fontSize: 18 }} />}
               >
@@ -858,7 +858,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
 
             {/* Agent — clickable bar list */}
             <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #1976d222', borderTop: '3px solid #1976d2', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', height: ESP_WIDGET_PANEL_HEIGHT, '& > *': { flex: 1, width: '100%' } }}>
-              <WidgetShell title="Agent" source={`${data.agents.length} entries · click to filter`} titleIcon={<PeopleIcon sx={{ color: '#1976d2', fontSize: 18 }} />}>
+              <WidgetShell title="Agent" source={`${data.agents.length} entries·`} titleIcon={<PeopleIcon sx={{ color: '#1976d2', fontSize: 18 }} />}>
                 <Box sx={{ px: 1.5, pb: 1.5, pt: 0.5, flex: 1, width: '100%', overflowY: 'auto' }}>
                   {data.agents.length === 0 ? (
                     <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
