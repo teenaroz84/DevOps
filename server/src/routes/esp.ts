@@ -70,6 +70,21 @@ function buildPlatformCondition(def: PlatformDef, col = 'appl_name'): string {
     : `(${includeSql})`;
 }
 
+function matchesPlatformPattern(applName: string, pattern: string): boolean {
+  if (pattern.endsWith('*')) return applName.startsWith(pattern.slice(0, -1));
+  return applName === pattern;
+}
+
+function getPlatformNameForApplName(applName: string): string | null {
+  for (const [platformName, def] of Object.entries(PLATFORM_CONFIG)) {
+    const included = def.includes.some((pattern) => matchesPlatformPattern(applName, pattern));
+    if (!included) continue;
+    const excluded = def.exclusions.some((pattern) => matchesPlatformPattern(applName, pattern));
+    if (!excluded) return platformName;
+  }
+  return null;
+}
+
 // GET /api/esp/platform-summary
 // Returns per-platform totals+idle+special job counts for KPI cards
 router.get('/platform-summary', async (req: Request, res: Response) => {
@@ -307,7 +322,10 @@ router.get('/applications', async (_req: Request, res: Response) => {
       ORDER BY appl_name
     `);
     res.json({
-      applications: result.rows.map((row: any) => ({ appl_name: row.appl_name }))
+      applications: result.rows.map((row: any) => ({
+        appl_name: row.appl_name,
+        platform_name: getPlatformNameForApplName(row.appl_name),
+      }))
     });
   } catch (err: any) {
     console.error('ESP applications error:', err.message);

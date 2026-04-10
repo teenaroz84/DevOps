@@ -81,6 +81,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   const { useMock } = useMockData()
   const didAutoSelectPlatform = React.useRef(false)
   const [applications, setApplications] = React.useState<string[]>([])
+  const [applicationPlatformMap, setApplicationPlatformMap] = React.useState<Record<string, string>>({})
   const [selected, setSelected] = React.useState<string>('')
   const [data, setData] = React.useState<AppData | null>(null)
   const [loading, setLoading] = React.useState(false)
@@ -105,6 +106,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   const [platformSummary, setPlatformSummary] = React.useState<{ platform: string; total: number; idle: number; special: number; app_count: number }[]>([])
   const [selectedPlatform, setSelectedPlatform] = React.useState<string | null>(null)
   const [platformApplications, setPlatformApplications] = React.useState<string[]>([])
+  const selectedApplibPlatform = selected ? (applicationPlatformMap[selected] ?? null) : null
 
   // Reset job filter + drill-down when application or platform changes
   React.useEffect(() => { setSelectedJobs([]); setDrillJob(null); setWidgetFilter(null); setJobStatusFilter('All') }, [selected, selectedPlatform])
@@ -169,17 +171,31 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   React.useEffect(() => {
     setAppsLoading(true)
     setApplications([])
+    setApplicationPlatformMap({})
     if (useMock) {
       const apps = MOCK_ESP_APPLICATIONS.map(a => a.appl_name)
+      const nextPlatformMap = Object.fromEntries(
+        MOCK_ESP_APPLICATIONS
+          .filter((app) => app.platform_name)
+          .map((app) => [app.appl_name, app.platform_name as string]),
+      )
       setApplications(apps)
+      setApplicationPlatformMap(nextPlatformMap)
       setSelected(apps[0] ?? '')
       setAppsLoading(false)
       return
     }
     espService.getApplications()
       .then((res: any) => {
-        const apps: string[] = (res.applications || []).map((a: any) => a.appl_name)
+        const list = Array.isArray(res.applications) ? res.applications : []
+        const apps: string[] = list.map((a: any) => a.appl_name)
+        const nextPlatformMap = Object.fromEntries(
+          list
+            .filter((app: any) => app?.appl_name && app?.platform_name)
+            .map((app: any) => [app.appl_name, app.platform_name]),
+        )
         setApplications(apps)
+        setApplicationPlatformMap(nextPlatformMap)
         // do NOT auto-select apps[0] — platform selection drives default load
       })
       .catch(() => {})
@@ -538,9 +554,10 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
             <Typography sx={{ fontSize: '11px', color: '#555', fontWeight: 600, whiteSpace: 'nowrap' }}>Platform:</Typography>
             <FormControl size="small" sx={{ width: '100%', minWidth: 0 }}>
               <Select
-                value={selectedPlatform ?? ''}
+                value={selectedPlatform ?? selectedApplibPlatform ?? ''}
                 onChange={(e) => {
                   const val = (e.target.value as string) || null
+                  setSelected('')
                   setSelectedPlatform(val)
                   if (!val) setData(null)
                 }}

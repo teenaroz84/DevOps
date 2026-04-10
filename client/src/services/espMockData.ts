@@ -272,7 +272,10 @@ const MOCK_APPS: AppData[] = [
   },
 ]
 
-export const MOCK_ESP_APPLICATIONS = MOCK_APPS.map(a => ({ appl_name: a.appl_name }))
+export const MOCK_ESP_APPLICATIONS = MOCK_APPS.map(a => ({
+  appl_name: a.appl_name,
+  platform_name: a.platform_name ?? null,
+}))
 
 export const MOCK_ESP_PLATFORMS = Array.from(
   new Map(
