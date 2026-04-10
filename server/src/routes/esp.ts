@@ -168,29 +168,44 @@ router.get('/platform-detail/:platform', async (req: Request, res: Response) => 
       safe(() => pool.query(`SELECT COALESCE(user_job, 'Null') AS name, COUNT(*) AS count FROM edoops.esp_job_cmnd WHERE ${cond} GROUP BY user_job ORDER BY count DESC`)
         .then(r => r.rows.map((x: any) => ({ name: x.name, count: parseInt(x.count) }))), []),
       safe(() => pool.query(`
+        WITH filtered_jobs AS (
+          SELECT
+            c.jobname,
+            c.appl_name,
+            c.jobtype AS job_type,
+            c.last_run_date
+          FROM edoops.esp_job_cmnd c
+          WHERE ${buildPlatformCondition(def, 'c.appl_name')}
+          ORDER BY c.last_run_date DESC NULLS LAST, c.jobname
+          LIMIT ${ESP_PLATFORM_JOB_LIST_LIMIT}
+        ),
+        latest_status AS (
+          SELECT DISTINCT ON (s.appl_name, s.job_longname)
+            s.appl_name,
+            s.job_longname,
+            s.ccfail
+          FROM edoops.esp_job_stats_recent s
+          JOIN filtered_jobs f
+            ON f.appl_name = s.appl_name
+           AND f.jobname = s.job_longname
+          ORDER BY s.appl_name, s.job_longname, s.end_date DESC NULLS LAST, s.end_time DESC NULLS LAST, s.start_date DESC NULLS LAST, s.start_time DESC NULLS LAST
+        )
         SELECT
-          c.jobname,
-          c.appl_name,
-          c.jobtype AS job_type,
-          c.last_run_date,
+          f.jobname,
+          f.appl_name,
+          f.job_type,
+          f.last_run_date,
           CASE
             WHEN latest.ccfail = 'YES' THEN 'FAILED'
             WHEN latest.ccfail = 'NO' THEN 'SUCCESS'
-            WHEN c.last_run_date IS NULL THEN 'NEVER RUN'
+            WHEN f.last_run_date IS NULL THEN 'NEVER RUN'
             ELSE 'UNKNOWN'
           END AS run_status
-        FROM edoops.esp_job_cmnd c
-        LEFT JOIN LATERAL (
-          SELECT s.ccfail
-          FROM edoops.esp_job_stats_recent s
-          WHERE s.appl_name = c.appl_name
-            AND s.job_longname = c.jobname
-          ORDER BY s.end_date DESC NULLS LAST, s.end_time DESC NULLS LAST, s.start_date DESC NULLS LAST, s.start_time DESC NULLS LAST
-          LIMIT 1
-        ) latest ON true
-        WHERE ${buildPlatformCondition(def, 'c.appl_name')}
-        ORDER BY c.last_run_date DESC NULLS LAST, c.jobname
-        LIMIT ${ESP_PLATFORM_JOB_LIST_LIMIT}`)
+        FROM filtered_jobs f
+        LEFT JOIN latest_status latest
+          ON latest.appl_name = f.appl_name
+         AND latest.job_longname = f.jobname
+        ORDER BY f.last_run_date DESC NULLS LAST, f.jobname`)
         .then(r => r.rows.map((x: any) => ({ jobname: x.jobname, appl_name: x.appl_name, job_type: x.job_type ?? null, last_run_date: x.last_run_date, run_status: x.run_status ?? null }))), []),
       safe(() => pool.query(`SELECT d.jobname, d.release AS successor_job FROM edoops.esp_job_dpndnt d JOIN edoops.esp_job_cmnd c ON d.appl_name = c.appl_name WHERE ${buildPlatformCondition(def, 'c.appl_name')} ORDER BY d.jobname LIMIT ${ESP_PLATFORM_DEPENDENCY_LIMIT}`)
         .then(r => r.rows.map((x: any) => ({ jobname: x.jobname, successor_job: x.successor_job }))), []),
