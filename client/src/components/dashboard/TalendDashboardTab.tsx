@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { Box, Typography, Chip, Paper, CircularProgress, TextField, InputAdornment, Button, Slider } from '@mui/material'
 import IntegrationInstructionsIcon from '@mui/icons-material/IntegrationInstructions'
 import SearchIcon from '@mui/icons-material/Search'
@@ -15,8 +15,6 @@ import {
   MOCK_TALEND_RECENT_TASKS,
   MOCK_TALEND_RECENT_ERRORS,
 } from '../../services/talendMockData'
-
-const EXPANDABLE_ERROR_LENGTH = 140
 
 const STATUS_COLOR: Record<string, { color: string; bg: string }> = {
   EXECUTION_SUCCESS: { color: '#2e7d32', bg: '#e8f5e9' },
@@ -45,23 +43,53 @@ const fmtTs = (ts: string | null) => {
 
 const ExpandableErrorText: React.FC<{ value?: string | null }> = ({ value }) => {
   const [expanded, setExpanded] = useState(false)
+  const [showToggle, setShowToggle] = useState(false)
+  const textRef = useRef<HTMLDivElement | null>(null)
 
-  if (!value) {
+  const normalizedValue = typeof value === 'string'
+    ? value.trim()
+    : value == null
+      ? ''
+      : String(value).trim()
+
+  useEffect(() => {
+    setExpanded(false)
+  }, [normalizedValue])
+
+  useEffect(() => {
+    if (expanded) {
+      return
+    }
+
+    const measureOverflow = () => {
+      const element = textRef.current
+      if (!element) return
+      setShowToggle(element.scrollHeight > element.clientHeight + 1)
+    }
+
+    measureOverflow()
+    window.addEventListener('resize', measureOverflow)
+    return () => window.removeEventListener('resize', measureOverflow)
+  }, [normalizedValue, expanded])
+
+  if (!normalizedValue) {
     return <Typography sx={{ fontSize: '11px', color: '#bbb' }}>—</Typography>
   }
 
-  const isLong = value.length > EXPANDABLE_ERROR_LENGTH
-
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.5 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.5, width: '100%' }}>
       <Typography
+        component="div"
+        ref={textRef}
         sx={{
           fontSize: '11px',
           color: '#444',
           lineHeight: 1.4,
           whiteSpace: expanded ? 'pre-wrap' : 'normal',
           wordBreak: 'break-word',
-          ...(expanded || !isLong ? {} : {
+          width: '100%',
+          maxWidth: '100%',
+          ...(expanded || !showToggle ? {} : {
             display: '-webkit-box',
             WebkitLineClamp: 2,
             WebkitBoxOrient: 'vertical',
@@ -69,9 +97,9 @@ const ExpandableErrorText: React.FC<{ value?: string | null }> = ({ value }) => 
           }),
         }}
       >
-        {value}
+        {normalizedValue}
       </Typography>
-      {isLong && (
+      {showToggle && (
         <Button
           size="small"
           onClick={() => setExpanded(prev => !prev)}
@@ -259,14 +287,6 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
         </Typography>
       ),
     },
-    {
-      key: 'info_count', header: 'Info', width: 60, align: 'right',
-      render: row => (
-        <Typography sx={{ fontSize: '11px', color: row.info_count > 0 ? '#1565c0' : '#ccc' }}>
-          {row.info_count ?? 0}
-        </Typography>
-      ),
-    },
     { key: 'workspace_name',    header: 'Workspace', width: 110, render: row => <Typography sx={{ fontSize: '10px', color: '#888' }}>{row.workspace_name || '—'}</Typography> },
     { key: 'remote_engine_name', header: 'Engine',   width: 130, render: row => <Typography sx={{ fontSize: '10px', color: '#888' }}>{row.remote_engine_name || '—'}</Typography> },
     { key: 'start_timestamp',   header: 'Time',      width: 130, render: row => <Typography sx={{ fontSize: '10px', color: '#aaa' }}>{fmtTs(row.start_timestamp)}</Typography> },
@@ -280,7 +300,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
         <Box sx={{ px: 2, py: 1.25, display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
           <IntegrationInstructionsIcon sx={{ fontSize: 16, color: '#e65100' }} />
           <Typography sx={{ fontWeight: 700, fontSize: '11px', color: '#555', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
-            Talend — Job Execution Logs
+            Talend Logs
           </Typography>
           {useMock && (
             <Chip label="MOCK DATA" size="small" sx={{ fontSize: '9px', height: 18, bgcolor: '#fff3e0', color: '#f57c00', fontWeight: 700, border: '1px solid #f57c0040' }} />
@@ -434,6 +454,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
                   rowKey="task_execution_id"
                   compact
                   accentColor="#e65100"
+                  maxHeight={360}
                 />
               </Box>
             </WidgetShell>
@@ -472,6 +493,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
                   rowKey="start_timestamp"
                   compact
                   accentColor="#c62828"
+                  maxHeight={420}
                   tableMinWidth={1320}
                 />
               </Box>

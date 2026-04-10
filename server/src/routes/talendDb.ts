@@ -27,7 +27,7 @@ async function safeQuery(sql: string, params: any[] = [], fallback: any[] = []):
 }
 
 // ─── GET /api/talend/summary ──────────────────────────────
-// Execution status counts + top workspace/engine info
+// Execution status counts + workspace/engine info
 router.get('/summary', async (req: Request, res: Response) => {
   try {
     const { clause: dc } = daysClause(req.query);
@@ -38,7 +38,6 @@ router.get('/summary', async (req: Request, res: Response) => {
         WHERE execution_status IS NOT NULL ${dc}
         GROUP BY execution_status
         ORDER BY cnt DESC
-        LIMIT 20
       `),
       safeQuery(`
         SELECT workspace_name, COUNT(*)::int AS cnt
@@ -46,7 +45,6 @@ router.get('/summary', async (req: Request, res: Response) => {
         WHERE workspace_name IS NOT NULL ${dc}
         GROUP BY workspace_name
         ORDER BY cnt DESC
-        LIMIT 10
       `),
       safeQuery(`
         SELECT remote_engine_name, COUNT(*)::int AS cnt
@@ -54,7 +52,6 @@ router.get('/summary', async (req: Request, res: Response) => {
         WHERE remote_engine_name IS NOT NULL ${dc}
         GROUP BY remote_engine_name
         ORDER BY cnt DESC
-        LIMIT 10
       `),
     ]);
 
@@ -108,7 +105,7 @@ router.get('/level-counts', async (req: Request, res: Response) => {
 });
 
 // ─── GET /api/talend/recent-tasks ────────────────────────
-// Latest 50 task executions — de-duped by task_execution_id
+// Task executions — de-duped by task_execution_id
 router.get('/recent-tasks', async (req: Request, res: Response) => {
   try {
     const { clause: dc } = daysClause(req.query);
@@ -129,7 +126,6 @@ router.get('/recent-tasks', async (req: Request, res: Response) => {
       FROM edoops.talend_logs_dashboard
       WHERE task_execution_id IS NOT NULL ${dc}
       ORDER BY task_execution_id, start_timestamp DESC NULLS LAST
-      LIMIT 50
     `);
     res.json(rows);
   } catch (err: any) {
@@ -149,7 +145,7 @@ router.get('/recent-errors', async (req: Request, res: Response) => {
         workspace_name,
         remote_engine_name,
         artifact_name,
-        NULLIF(BTRIM(err_message_desc), '') AS err_message_desc,
+        err_message_desc,
         COALESCE(fatal_count, 0)::int AS fatal_count,
         COALESCE(error_count, 0)::int AS error_count,
         COALESCE(warn_count,  0)::int AS warn_count,
@@ -163,11 +159,9 @@ router.get('/recent-errors', async (req: Request, res: Response) => {
       WHERE (
         COALESCE(fatal_count, 0) > 0 OR
         COALESCE(error_count, 0) > 0 OR
-        COALESCE(warn_count,  0) > 0 OR
-        COALESCE(info_count,  0) > 0
+        COALESCE(warn_count,  0) > 0 
       ) ${dc}
       ORDER BY start_timestamp DESC NULLS LAST
-      LIMIT 200
     `);
     res.json(rows);
   } catch (err: any) {
