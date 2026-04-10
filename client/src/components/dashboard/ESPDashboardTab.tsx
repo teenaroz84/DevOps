@@ -57,6 +57,8 @@ const PLATFORM_FULL_NAMES: Record<string, string> = {
 
 const BAR_COLORS = ['#1976d2', '#f57c00', '#c62828', '#2e7d32', '#6a1b9a', '#00838f']
 const ESP_PLATFORM_RECENT_JOB_LIMIT = 500
+const ESP_WIDGET_PANEL_HEIGHT = 260
+const isSpecialEspJob = (jobname: string) => /JSDELAY|RETRIG/i.test(jobname)
 
 // ─── Main Component ───────────────────────────────────────
 export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void }> = ({ onOpenAgent }) => {
@@ -365,16 +367,33 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
         flex: 1,
         noWrap: true,
         render: r => (
-          <Typography
-            component="span"
-            sx={{
-              fontSize: '11px',
-              fontWeight: drillJob === r.jobname ? 700 : 400,
-              color: drillJob === r.jobname ? '#1565c0' : 'inherit',
-            }}
-          >
-            {r.jobname}
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
+            <Typography
+              component="span"
+              sx={{
+                fontSize: '11px',
+                fontWeight: drillJob === r.jobname ? 700 : 400,
+                color: isSpecialEspJob(r.jobname) ? '#8d6e00' : drillJob === r.jobname ? '#1565c0' : 'inherit',
+                minWidth: 0,
+              }}
+            >
+              {r.jobname}
+            </Typography>
+            {isSpecialEspJob(r.jobname) && (
+              <Chip
+                label="Special"
+                size="small"
+                sx={{
+                  height: 18,
+                  fontSize: '10px',
+                  fontWeight: 700,
+                  bgcolor: '#fff8e1',
+                  color: '#8d6e00',
+                  border: '1px solid #f1d27a',
+                }}
+              />
+            )}
+          </Box>
         ),
       },
       {
@@ -700,7 +719,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                 title="Job List"
                 source={selectedPlatform
                   ? `${filteredJobList.length}${filteredJobList.length >= ESP_PLATFORM_RECENT_JOB_LIMIT ? '+' : ''} recent jobs · select an application for full detail`
-                  : `${filteredJobList.length}${filteredJobList.length !== data.job_list.length ? ` / ${data.job_list.length}` : ''} jobs · click a job to view its trend`}
+                  : `${filteredJobList.length}${filteredJobList.length !== data.job_list.length ? ` / ${data.job_list.length}` : ''} jobs`}
                 titleIcon={<WorkIcon sx={{ color: '#1976d2', fontSize: 18 }} />}
               >
                 <Box sx={{ flex: 1, overflowY: 'auto', px: 1.5, pb: 1 }}>
@@ -712,7 +731,6 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                     maxHeight={280}
                     accentColor="#2e7d32"
                     emptyMessage="No jobs found"
-                    onRowClick={row => setDrillJob(prev => prev === row.jobname ? null : row.jobname)}
                   />
                 </Box>
               </WidgetShell>
@@ -831,14 +849,16 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
           )}
 
           {/* ── Row 3: Agent | Job Type ── */}
-          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 2 }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' }, gap: 2 }}>
 
             {/* Agent — clickable bar list */}
-            <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #1976d222', borderTop: '3px solid #1976d2', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+            <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #1976d222', borderTop: '3px solid #1976d2', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', minHeight: ESP_WIDGET_PANEL_HEIGHT }}>
               <WidgetShell title="Agent" source={`${data.agents.length} entries · click to filter`} titleIcon={<PeopleIcon sx={{ color: '#1976d2', fontSize: 18 }} />}>
-                <Box sx={{ px: 1.5, pb: 1.5, pt: 0.5 }}>
+                <Box sx={{ px: 1.5, pb: 1.5, pt: 0.5, flex: 1, overflowY: 'auto' }}>
                   {data.agents.length === 0 ? (
-                    <Typography sx={{ fontSize: '11px', color: '#bbb', textAlign: 'center', py: 2 }}>No data</Typography>
+                    <Box sx={{ minHeight: ESP_WIDGET_PANEL_HEIGHT - 70, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Typography sx={{ fontSize: '11px', color: '#bbb', textAlign: 'center' }}>No data</Typography>
+                    </Box>
                   ) : (
                     <MetricBarList
                       items={data.agents.map((a, idx) => ({
@@ -859,11 +879,11 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
             </Paper>
 
             {/* Job Type — donut */}
-            <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #6a1b9a22', borderTop: '3px solid #6a1b9a', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+            <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #6a1b9a22', borderTop: '3px solid #6a1b9a', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', minHeight: ESP_WIDGET_PANEL_HEIGHT }}>
               <WidgetShell title="Job Type" source={`${data.job_types.length} types · click to filter`} titleIcon={<StorageIcon sx={{ color: '#6a1b9a', fontSize: 18 }} />}>
-                <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 1, flex: 1, minHeight: ESP_WIDGET_PANEL_HEIGHT - 70 }}>
                   {data.job_types.length === 0 ? (
-                    <Typography sx={{ fontSize: '11px', color: '#bbb', py: 2 }}>No data</Typography>
+                    <Typography sx={{ fontSize: '11px', color: '#bbb' }}>No data</Typography>
                   ) : (
                     <DonutChart
                       data={data.job_types.map((t, i) => ({

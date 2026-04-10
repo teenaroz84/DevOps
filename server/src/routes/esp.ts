@@ -12,8 +12,8 @@ const router = Router();
 // exclusions: same pattern — rows matching these are excluded
 interface PlatformDef { includes: string[]; exclusions: string[] }
 const ESP_RECENT_WINDOW = '2 days';
-const ESP_PLATFORM_JOB_LIST_LIMIT = 500;
-const ESP_PLATFORM_DEPENDENCY_LIMIT = 500;
+const ESP_PLATFORM_JOB_LIST_LIMIT = 1000;
+const ESP_PLATFORM_DEPENDENCY_LIMIT = 1000;
 const PLATFORM_CONFIG: Record<string, PlatformDef> = {
   /* 'PowerCenter': {
     includes:   ['ERDP*'],
