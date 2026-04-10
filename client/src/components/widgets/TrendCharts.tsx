@@ -61,6 +61,11 @@ interface TrendLineChartProps {
   /** Optional fixed domain for Y axis as [min, max] */
   yDomain?: [number | 'auto', number | 'auto']
   margin?: { top?: number; right?: number; bottom?: number; left?: number }
+  tooltipContent?: (args: {
+    active?: boolean
+    label?: string | number
+    payload?: Array<{ name?: string; value?: string | number; color?: string; dataKey?: string }>
+  }) => React.ReactNode
 }
 
 export const TrendLineChart: React.FC<TrendLineChartProps> = ({
@@ -71,6 +76,7 @@ export const TrendLineChart: React.FC<TrendLineChartProps> = ({
   showGrid = true,
   yDomain,
   margin = { top: 10, right: 20, left: -10, bottom: 10 },
+  tooltipContent,
 }) => {
   return (
     <Box sx={{ width: '100%', height, minWidth: 0 }}>
@@ -86,6 +92,7 @@ export const TrendLineChart: React.FC<TrendLineChartProps> = ({
             domain={yDomain}
           />
           <Tooltip
+            content={tooltipContent ? ({ active, label, payload }) => tooltipContent({ active, label, payload: payload as any }) : undefined}
             contentStyle={{
               backgroundColor: '#fff',
               border: '1px solid #ddd',

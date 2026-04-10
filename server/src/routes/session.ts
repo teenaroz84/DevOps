@@ -16,6 +16,7 @@ import { BatchWriteCommand, DeleteCommand, DynamoDBDocumentClient, PutCommand, Q
 const router = Router();
 
 const TABLE = process.env.SESSIONS_TABLE || 'ChatSessions';
+const DEBUG_SESSIONS = process.env.DEBUG_SESSIONS === '1';
 
 let ddb: DynamoDBDocumentClient | null = null;
 
@@ -32,6 +33,15 @@ type SessionTurn = {
   Query: string;
   Response: string;
 };
+
+function debugSessionLog(event: string, details?: Record<string, unknown>): void {
+  if (!DEBUG_SESSIONS) return;
+  if (details) {
+    console.log(`[sessions] ${event}`, details);
+    return;
+  }
+  console.log(`[sessions] ${event}`);
+}
 
 function getClient(): DynamoDBDocumentClient {
   if (!ddb) {
@@ -125,9 +135,22 @@ function toMessages(turns: SessionTurn[]): Array<{ role: 'user' | 'agent'; conte
 // GET /api/sessions/:sessionId/:agentId
 router.get('/:sessionId/:agentId', async (req: Request, res: Response) => {
   const { sessionId, agentId } = req.params;
+  debugSessionLog('GET request', {
+    route: req.originalUrl,
+    sessionId,
+    agentId,
+    storageSessionId: getStorageSessionId(sessionId, agentId),
+  });
   try {
     const turns = await listTurns(sessionId, agentId);
     const messages = toMessages(turns);
+    debugSessionLog('GET response', {
+      sessionId,
+      agentId,
+      turnCount: turns.length,
+      messageCount: messages.length,
+      messages,
+    });
     res.json({ messages });
   } catch (err: any) {
     console.warn('[sessions] GET failed, returning empty history:', err.message);
@@ -140,8 +163,21 @@ router.post('/:sessionId/:agentId', async (req: Request, res: Response) => {
   const { sessionId, agentId } = req.params;
   const messages = Array.isArray(req.body.messages) ? req.body.messages as StoredMessage[] : [];
   const userId = typeof req.body.userId === 'string' && req.body.userId.trim() ? req.body.userId.trim() : undefined;
+  debugSessionLog('POST request', {
+    route: req.originalUrl,
+    sessionId,
+    agentId,
+    storageSessionId: getStorageSessionId(sessionId, agentId),
+    body: req.body,
+  });
   try {
     const turns = buildTurns(getStorageSessionId(sessionId, agentId), messages, userId);
+    debugSessionLog('POST translated turns', {
+      sessionId,
+      agentId,
+      turnCount: turns.length,
+      turns,
+    });
     await deleteTurns(sessionId, agentId);
 
     for (const turn of turns) {
@@ -151,16 +187,36 @@ router.post('/:sessionId/:agentId', async (req: Request, res: Response) => {
       }));
     }
 
-    res.json({ ok: true });
+    debugSessionLog('POST persisted', {
+      sessionId,
+      agentId,
+      persisted: true,
+      turnCount: turns.length,
+      table: TABLE,
+    });
+    res.json({ ok: true, persisted: true });
   } catch (err: any) {
-    console.warn('[sessions] POST failed:', err.message);
-    res.status(500).json({ error: err.message });
+    console.warn('[sessions] POST failed, skipping remote persistence:', err.message);
+    debugSessionLog('POST persisted', {
+      sessionId,
+      agentId,
+      persisted: false,
+      error: err.message,
+      table: TABLE,
+    });
+    res.json({ ok: true, persisted: false });
   }
 });
 
 // DELETE /api/sessions/:sessionId/:agentId
 router.delete('/:sessionId/:agentId', async (req: Request, res: Response) => {
   const { sessionId, agentId } = req.params;
+  debugSessionLog('DELETE request', {
+    route: req.originalUrl,
+    sessionId,
+    agentId,
+    storageSessionId: getStorageSessionId(sessionId, agentId),
+  });
   try {
     const turns = await listTurns(sessionId, agentId);
     if (turns.length === 1) {
@@ -174,10 +230,24 @@ router.delete('/:sessionId/:agentId', async (req: Request, res: Response) => {
     } else {
       await deleteTurns(sessionId, agentId);
     }
-    res.json({ ok: true });
+    debugSessionLog('DELETE persisted', {
+      sessionId,
+      agentId,
+      persisted: true,
+      deletedTurnCount: turns.length,
+      table: TABLE,
+    });
+    res.json({ ok: true, persisted: true });
   } catch (err: any) {
-    console.warn('[sessions] DELETE failed:', err.message);
-    res.status(500).json({ error: err.message });
+    console.warn('[sessions] DELETE failed, skipping remote delete:', err.message);
+    debugSessionLog('DELETE persisted', {
+      sessionId,
+      agentId,
+      persisted: false,
+      error: err.message,
+      table: TABLE,
+    });
+    res.json({ ok: true, persisted: false });
   }
 });
 

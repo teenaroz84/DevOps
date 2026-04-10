@@ -6,6 +6,8 @@ export interface NameCount { name: string; count: number }
 
 export interface AppData {
   appl_name: string
+  platform_id?: string
+  platform_name?: string
   job_count: number
   idle_job_count: number
   spl_job_count: number
@@ -13,7 +15,7 @@ export interface AppData {
   job_types: NameCount[]
   completion_codes: NameCount[]
   user_jobs: NameCount[]
-  job_list: Array<{ jobname: string; last_run_date: string | null; job_type?: string | null }>
+  job_list: Array<{ jobname: string; last_run_date: string | null; job_type?: string | null; run_status?: string | null }>
   job_run_trend: Array<{ day: string; hour: number; job_count: number; job_fail_count: number }>
   successor_jobs: Array<{ jobname: string; successor_job: string }>
   predecessor_jobs: Array<{ jobname: string; predecessor_job: string }>
@@ -25,6 +27,8 @@ export interface AppData {
 const MOCK_APPS: AppData[] = [
   {
     appl_name: 'DTDPLMET',
+    platform_id: 'talend',
+    platform_name: 'Talend',
     job_count: 107,
     idle_job_count: 107,
     spl_job_count: 16,
@@ -46,10 +50,10 @@ const MOCK_APPS: AppData[] = [
       { name: 'Null', count: 28 },
     ],
     job_list: [
-      { jobname: 'CD332400', last_run_date: '2026-03-24T10:12:00Z', job_type: 'UNIX' },
-      { jobname: 'CD332402', last_run_date: '2026-03-24T10:15:00Z', job_type: 'UNIX' },
+      { jobname: 'CD332400', last_run_date: '2026-03-24T10:12:00Z', job_type: 'UNIX', run_status: 'SUCCESS' },
+      { jobname: 'CD332402', last_run_date: '2026-03-24T10:15:00Z', job_type: 'UNIX', run_status: 'SUCCESS' },
       { jobname: 'COMPRT_DTDOPSD57_PRD', last_run_date: '2026-03-24T11:00:00Z', job_type: 'UNIX' },
-      { jobname: 'COMPRT_DTDOPSD63_PRD', last_run_date: '2026-03-24T11:05:00Z', job_type: 'UNIX' },
+      { jobname: 'COMPRT_DTDOPSD63_PRD', last_run_date: '2026-03-24T11:05:00Z', job_type: 'UNIX', run_status: 'FAILED' },
       { jobname: 'COMPRT_DTDOPSD64_PRD', last_run_date: '2026-03-24T11:10:00Z', job_type: 'UNIX' },
       { jobname: 'COMPRT_DTDOPSD67_PRD', last_run_date: '2026-03-24T11:15:00Z', job_type: 'UNIX' },
       { jobname: 'COMPRT_DTDOPSD70_PRD', last_run_date: '2026-03-24T12:00:00Z', job_type: 'UNIX' },
@@ -58,8 +62,8 @@ const MOCK_APPS: AppData[] = [
       { jobname: 'DTOPSA04_PRD', last_run_date: '2026-03-24T12:15:00Z', job_type: 'UNIX' },
       { jobname: 'DTOPSA05_PRD', last_run_date: '2026-03-24T13:00:00Z', job_type: 'UNIX' },
       { jobname: 'DTOPSA06_PRD', last_run_date: '2026-03-24T13:05:00Z', job_type: 'UNIX' },
-      { jobname: 'JSDELAY_DTDPLMET_001', last_run_date: null, job_type: 'MAINFRAME' },
-      { jobname: 'RETRIG_DTDPLMET_001', last_run_date: null, job_type: 'MAINFRAME' },
+      { jobname: 'JSDELAY_DTDPLMET_001', last_run_date: null, job_type: 'MAINFRAME', run_status: 'NEVER RUN' },
+      { jobname: 'RETRIG_DTDPLMET_001', last_run_date: null, job_type: 'MAINFRAME', run_status: 'NEVER RUN' },
       { jobname: 'FINMETRICS_LOAD_PRD', last_run_date: '2026-03-24T14:00:00Z', job_type: 'UNIX' },
       { jobname: 'FINMETRICS_XFORM_PRD', last_run_date: '2026-03-24T14:10:00Z', job_type: 'UNIX' },
     ],
@@ -124,6 +128,8 @@ const MOCK_APPS: AppData[] = [
   },
   {
     appl_name: 'CUSTOMER_360',
+    platform_id: 'talend',
+    platform_name: 'Talend',
     job_count: 88,
     idle_job_count: 12,
     spl_job_count: 3,
@@ -144,13 +150,13 @@ const MOCK_APPS: AppData[] = [
       { name: 'Null', count: 18 },
     ],
     job_list: [
-      { jobname: 'CUST360_EXTRACT_01', last_run_date: '2026-03-24T09:00:00Z', job_type: 'UNIX' },
+      { jobname: 'CUST360_EXTRACT_01', last_run_date: '2026-03-24T09:00:00Z', job_type: 'UNIX', run_status: 'SUCCESS' },
       { jobname: 'CUST360_EXTRACT_02', last_run_date: '2026-03-24T09:10:00Z', job_type: 'UNIX' },
       { jobname: 'CUST360_TRANSFORM_01', last_run_date: '2026-03-24T10:00:00Z', job_type: 'UNIX' },
-      { jobname: 'CUST360_LOAD_DW', last_run_date: '2026-03-24T11:30:00Z', job_type: 'UNIX' },
+      { jobname: 'CUST360_LOAD_DW', last_run_date: '2026-03-24T11:30:00Z', job_type: 'UNIX', run_status: 'FAILED' },
       { jobname: 'CUST360_VALIDATE', last_run_date: '2026-03-24T12:00:00Z', job_type: 'MAINFRAME' },
-      { jobname: 'JSDELAY_CUST360_001', last_run_date: null, job_type: 'MAINFRAME' },
-      { jobname: 'RETRIG_CUST360_001', last_run_date: null, job_type: 'MAINFRAME' },
+      { jobname: 'JSDELAY_CUST360_001', last_run_date: null, job_type: 'MAINFRAME', run_status: 'NEVER RUN' },
+      { jobname: 'RETRIG_CUST360_001', last_run_date: null, job_type: 'MAINFRAME', run_status: 'NEVER RUN' },
     ],
     job_run_trend: [
       { day: '2026-03-24', hour: 9,  job_count: 7,  job_fail_count: 0 },
@@ -195,6 +201,8 @@ const MOCK_APPS: AppData[] = [
   },
   {
     appl_name: 'FINANCE_ETL',
+    platform_id: 'ppcm',
+    platform_name: 'PPCM',
     job_count: 63,
     idle_job_count: 8,
     spl_job_count: 6,
@@ -216,12 +224,12 @@ const MOCK_APPS: AppData[] = [
       { name: 'Null', count: 3 },
     ],
     job_list: [
-      { jobname: 'FIN_GL_EXTRACT', last_run_date: '2026-03-24T06:00:00Z', job_type: 'UNIX' },
+      { jobname: 'FIN_GL_EXTRACT', last_run_date: '2026-03-24T06:00:00Z', job_type: 'UNIX', run_status: 'SUCCESS' },
       { jobname: 'FIN_AP_EXTRACT', last_run_date: '2026-03-24T06:10:00Z', job_type: 'UNIX' },
-      { jobname: 'FIN_AR_EXTRACT', last_run_date: '2026-03-24T06:20:00Z', job_type: 'UNIX' },
+      { jobname: 'FIN_AR_EXTRACT', last_run_date: '2026-03-24T06:20:00Z', job_type: 'UNIX', run_status: 'FAILED' },
       { jobname: 'FIN_GL_LOAD_DW', last_run_date: '2026-03-24T08:00:00Z', job_type: 'UNIX' },
       { jobname: 'FIN_RECONCILE',  last_run_date: '2026-03-24T09:00:00Z', job_type: 'MAINFRAME' },
-      { jobname: 'JSDELAY_FIN_001', last_run_date: null, job_type: 'MAINFRAME' },
+      { jobname: 'JSDELAY_FIN_001', last_run_date: null, job_type: 'MAINFRAME', run_status: 'NEVER RUN' },
     ],
     job_run_trend: [
       { day: '2026-03-24', hour: 6,  job_count: 10, job_fail_count: 1 },
@@ -266,9 +274,92 @@ const MOCK_APPS: AppData[] = [
 
 export const MOCK_ESP_APPLICATIONS = MOCK_APPS.map(a => ({ appl_name: a.appl_name }))
 
+export const MOCK_ESP_PLATFORMS = Array.from(
+  new Map(
+    MOCK_APPS
+      .filter((app) => app.platform_id && app.platform_name)
+      .map((app) => [app.platform_id, { platform_id: app.platform_id!, platform_name: app.platform_name! }]),
+  ).values(),
+)
+
+export const MOCK_ESP_PLATFORM_SUMMARY = MOCK_ESP_PLATFORMS.map((platform) => {
+  const apps = MOCK_APPS.filter((app) => app.platform_id === platform.platform_id)
+  return {
+    platform_id: platform.platform_id,
+    platform_name: platform.platform_name,
+    total: apps.reduce((sum, app) => sum + app.job_count, 0),
+    idle: apps.reduce((sum, app) => sum + app.idle_job_count, 0),
+    special: apps.reduce((sum, app) => sum + app.spl_job_count, 0),
+    app_count: apps.length,
+  }
+})
+
 /** Mirrors the /api/esp/job-counts response shape: [{appl_name, total_jobs}] */
 export const MOCK_ESP_JOB_COUNTS = MOCK_APPS.map(a => ({ appl_name: a.appl_name, total_jobs: a.job_count }))
 
 export function getMockAppData(applName: string): AppData | null {
   return MOCK_APPS.find(a => a.appl_name === applName) ?? null
+}
+
+export function getMockPlatformApplications(platformId: string): string[] {
+  return MOCK_APPS
+    .filter((app) => app.platform_id === platformId)
+    .map((app) => app.appl_name)
+    .sort((left, right) => left.localeCompare(right))
+}
+
+export function getMockPlatformData(platformId: string): AppData | null {
+  const apps = MOCK_APPS.filter((app) => app.platform_id === platformId)
+  if (apps.length === 0) return null
+
+  const [firstApp] = apps
+
+  const aggregateCounts = (pick: (app: AppData) => NameCount[]) => {
+    const counts = new Map<string, number>()
+    apps.forEach((app) => {
+      pick(app).forEach((item) => {
+        counts.set(item.name, (counts.get(item.name) ?? 0) + item.count)
+      })
+    })
+    return Array.from(counts.entries())
+      .map(([name, count]) => ({ name, count }))
+      .sort((left, right) => right.count - left.count)
+  }
+
+  const trendCounts = new Map<string, { day: string; hour: number; job_count: number; job_fail_count: number }>()
+  apps.forEach((app) => {
+    app.job_run_trend.forEach((row) => {
+      const key = `${row.day}_${row.hour}`
+      const existing = trendCounts.get(key)
+      if (existing) {
+        existing.job_count += row.job_count
+        existing.job_fail_count += row.job_fail_count
+      } else {
+        trendCounts.set(key, { ...row })
+      }
+    })
+  })
+
+  return {
+    appl_name: firstApp.platform_name ?? firstApp.appl_name,
+    platform_id: firstApp.platform_id,
+    platform_name: firstApp.platform_name,
+    job_count: apps.reduce((sum, app) => sum + app.job_count, 0),
+    idle_job_count: apps.reduce((sum, app) => sum + app.idle_job_count, 0),
+    spl_job_count: apps.reduce((sum, app) => sum + app.spl_job_count, 0),
+    agents: aggregateCounts((app) => app.agents),
+    job_types: aggregateCounts((app) => app.job_types),
+    completion_codes: aggregateCounts((app) => app.completion_codes),
+    user_jobs: aggregateCounts((app) => app.user_jobs),
+    job_list: apps.flatMap((app) => app.job_list.map((job) => ({ ...job, appl_name: app.appl_name }))),
+    job_run_trend: Array.from(trendCounts.values()).sort((left, right) => {
+      const dayCompare = left.day.localeCompare(right.day)
+      return dayCompare !== 0 ? dayCompare : left.hour - right.hour
+    }),
+    successor_jobs: apps.flatMap((app) => app.successor_jobs),
+    predecessor_jobs: apps.flatMap((app) => app.predecessor_jobs),
+    metadata: apps.flatMap((app) => app.metadata),
+    metadata_detail: apps.flatMap((app) => app.metadata_detail),
+    job_run_table: apps.flatMap((app) => app.job_run_table),
+  }
 }
