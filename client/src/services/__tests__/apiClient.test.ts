@@ -13,7 +13,7 @@ describe('apiClient', () => {
   })
 
   describe('get', () => {
-    it('calls fetch with the correct URL and headers', async () => {
+    it('calls fetch with the correct URL and no forced JSON header', async () => {
       const mockData = { status: 'ok' }
       vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
         ok: true,
@@ -24,11 +24,7 @@ describe('apiClient', () => {
 
       expect(fetch).toHaveBeenCalledWith(
         'http://test-api.example.com/api/dmf/summary',
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            'Content-Type': 'application/json',
-          }),
-        }),
+        expect.objectContaining({ headers: {} }),
       )
     })
 

@@ -9,12 +9,14 @@ import { config } from '../config'
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const url = `${config.apiBaseUrl}${path}`
+  const hasBody = options?.body != null
+  const headers = {
+    ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
+    ...options?.headers,
+  }
   const res = await fetch(url, {
     ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers,
-    },
+    headers,
   })
   if (!res.ok) {
     throw new Error(`API ${res.status}: ${res.statusText} — ${path}`)

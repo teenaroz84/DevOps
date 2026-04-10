@@ -872,9 +872,9 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                           value: a.count,
                           max: Math.max(...data.agents.map(x => x.count), 1),
                           color: widgetFilter?.field === 'agent' && widgetFilter.value === a.name ? '#1565c0' : BAR_COLORS[idx % BAR_COLORS.length],
-                          onClick: () => setWidgetFilter(prev =>
+                          /* onClick: () => setWidgetFilter(prev =>
                             prev?.field === 'agent' && prev.value === a.name ? null : { field: 'agent', value: a.name }
-                          ),
+                          ), */
                         }))}
                         barHeight={8}
                         compact
