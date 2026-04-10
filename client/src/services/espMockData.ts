@@ -13,7 +13,7 @@ export interface AppData {
   job_types: NameCount[]
   completion_codes: NameCount[]
   user_jobs: NameCount[]
-  job_list: Array<{ jobname: string; last_run_date: string | null }>
+  job_list: Array<{ jobname: string; last_run_date: string | null; job_type?: string | null }>
   job_run_trend: Array<{ day: string; hour: number; job_count: number; job_fail_count: number }>
   successor_jobs: Array<{ jobname: string; successor_job: string }>
   predecessor_jobs: Array<{ jobname: string; predecessor_job: string }>
@@ -46,22 +46,22 @@ const MOCK_APPS: AppData[] = [
       { name: 'Null', count: 28 },
     ],
     job_list: [
-      { jobname: 'CD332400', last_run_date: '2026-03-24T10:12:00Z' },
-      { jobname: 'CD332402', last_run_date: '2026-03-24T10:15:00Z' },
-      { jobname: 'COMPRT_DTDOPSD57_PRD', last_run_date: '2026-03-24T11:00:00Z' },
-      { jobname: 'COMPRT_DTDOPSD63_PRD', last_run_date: '2026-03-24T11:05:00Z' },
-      { jobname: 'COMPRT_DTDOPSD64_PRD', last_run_date: '2026-03-24T11:10:00Z' },
-      { jobname: 'COMPRT_DTDOPSD67_PRD', last_run_date: '2026-03-24T11:15:00Z' },
-      { jobname: 'COMPRT_DTDOPSD70_PRD', last_run_date: '2026-03-24T12:00:00Z' },
-      { jobname: 'COMPRT_DTDOPSD71_PRD', last_run_date: '2026-03-24T12:05:00Z' },
-      { jobname: 'COMPRT_DTDOPSH89_PRD', last_run_date: '2026-03-24T12:10:00Z' },
-      { jobname: 'DTOPSA04_PRD', last_run_date: '2026-03-24T12:15:00Z' },
-      { jobname: 'DTOPSA05_PRD', last_run_date: '2026-03-24T13:00:00Z' },
-      { jobname: 'DTOPSA06_PRD', last_run_date: '2026-03-24T13:05:00Z' },
-      { jobname: 'JSDELAY_DTDPLMET_001', last_run_date: null },
-      { jobname: 'RETRIG_DTDPLMET_001', last_run_date: null },
-      { jobname: 'FINMETRICS_LOAD_PRD', last_run_date: '2026-03-24T14:00:00Z' },
-      { jobname: 'FINMETRICS_XFORM_PRD', last_run_date: '2026-03-24T14:10:00Z' },
+      { jobname: 'CD332400', last_run_date: '2026-03-24T10:12:00Z', job_type: 'UNIX' },
+      { jobname: 'CD332402', last_run_date: '2026-03-24T10:15:00Z', job_type: 'UNIX' },
+      { jobname: 'COMPRT_DTDOPSD57_PRD', last_run_date: '2026-03-24T11:00:00Z', job_type: 'UNIX' },
+      { jobname: 'COMPRT_DTDOPSD63_PRD', last_run_date: '2026-03-24T11:05:00Z', job_type: 'UNIX' },
+      { jobname: 'COMPRT_DTDOPSD64_PRD', last_run_date: '2026-03-24T11:10:00Z', job_type: 'UNIX' },
+      { jobname: 'COMPRT_DTDOPSD67_PRD', last_run_date: '2026-03-24T11:15:00Z', job_type: 'UNIX' },
+      { jobname: 'COMPRT_DTDOPSD70_PRD', last_run_date: '2026-03-24T12:00:00Z', job_type: 'UNIX' },
+      { jobname: 'COMPRT_DTDOPSD71_PRD', last_run_date: '2026-03-24T12:05:00Z', job_type: 'UNIX' },
+      { jobname: 'COMPRT_DTDOPSH89_PRD', last_run_date: '2026-03-24T12:10:00Z', job_type: 'UNIX' },
+      { jobname: 'DTOPSA04_PRD', last_run_date: '2026-03-24T12:15:00Z', job_type: 'UNIX' },
+      { jobname: 'DTOPSA05_PRD', last_run_date: '2026-03-24T13:00:00Z', job_type: 'UNIX' },
+      { jobname: 'DTOPSA06_PRD', last_run_date: '2026-03-24T13:05:00Z', job_type: 'UNIX' },
+      { jobname: 'JSDELAY_DTDPLMET_001', last_run_date: null, job_type: 'MAINFRAME' },
+      { jobname: 'RETRIG_DTDPLMET_001', last_run_date: null, job_type: 'MAINFRAME' },
+      { jobname: 'FINMETRICS_LOAD_PRD', last_run_date: '2026-03-24T14:00:00Z', job_type: 'UNIX' },
+      { jobname: 'FINMETRICS_XFORM_PRD', last_run_date: '2026-03-24T14:10:00Z', job_type: 'UNIX' },
     ],
     job_run_trend: [
       { day: '2026-03-24', hour: 8,  job_count: 6,  job_fail_count: 0 },
@@ -144,13 +144,13 @@ const MOCK_APPS: AppData[] = [
       { name: 'Null', count: 18 },
     ],
     job_list: [
-      { jobname: 'CUST360_EXTRACT_01', last_run_date: '2026-03-24T09:00:00Z' },
-      { jobname: 'CUST360_EXTRACT_02', last_run_date: '2026-03-24T09:10:00Z' },
-      { jobname: 'CUST360_TRANSFORM_01', last_run_date: '2026-03-24T10:00:00Z' },
-      { jobname: 'CUST360_LOAD_DW', last_run_date: '2026-03-24T11:30:00Z' },
-      { jobname: 'CUST360_VALIDATE', last_run_date: '2026-03-24T12:00:00Z' },
-      { jobname: 'JSDELAY_CUST360_001', last_run_date: null },
-      { jobname: 'RETRIG_CUST360_001', last_run_date: null },
+      { jobname: 'CUST360_EXTRACT_01', last_run_date: '2026-03-24T09:00:00Z', job_type: 'UNIX' },
+      { jobname: 'CUST360_EXTRACT_02', last_run_date: '2026-03-24T09:10:00Z', job_type: 'UNIX' },
+      { jobname: 'CUST360_TRANSFORM_01', last_run_date: '2026-03-24T10:00:00Z', job_type: 'UNIX' },
+      { jobname: 'CUST360_LOAD_DW', last_run_date: '2026-03-24T11:30:00Z', job_type: 'UNIX' },
+      { jobname: 'CUST360_VALIDATE', last_run_date: '2026-03-24T12:00:00Z', job_type: 'MAINFRAME' },
+      { jobname: 'JSDELAY_CUST360_001', last_run_date: null, job_type: 'MAINFRAME' },
+      { jobname: 'RETRIG_CUST360_001', last_run_date: null, job_type: 'MAINFRAME' },
     ],
     job_run_trend: [
       { day: '2026-03-24', hour: 9,  job_count: 7,  job_fail_count: 0 },
@@ -216,12 +216,12 @@ const MOCK_APPS: AppData[] = [
       { name: 'Null', count: 3 },
     ],
     job_list: [
-      { jobname: 'FIN_GL_EXTRACT', last_run_date: '2026-03-24T06:00:00Z' },
-      { jobname: 'FIN_AP_EXTRACT', last_run_date: '2026-03-24T06:10:00Z' },
-      { jobname: 'FIN_AR_EXTRACT', last_run_date: '2026-03-24T06:20:00Z' },
-      { jobname: 'FIN_GL_LOAD_DW', last_run_date: '2026-03-24T08:00:00Z' },
-      { jobname: 'FIN_RECONCILE',  last_run_date: '2026-03-24T09:00:00Z' },
-      { jobname: 'JSDELAY_FIN_001', last_run_date: null },
+      { jobname: 'FIN_GL_EXTRACT', last_run_date: '2026-03-24T06:00:00Z', job_type: 'UNIX' },
+      { jobname: 'FIN_AP_EXTRACT', last_run_date: '2026-03-24T06:10:00Z', job_type: 'UNIX' },
+      { jobname: 'FIN_AR_EXTRACT', last_run_date: '2026-03-24T06:20:00Z', job_type: 'UNIX' },
+      { jobname: 'FIN_GL_LOAD_DW', last_run_date: '2026-03-24T08:00:00Z', job_type: 'UNIX' },
+      { jobname: 'FIN_RECONCILE',  last_run_date: '2026-03-24T09:00:00Z', job_type: 'MAINFRAME' },
+      { jobname: 'JSDELAY_FIN_001', last_run_date: null, job_type: 'MAINFRAME' },
     ],
     job_run_trend: [
       { day: '2026-03-24', hour: 6,  job_count: 10, job_fail_count: 1 },

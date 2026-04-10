@@ -16,6 +16,7 @@ import {
 } from '../widgets'
 import type { ColumnDef } from '../widgets'
 import { espService } from '../../services'
+import type { EspDurationFilters } from '../../services/espService'
 import { useMockData } from '../../context/MockDataContext'
 import { MOCK_ESP_APPLICATIONS, getMockAppData } from '../../services/espMockData'
 
@@ -31,7 +32,7 @@ interface AppData {
   job_types: NameCount[]
   completion_codes: NameCount[]
   user_jobs: NameCount[]
-  job_list: Array<{ jobname: string; last_run_date: string | null; appl_name?: string }>
+  job_list: Array<{ jobname: string; last_run_date: string | null; job_type?: string | null; appl_name?: string }>
   job_run_trend: Array<{ day: string; hour: number; job_count: number; job_fail_count: number }>
   successor_jobs: Array<{ jobname: string; successor_job: string }>
   predecessor_jobs: Array<{ jobname: string; predecessor_job: string }>
@@ -56,6 +57,39 @@ const PLATFORM_FULL_NAMES: Record<string, string> = {
 }
 
 const BAR_COLORS = ['#1976d2', '#f57c00', '#c62828', '#2e7d32', '#6a1b9a', '#00838f']
+const CUSTOM_RANGE_LIMIT_DAYS = 92
+
+const DURATION_OPTIONS = [
+  { value: '1w', label: '1 Week' },
+  { value: '2w', label: '2 Weeks' },
+  { value: '3w', label: '3 Weeks' },
+  { value: 'custom', label: 'Custom' },
+]
+
+const toInputDate = (date: Date) => date.toISOString().slice(0, 10)
+
+const shiftDateByDays = (days: number) => {
+  const date = new Date()
+  date.setDate(date.getDate() + days)
+  return toInputDate(date)
+}
+
+const validateCustomRange = (startDate: string, endDate: string) => {
+  if (!startDate || !endDate) return 'Start and end dates are required'
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) return 'Use valid dates'
+  const start = new Date(`${startDate}T00:00:00Z`)
+  const end = new Date(`${endDate}T00:00:00Z`)
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 'Use valid dates'
+  if (end < start) return 'End date must be on or after start date'
+  const diffDays = Math.floor((end.getTime() - start.getTime()) / 86_400_000)
+  if (diffDays > CUSTOM_RANGE_LIMIT_DAYS) return 'Custom range cannot exceed 3 months'
+  return null
+}
+
+const formatDurationLabel = (duration: string, startDate: string, endDate: string) => {
+  if (duration === 'custom') return `${startDate} to ${endDate}`
+  return DURATION_OPTIONS.find(option => option.value === duration)?.label ?? '2 Weeks'
+}
 
 // ─── Main Component ───────────────────────────────────────
 export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void }> = ({ onOpenAgent }) => {
@@ -65,7 +99,9 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   const [data, setData] = React.useState<AppData | null>(null)
   const [loading, setLoading] = React.useState(false)
   const [appsLoading, setAppsLoading] = React.useState(true)
-  const [trendDays, setTrendDays] = React.useState<number>(2)
+  const [duration, setDuration] = React.useState<'1w' | '2w' | '3w' | 'custom'>('2w')
+  const [customStartDate, setCustomStartDate] = React.useState<string>(() => shiftDateByDays(-13))
+  const [customEndDate, setCustomEndDate] = React.useState<string>(() => toInputDate(new Date()))
   const [trendData, setTrendData] = React.useState<Array<{ day: string; hour: number; job_count: number; job_fail_count: number }>>([])
   const [trendLoading, setTrendLoading] = React.useState(false)
   const [metadataDetail, setMetadataDetail] = React.useState<AppData['metadata_detail']>([])
@@ -85,6 +121,13 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   const [platformSummary, setPlatformSummary] = React.useState<{ platform: string; total: number; idle: number; special: number; app_count: number }[]>([])
   const [selectedPlatform, setSelectedPlatform] = React.useState<string | null>(null)
   const [platformApplications, setPlatformApplications] = React.useState<string[]>([])
+  const customRangeError = React.useMemo(() => duration === 'custom' ? validateCustomRange(customStartDate, customEndDate) : null, [duration, customStartDate, customEndDate])
+  const durationFilters = React.useMemo<EspDurationFilters>(() => (
+    duration === 'custom'
+      ? { duration, startDate: customStartDate, endDate: customEndDate }
+      : { duration }
+  ), [duration, customStartDate, customEndDate])
+  const durationLabel = React.useMemo(() => formatDurationLabel(duration, customStartDate, customEndDate), [duration, customStartDate, customEndDate])
 
   // Reset job filter + drill-down when application or platform changes
   React.useEffect(() => { setSelectedJobs([]); setDrillJob(null); setWidgetFilter(null) }, [selected, selectedPlatform])
@@ -93,21 +136,23 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   // Auto-selects the first platform so the dashboard is populated on load
   React.useEffect(() => {
     if (useMock) return  // no mock data for platforms
-    espService.getPlatformSummary()
+    if (customRangeError) return
+    espService.getPlatformSummary(durationFilters)
       .then((res: any) => {
         const list = Array.isArray(res) ? res : []
         setPlatformSummary(list)
-        if (list.length > 0) setSelectedPlatform(list[0].platform)
+        if (!selectedPlatform && list.length > 0) setSelectedPlatform(list[0].platform)
       })
       .catch(() => {})
-  }, [useMock])
+  }, [useMock, durationFilters, customRangeError, selectedPlatform])
 
   // When platform selected, load its detail + metadata + run table
   React.useEffect(() => {
     if (!selectedPlatform || useMock) return
+    if (customRangeError) return
     setLoading(true)
     setData(null)
-    espService.getPlatformDetail(selectedPlatform)
+    espService.getPlatformDetail(selectedPlatform, durationFilters)
       .then((res: any) => {
         if (!res || res.error) { setData(null); return }
         setData({
@@ -125,21 +170,22 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       })
       .catch(() => setData(null))
       .finally(() => setLoading(false))
-  }, [selectedPlatform, useMock])
+  }, [selectedPlatform, useMock, durationFilters, customRangeError])
 
   React.useEffect(() => {
     if (!selectedPlatform || useMock) return
+    if (customRangeError) return
     setTableLoading(true)
     setMetadataDetail([])
     setJobRunTable([])
     Promise.all([
       espService.getPlatformMetadata(selectedPlatform).catch(() => []),
-      espService.getPlatformJobRunTable(selectedPlatform).catch(() => []),
+      espService.getPlatformJobRunTable(selectedPlatform, durationFilters).catch(() => []),
     ]).then(([meta, runs]: any) => {
       setMetadataDetail(Array.isArray(meta) ? meta : [])
       setJobRunTable(Array.isArray(runs) ? runs : [])
     }).finally(() => setTableLoading(false))
-  }, [selectedPlatform, useMock])
+  }, [selectedPlatform, useMock, durationFilters, customRangeError])
 
   // Load application names for the selected platform (shown as qualifiers)
   React.useEffect(() => {
@@ -173,6 +219,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   // Load detail whenever selection or mock mode changes (skipped when platform is active)
   React.useEffect(() => {
     if (!selected || selectedPlatform) return
+    if (customRangeError) return
     setLoading(true)
     setData(null)
     if (useMock) {
@@ -180,7 +227,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       setLoading(false)
       return
     }
-    espService.getAppSummary(selected)
+    espService.getAppSummary(selected, durationFilters)
       .then((res: any) => {
         if (!res || res.error) { setData(null); return }
         setData({
@@ -198,11 +245,12 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       })
       .catch(() => setData(null))
       .finally(() => setLoading(false))
-  }, [selected, selectedPlatform, useMock])
+  }, [selected, selectedPlatform, useMock, durationFilters, customRangeError])
 
   // Load metadata detail + job run table whenever selection or mock mode changes
   React.useEffect(() => {
     if (!selected || selectedPlatform) return
+    if (customRangeError) return
     setTableLoading(true)
     setMetadataDetail([])
     setJobRunTable([])
@@ -215,17 +263,18 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
     }
     Promise.all([
       espService.getMetadata(selected).catch(() => []),
-      espService.getJobRunTable(selected).catch(() => []),
+      espService.getJobRunTable(selected, durationFilters).catch(() => []),
     ]).then(([meta, runs]: any) => {
       setMetadataDetail(Array.isArray(meta) ? meta : [])
       setJobRunTable(Array.isArray(runs) ? runs : [])
     }).finally(() => setTableLoading(false))
-  }, [selected, selectedPlatform, useMock])
+  }, [selected, selectedPlatform, useMock, durationFilters, customRangeError])
 
   // Load trend data independently — uses platform or app selection
   React.useEffect(() => {
     const activeKey = selectedPlatform ?? selected
     if (!activeKey) return
+    if (customRangeError) return
     setTrendLoading(true)
     setTrendData([])
     if (useMock) {
@@ -235,23 +284,24 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       return
     }
     const req = selectedPlatform
-      ? espService.getPlatformRunTrend(selectedPlatform, trendDays)
-      : espService.getJobRunTrend(selected, trendDays)
+      ? espService.getPlatformRunTrend(selectedPlatform, durationFilters)
+      : espService.getJobRunTrend(selected, durationFilters)
     req
       .then((res: any) => setTrendData(Array.isArray(res) ? res : []))
       .catch(() => setTrendData([]))
       .finally(() => setTrendLoading(false))
-  }, [selected, selectedPlatform, trendDays, useMock])
+  }, [selected, selectedPlatform, durationFilters, useMock, customRangeError])
 
   // Load per-job trend when drillJob or trendDays changes
   React.useEffect(() => {
     if (!drillJob) { setDrillJobTrend([]); return }
+    if (customRangeError) return
     setDrillJobTrendLoading(true)
-    espService.getJobRunTrendByJob(drillJob, trendDays)
+    espService.getJobRunTrendByJob(drillJob, durationFilters)
       .then((res: any) => setDrillJobTrend(Array.isArray(res) ? res : []))
       .catch(() => setDrillJobTrend([]))
       .finally(() => setDrillJobTrendLoading(false))
-  }, [drillJob, trendDays])
+  }, [drillJob, durationFilters, customRangeError])
 
   // Transform trend data for recharts: keys ${day}_count and ${day}_fail per hour
   const buildTrendChart = (rows: Array<{ day: string; hour: number; job_count: number; job_fail_count: number }>) => {
@@ -294,7 +344,14 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   // Filtered rows — driven by selectedJobs + widgetFilter (empty = all jobs)
   const filteredJobList     = React.useMemo(() => (data?.job_list ?? [])
     .filter(r => !selectedJobs.length || selectedJobs.includes(r.jobname))
-    .filter(r => !widgetFilteredJobnames || widgetFilteredJobnames.has(r.jobname)),        [data, selectedJobs, widgetFilteredJobnames])
+    .filter(r => !widgetFilteredJobnames || widgetFilteredJobnames.has(r.jobname))
+    .sort((left, right) => {
+      if (!left.last_run_date && !right.last_run_date) return left.jobname.localeCompare(right.jobname)
+      if (!left.last_run_date) return 1
+      if (!right.last_run_date) return -1
+      const tsDiff = new Date(right.last_run_date).getTime() - new Date(left.last_run_date).getTime()
+      return tsDiff !== 0 ? tsDiff : left.jobname.localeCompare(right.jobname)
+    }),        [data, selectedJobs, widgetFilteredJobnames])
   const filteredMeta        = React.useMemo(() => (data?.metadata ?? [])
     .filter(r => !selectedJobs.length || selectedJobs.includes(r.jobname))
     .filter(r => !widgetFilteredJobnames || widgetFilteredJobnames.has(r.jobname)),        [data, selectedJobs, widgetFilteredJobnames])
@@ -403,8 +460,15 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
           )
         },
       },
+      {
+        key: 'job_type',
+        header: 'Job Type',
+        width: 90,
+        noWrap: true,
+        render: r => r.job_type ?? '—',
+      },
     ]
-    return selectedPlatform ? [applCol, ...baseCols] : baseCols
+    return selectedPlatform ? [...baseCols, applCol] : baseCols
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPlatform, drillJob])
 
@@ -455,12 +519,12 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
         </Box>
 
         {/* ── Row 2: Filters ── */}
-        <Box sx={{ px: 2, py: 1, display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+        <Box sx={{ px: 2, py: 1, display: 'flex', alignItems: 'flex-start', gap: 1.5, flexWrap: 'wrap' }}>
 
           {/* Platform */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+          <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'stretch', sm: 'center' }, gap: 0.75, flex: '1 1 180px', minWidth: { xs: '100%', sm: 180 } }}>
             <Typography sx={{ fontSize: '11px', color: '#555', fontWeight: 600, whiteSpace: 'nowrap' }}>Platform:</Typography>
-            <FormControl size="small">
+            <FormControl size="small" sx={{ width: '100%', minWidth: 0 }}>
               <Select
                 value={selectedPlatform ?? ''}
                 onChange={(e) => {
@@ -471,7 +535,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                 displayEmpty
                 renderValue={(val) => val ? String(val) : <em style={{ color: '#888' }}>All</em>}
                 sx={{
-                  fontSize: '12px', fontWeight: 600, minWidth: 150, bgcolor: '#fff',
+                  fontSize: '12px', fontWeight: 600, width: '100%', minWidth: 0, bgcolor: '#fff',
                   '& .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d3240' },
                   '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
                   '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
@@ -492,7 +556,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
           </Box>
 
           {/* Application */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+          <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'stretch', sm: 'center' }, gap: 0.75, flex: '1 1 260px', minWidth: { xs: '100%', md: 260 } }}>
             <Typography sx={{ fontSize: '11px', color: '#666', fontWeight: 500, whiteSpace: 'nowrap' }}>Application:</Typography>
             {selectedPlatform ? (
               platformApplications.length === 0 ? (
@@ -508,7 +572,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                     }
                   }}
                   size="small"
-                  sx={{ minWidth: 240 }}
+                  sx={{ width: '100%', minWidth: 0 }}
                   renderInput={(params) => (
                     <TextField
                       {...params}
@@ -534,7 +598,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                 onChange={(_, val) => setSelected(val ?? '')}
                 disableClearable={false}
                 size="small"
-                sx={{ minWidth: 240 }}
+                sx={{ width: '100%', minWidth: 0 }}
                 renderInput={(params) => (
                   <TextField
                     {...params}
@@ -554,7 +618,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
           </Box>
 
           {/* Job selector */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+            <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'stretch', sm: 'center' }, gap: 0.75, flex: '1 1 320px', minWidth: { xs: '100%', lg: 320 } }}>
               <Typography sx={{ fontSize: '11px', color: '#666', fontWeight: 500, whiteSpace: 'nowrap' }}>Job:</Typography>
               <Autocomplete
                 multiple
@@ -564,7 +628,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                 clearOnEscape
                 disabled={loading || !data}
                 size="small"
-                sx={{ minWidth: 220, maxWidth: 340 }}
+                sx={{ width: '100%', minWidth: 0, maxWidth: { xs: '100%', lg: 340 } }}
                 getOptionLabel={(option) => option === '__SELECT_ALL__' ? 'Select All' : option}
                 onChange={(_, val) => {
                   if (val.includes('__SELECT_ALL__')) {
@@ -623,8 +687,66 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
               />
             </Box>
 
+          {/* Duration */}
+          <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'stretch', sm: 'center' }, gap: 0.75, flex: '1 1 180px', minWidth: { xs: '100%', sm: 180, lg: 200 } }}>
+            <Typography sx={{ fontSize: '11px', color: '#666', fontWeight: 500, whiteSpace: 'nowrap' }}>Duration:</Typography>
+            <FormControl size="small" sx={{ width: '100%', minWidth: 0 }}>
+              <Select
+                value={duration}
+                onChange={(e) => {
+                  const next = e.target.value as '1w' | '2w' | '3w' | 'custom'
+                  setDuration(next)
+                  if (next === 'custom' && !customStartDate && !customEndDate) {
+                    setCustomStartDate(shiftDateByDays(-13))
+                    setCustomEndDate(toInputDate(new Date()))
+                  }
+                }}
+                sx={{
+                  fontSize: '12px', fontWeight: 600, width: '100%', minWidth: 0, bgcolor: '#fff',
+                  '& .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d3240' },
+                  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
+                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
+                }}
+              >
+                {DURATION_OPTIONS.map(option => (
+                  <MenuItem key={option.value} value={option.value} sx={{ fontSize: '12px' }}>{option.label}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Box>
+
+          {duration === 'custom' && (
+            <>
+              <TextField
+                type="date"
+                size="small"
+                label="Start"
+                value={customStartDate}
+                onChange={(e) => setCustomStartDate(e.target.value)}
+                InputLabelProps={{ shrink: true }}
+                inputProps={{ max: customEndDate || toInputDate(new Date()) }}
+                error={Boolean(customRangeError)}
+                sx={{ flex: '1 1 180px', minWidth: { xs: '100%', sm: 180 }, '& .MuiInputBase-root': { fontSize: '12px', bgcolor: '#fff' }, '& .MuiInputLabel-root': { fontSize: '11px' } }}
+              />
+              <TextField
+                type="date"
+                size="small"
+                label="End"
+                value={customEndDate}
+                onChange={(e) => setCustomEndDate(e.target.value)}
+                InputLabelProps={{ shrink: true }}
+                inputProps={{ min: customStartDate, max: toInputDate(new Date()) }}
+                error={Boolean(customRangeError)}
+                sx={{ flex: '1 1 180px', minWidth: { xs: '100%', sm: 180 }, '& .MuiInputBase-root': { fontSize: '12px', bgcolor: '#fff' }, '& .MuiInputLabel-root': { fontSize: '11px' } }}
+              />
+              <Typography sx={{ fontSize: '10px', color: customRangeError ? '#c62828' : '#888', whiteSpace: { xs: 'normal', md: 'nowrap' }, flex: '1 1 220px', minWidth: { xs: '100%', md: 220 }, pt: { xs: 0, md: 0.75 } }}>
+                {customRangeError ?? 'Custom range max: 3 months'}
+              </Typography>
+            </>
+          )}
+
           {/* Clear Filters */}
-          {(selectedJobs.length > 0 || (selected && !selectedPlatform) || (selectedPlatform && platformSummary.length > 0 && selectedPlatform !== platformSummary[0].platform)) && (
+          {(selectedJobs.length > 0 || duration !== '2w' || (selected && !selectedPlatform) || (selectedPlatform && platformSummary.length > 0 && selectedPlatform !== platformSummary[0].platform)) && (
             <Button
               size="small"
               onClick={() => {
@@ -632,8 +754,11 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                 setSelectedJobs([])
                 setSelected('')
                 setSelectedPlatform(first)
+                setDuration('2w')
+                setCustomStartDate(shiftDateByDays(-13))
+                setCustomEndDate(toInputDate(new Date()))
               }}
-              sx={{ fontSize: '10px', color: '#d32f2f', textTransform: 'none', height: 26, whiteSpace: 'nowrap', px: 1.25, border: '1px solid #ef9a9a', borderRadius: 1, '&:hover': { bgcolor: '#fce4ec' } }}
+              sx={{ fontSize: '10px', color: '#d32f2f', textTransform: 'none', height: 26, whiteSpace: 'nowrap', px: 1.25, border: '1px solid #ef9a9a', borderRadius: 1, ml: { xs: 0, lg: 'auto' }, '&:hover': { bgcolor: '#fce4ec' } }}
             >
               Clear Filters
             </Button>
@@ -675,9 +800,9 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                     { label: 'Special Jobs',   value: data.spl_job_count,    color: '#c62828', bg: '#fce4ec' },
                     { label: 'Agents',         value: data.agents.length,    color: '#2e7d32', bg: '#e8f5e9' },
                     { label: 'Job Types',      value: data.job_types.length, color: '#6a1b9a', bg: '#f3e5f5' },
-                    { label: 'User Jobs',      value: data.user_jobs.length, color: '#00838f', bg: '#e0f7fa' },
+                    // { label: 'User Jobs',      value: data.user_jobs.length, color: '#00838f', bg: '#e0f7fa' },
                   ]}
-                  columns={6}
+                  columns={5}
                 />
               </Box>
             </WidgetShell>
@@ -713,7 +838,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
               <WidgetShell
                 title={drillJob
                   ? `Job Trend — ${drillJob}`
-                  : `Job Run Trend — Last ${trendDays} Day${trendDays > 1 ? 's' : ''}`}
+                  : `Job Run Trend — ${durationLabel}`}
                 source={drillJob ? 'esp_job_stats_recent · click job again or × to reset' : 'ESP · esp_job_stats_recent'}
                 titleIcon={<TrendingUpIcon sx={{ color: '#1565c0', fontSize: 18 }} />}
                 actions={
@@ -728,6 +853,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                         <ArrowBackIcon sx={{ fontSize: 14 }} />
                       </IconButton>
                     )}
+                    {/* Keep additional ranges commented for later reuse.
                     {[1, 2, 3, 5, 7].map(d => (
                       <Chip
                         key={d}
@@ -742,7 +868,18 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                           '&:hover': { bgcolor: trendDays === d ? '#1565c0' : '#bbdefb' },
                         }}
                       />
-                    ))}
+                    ))} */}
+                    <Chip
+                      label={durationLabel}
+                      size="small"
+                      sx={{
+                        fontSize: '10px', height: 20,
+                        bgcolor: '#1565c0',
+                        color: '#fff',
+                        fontWeight: 700,
+                        cursor: 'default',
+                      }}
+                    />
                   </Box>
                 }
               >
@@ -809,8 +946,8 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
             </Box>
           )}
 
-          {/* ── Row 3: Agent | Job Type (donut) | Completion Code (donut) | User Job ── */}
-          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2 }}>
+          {/* ── Row 3: Agent | Job Type ── */}
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 2 }}>
 
             {/* Agent — clickable bar list */}
             <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #1976d222', borderTop: '3px solid #1976d2', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
@@ -863,7 +1000,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
               </WidgetShell>
             </Paper>
 
-            {/* Completion Code — donut */}
+            {/* Completion Code and User Job widgets are intentionally hidden for now.
             <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #2e7d3222', borderTop: '3px solid #2e7d32', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
               <WidgetShell title="Completion Code" source={`${data.completion_codes.length} codes · click to filter`} titleIcon={<ScheduleIcon sx={{ color: '#2e7d32', fontSize: 18 }} />}>
                 <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
@@ -889,7 +1026,6 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
               </WidgetShell>
             </Paper>
 
-            {/* User Job — clickable bar list */}
             <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #f57c0022', borderTop: '3px solid #f57c00', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
               <WidgetShell title="User Job" source={`${data.user_jobs.length} entries · click to filter`} titleIcon={<PeopleIcon sx={{ color: '#f57c00', fontSize: 18 }} />}>
                 <Box sx={{ p: 1.5 }}>
@@ -913,6 +1049,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                 </Box>
               </WidgetShell>
             </Paper>
+            */}
           </Box>
 
           {/* ── Row 4: Predecessor Jobs | Successor Jobs | Metadata Table ── */}

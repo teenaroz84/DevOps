@@ -66,7 +66,10 @@ const ExpandableErrorText: React.FC<{ value?: string | null }> = ({ value }) => 
     const measureOverflow = () => {
       const element = textRef.current
       if (!element) return
-      setShowToggle(element.scrollHeight > element.clientHeight + 1)
+      setShowToggle(
+        element.scrollWidth > element.clientWidth + 1 ||
+        element.scrollHeight > element.clientHeight + 1
+      )
     }
 
     frameId = window.requestAnimationFrame(measureOverflow)
@@ -90,15 +93,13 @@ const ExpandableErrorText: React.FC<{ value?: string | null }> = ({ value }) => 
           fontSize: '11px',
           color: '#444',
           lineHeight: 1.4,
-          whiteSpace: expanded ? 'pre-wrap' : 'normal',
+          whiteSpace: expanded ? 'pre-wrap' : 'nowrap',
           wordBreak: 'break-word',
           width: '100%',
           maxWidth: '100%',
           ...(expanded ? {} : {
-            display: '-webkit-box',
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: 'vertical',
             overflow: 'hidden',
+            textOverflow: 'ellipsis',
           }),
         }}
       >
