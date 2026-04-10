@@ -61,15 +61,20 @@ const ExpandableErrorText: React.FC<{ value?: string | null }> = ({ value }) => 
       return
     }
 
+    let frameId = 0
+
     const measureOverflow = () => {
       const element = textRef.current
       if (!element) return
       setShowToggle(element.scrollHeight > element.clientHeight + 1)
     }
 
-    measureOverflow()
+    frameId = window.requestAnimationFrame(measureOverflow)
     window.addEventListener('resize', measureOverflow)
-    return () => window.removeEventListener('resize', measureOverflow)
+    return () => {
+      window.cancelAnimationFrame(frameId)
+      window.removeEventListener('resize', measureOverflow)
+    }
   }, [normalizedValue, expanded])
 
   if (!normalizedValue) {
@@ -89,7 +94,7 @@ const ExpandableErrorText: React.FC<{ value?: string | null }> = ({ value }) => 
           wordBreak: 'break-word',
           width: '100%',
           maxWidth: '100%',
-          ...(expanded || !showToggle ? {} : {
+          ...(expanded ? {} : {
             display: '-webkit-box',
             WebkitLineClamp: 2,
             WebkitBoxOrient: 'vertical',
@@ -454,7 +459,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
                   rowKey="task_execution_id"
                   compact
                   accentColor="#e65100"
-                  maxHeight={360}
+                  maxHeight={280}
                 />
               </Box>
             </WidgetShell>
