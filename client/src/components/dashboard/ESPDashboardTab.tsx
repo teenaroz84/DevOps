@@ -857,36 +857,38 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' }, gap: 2 }}>
 
             {/* Agent — clickable bar list */}
-            <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #1976d222', borderTop: '3px solid #1976d2', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', minHeight: ESP_WIDGET_PANEL_HEIGHT }}>
+            <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #1976d222', borderTop: '3px solid #1976d2', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', height: ESP_WIDGET_PANEL_HEIGHT, '& > *': { flex: 1, width: '100%' } }}>
               <WidgetShell title="Agent" source={`${data.agents.length} entries · click to filter`} titleIcon={<PeopleIcon sx={{ color: '#1976d2', fontSize: 18 }} />}>
-                <Box sx={{ px: 1.5, pb: 1.5, pt: 0.5, flex: 1, overflowY: 'auto' }}>
+                <Box sx={{ px: 1.5, pb: 1.5, pt: 0.5, flex: 1, width: '100%', overflowY: 'auto' }}>
                   {data.agents.length === 0 ? (
-                    <Box sx={{ minHeight: ESP_WIDGET_PANEL_HEIGHT - 70, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       <Typography sx={{ fontSize: '11px', color: '#bbb', textAlign: 'center' }}>No data</Typography>
                     </Box>
                   ) : (
-                    <MetricBarList
-                      items={data.agents.map((a, idx) => ({
-                        label: a.name,
-                        value: a.count,
-                        max: Math.max(...data.agents.map(x => x.count), 1),
-                        color: widgetFilter?.field === 'agent' && widgetFilter.value === a.name ? '#1565c0' : BAR_COLORS[idx % BAR_COLORS.length],
-                        onClick: () => setWidgetFilter(prev =>
-                          prev?.field === 'agent' && prev.value === a.name ? null : { field: 'agent', value: a.name }
-                        ),
-                      }))}
-                      barHeight={8}
-                      compact
-                    />
+                    <Box sx={{ width: '100%' }}>
+                      <MetricBarList
+                        items={data.agents.map((a, idx) => ({
+                          label: a.name,
+                          value: a.count,
+                          max: Math.max(...data.agents.map(x => x.count), 1),
+                          color: widgetFilter?.field === 'agent' && widgetFilter.value === a.name ? '#1565c0' : BAR_COLORS[idx % BAR_COLORS.length],
+                          onClick: () => setWidgetFilter(prev =>
+                            prev?.field === 'agent' && prev.value === a.name ? null : { field: 'agent', value: a.name }
+                          ),
+                        }))}
+                        barHeight={8}
+                        compact
+                      />
+                    </Box>
                   )}
                 </Box>
               </WidgetShell>
             </Paper>
 
             {/* Job Type — donut */}
-            <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #6a1b9a22', borderTop: '3px solid #6a1b9a', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', minHeight: ESP_WIDGET_PANEL_HEIGHT }}>
+            <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #6a1b9a22', borderTop: '3px solid #6a1b9a', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', height: ESP_WIDGET_PANEL_HEIGHT, '& > *': { flex: 1, width: '100%' } }}>
               <WidgetShell title="Job Type" source={`${data.job_types.length} types · click to filter`} titleIcon={<StorageIcon sx={{ color: '#6a1b9a', fontSize: 18 }} />}>
-                <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 1, flex: 1, minHeight: ESP_WIDGET_PANEL_HEIGHT - 70 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 1, flex: 1, width: '100%', height: '100%' }}>
                   {data.job_types.length === 0 ? (
                     <Typography sx={{ fontSize: '11px', color: '#bbb' }}>No data</Typography>
                   ) : (
