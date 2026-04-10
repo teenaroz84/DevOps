@@ -16,7 +16,6 @@ import {
 } from '../widgets'
 import type { ColumnDef } from '../widgets'
 import { espService } from '../../services'
-import type { EspDurationFilters } from '../../services/espService'
 import { useMockData } from '../../context/MockDataContext'
 import { MOCK_ESP_APPLICATIONS, getMockAppData } from '../../services/espMockData'
 
@@ -57,39 +56,7 @@ const PLATFORM_FULL_NAMES: Record<string, string> = {
 }
 
 const BAR_COLORS = ['#1976d2', '#f57c00', '#c62828', '#2e7d32', '#6a1b9a', '#00838f']
-const CUSTOM_RANGE_LIMIT_DAYS = 92
-
-const DURATION_OPTIONS = [
-  { value: '1w', label: '1 Week' },
-  { value: '2w', label: '2 Weeks' },
-  { value: '3w', label: '3 Weeks' },
-  { value: 'custom', label: 'Custom' },
-]
-
-const toInputDate = (date: Date) => date.toISOString().slice(0, 10)
-
-const shiftDateByDays = (days: number) => {
-  const date = new Date()
-  date.setDate(date.getDate() + days)
-  return toInputDate(date)
-}
-
-const validateCustomRange = (startDate: string, endDate: string) => {
-  if (!startDate || !endDate) return 'Start and end dates are required'
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) return 'Use valid dates'
-  const start = new Date(`${startDate}T00:00:00Z`)
-  const end = new Date(`${endDate}T00:00:00Z`)
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 'Use valid dates'
-  if (end < start) return 'End date must be on or after start date'
-  const diffDays = Math.floor((end.getTime() - start.getTime()) / 86_400_000)
-  if (diffDays > CUSTOM_RANGE_LIMIT_DAYS) return 'Custom range cannot exceed 3 months'
-  return null
-}
-
-const formatDurationLabel = (duration: string, startDate: string, endDate: string) => {
-  if (duration === 'custom') return `${startDate} to ${endDate}`
-  return DURATION_OPTIONS.find(option => option.value === duration)?.label ?? '2 Weeks'
-}
+const ESP_PLATFORM_RECENT_JOB_LIMIT = 500
 
 // ─── Main Component ───────────────────────────────────────
 export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void }> = ({ onOpenAgent }) => {
@@ -99,9 +66,6 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   const [data, setData] = React.useState<AppData | null>(null)
   const [loading, setLoading] = React.useState(false)
   const [appsLoading, setAppsLoading] = React.useState(true)
-  const [duration, setDuration] = React.useState<'1w' | '2w' | '3w' | 'custom'>('2w')
-  const [customStartDate, setCustomStartDate] = React.useState<string>(() => shiftDateByDays(-13))
-  const [customEndDate, setCustomEndDate] = React.useState<string>(() => toInputDate(new Date()))
   const [trendData, setTrendData] = React.useState<Array<{ day: string; hour: number; job_count: number; job_fail_count: number }>>([])
   const [trendLoading, setTrendLoading] = React.useState(false)
   const [metadataDetail, setMetadataDetail] = React.useState<AppData['metadata_detail']>([])
@@ -121,13 +85,6 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   const [platformSummary, setPlatformSummary] = React.useState<{ platform: string; total: number; idle: number; special: number; app_count: number }[]>([])
   const [selectedPlatform, setSelectedPlatform] = React.useState<string | null>(null)
   const [platformApplications, setPlatformApplications] = React.useState<string[]>([])
-  const customRangeError = React.useMemo(() => duration === 'custom' ? validateCustomRange(customStartDate, customEndDate) : null, [duration, customStartDate, customEndDate])
-  const durationFilters = React.useMemo<EspDurationFilters>(() => (
-    duration === 'custom'
-      ? { duration, startDate: customStartDate, endDate: customEndDate }
-      : { duration }
-  ), [duration, customStartDate, customEndDate])
-  const durationLabel = React.useMemo(() => formatDurationLabel(duration, customStartDate, customEndDate), [duration, customStartDate, customEndDate])
 
   // Reset job filter + drill-down when application or platform changes
   React.useEffect(() => { setSelectedJobs([]); setDrillJob(null); setWidgetFilter(null) }, [selected, selectedPlatform])
@@ -136,23 +93,21 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   // Auto-selects the first platform so the dashboard is populated on load
   React.useEffect(() => {
     if (useMock) return  // no mock data for platforms
-    if (customRangeError) return
-    espService.getPlatformSummary(durationFilters)
+    espService.getPlatformSummary()
       .then((res: any) => {
         const list = Array.isArray(res) ? res : []
         setPlatformSummary(list)
         if (!selectedPlatform && list.length > 0) setSelectedPlatform(list[0].platform)
       })
       .catch(() => {})
-  }, [useMock, durationFilters, customRangeError, selectedPlatform])
+  }, [useMock, selectedPlatform])
 
   // When platform selected, load its detail + metadata + run table
   React.useEffect(() => {
     if (!selectedPlatform || useMock) return
-    if (customRangeError) return
     setLoading(true)
     setData(null)
-    espService.getPlatformDetail(selectedPlatform, durationFilters)
+    espService.getPlatformDetail(selectedPlatform)
       .then((res: any) => {
         if (!res || res.error) { setData(null); return }
         setData({
@@ -170,22 +125,14 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       })
       .catch(() => setData(null))
       .finally(() => setLoading(false))
-  }, [selectedPlatform, useMock, durationFilters, customRangeError])
+  }, [selectedPlatform, useMock])
 
   React.useEffect(() => {
     if (!selectedPlatform || useMock) return
-    if (customRangeError) return
-    setTableLoading(true)
     setMetadataDetail([])
     setJobRunTable([])
-    Promise.all([
-      espService.getPlatformMetadata(selectedPlatform).catch(() => []),
-      espService.getPlatformJobRunTable(selectedPlatform, durationFilters).catch(() => []),
-    ]).then(([meta, runs]: any) => {
-      setMetadataDetail(Array.isArray(meta) ? meta : [])
-      setJobRunTable(Array.isArray(runs) ? runs : [])
-    }).finally(() => setTableLoading(false))
-  }, [selectedPlatform, useMock, durationFilters, customRangeError])
+    setTableLoading(false)
+  }, [selectedPlatform, useMock])
 
   // Load application names for the selected platform (shown as qualifiers)
   React.useEffect(() => {
@@ -219,7 +166,6 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   // Load detail whenever selection or mock mode changes (skipped when platform is active)
   React.useEffect(() => {
     if (!selected || selectedPlatform) return
-    if (customRangeError) return
     setLoading(true)
     setData(null)
     if (useMock) {
@@ -227,7 +173,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       setLoading(false)
       return
     }
-    espService.getAppSummary(selected, durationFilters)
+    espService.getAppSummary(selected)
       .then((res: any) => {
         if (!res || res.error) { setData(null); return }
         setData({
@@ -245,12 +191,11 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       })
       .catch(() => setData(null))
       .finally(() => setLoading(false))
-  }, [selected, selectedPlatform, useMock, durationFilters, customRangeError])
+  }, [selected, selectedPlatform, useMock])
 
   // Load metadata detail + job run table whenever selection or mock mode changes
   React.useEffect(() => {
     if (!selected || selectedPlatform) return
-    if (customRangeError) return
     setTableLoading(true)
     setMetadataDetail([])
     setJobRunTable([])
@@ -263,18 +208,17 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
     }
     Promise.all([
       espService.getMetadata(selected).catch(() => []),
-      espService.getJobRunTable(selected, durationFilters).catch(() => []),
+      espService.getJobRunTable(selected).catch(() => []),
     ]).then(([meta, runs]: any) => {
       setMetadataDetail(Array.isArray(meta) ? meta : [])
       setJobRunTable(Array.isArray(runs) ? runs : [])
     }).finally(() => setTableLoading(false))
-  }, [selected, selectedPlatform, useMock, durationFilters, customRangeError])
+  }, [selected, selectedPlatform, useMock])
 
   // Load trend data independently — uses platform or app selection
   React.useEffect(() => {
     const activeKey = selectedPlatform ?? selected
     if (!activeKey) return
-    if (customRangeError) return
     setTrendLoading(true)
     setTrendData([])
     if (useMock) {
@@ -284,24 +228,23 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       return
     }
     const req = selectedPlatform
-      ? espService.getPlatformRunTrend(selectedPlatform, durationFilters)
-      : espService.getJobRunTrend(selected, durationFilters)
+      ? espService.getPlatformRunTrend(selectedPlatform)
+      : espService.getJobRunTrend(selected)
     req
       .then((res: any) => setTrendData(Array.isArray(res) ? res : []))
       .catch(() => setTrendData([]))
       .finally(() => setTrendLoading(false))
-  }, [selected, selectedPlatform, durationFilters, useMock, customRangeError])
+  }, [selected, selectedPlatform, useMock])
 
   // Load per-job trend when drillJob or trendDays changes
   React.useEffect(() => {
     if (!drillJob) { setDrillJobTrend([]); return }
-    if (customRangeError) return
     setDrillJobTrendLoading(true)
-    espService.getJobRunTrendByJob(drillJob, durationFilters)
+    espService.getJobRunTrendByJob(drillJob)
       .then((res: any) => setDrillJobTrend(Array.isArray(res) ? res : []))
       .catch(() => setDrillJobTrend([]))
       .finally(() => setDrillJobTrendLoading(false))
-  }, [drillJob, durationFilters, customRangeError])
+  }, [drillJob])
 
   // Transform trend data for recharts: keys ${day}_count and ${day}_fail per hour
   const buildTrendChart = (rows: Array<{ day: string; hour: number; job_count: number; job_fail_count: number }>) => {
@@ -687,66 +630,8 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
               />
             </Box>
 
-          {/* Duration */}
-          <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'stretch', sm: 'center' }, gap: 0.75, flex: '1 1 180px', minWidth: { xs: '100%', sm: 180, lg: 200 } }}>
-            <Typography sx={{ fontSize: '11px', color: '#666', fontWeight: 500, whiteSpace: 'nowrap' }}>Duration:</Typography>
-            <FormControl size="small" sx={{ width: '100%', minWidth: 0 }}>
-              <Select
-                value={duration}
-                onChange={(e) => {
-                  const next = e.target.value as '1w' | '2w' | '3w' | 'custom'
-                  setDuration(next)
-                  if (next === 'custom' && !customStartDate && !customEndDate) {
-                    setCustomStartDate(shiftDateByDays(-13))
-                    setCustomEndDate(toInputDate(new Date()))
-                  }
-                }}
-                sx={{
-                  fontSize: '12px', fontWeight: 600, width: '100%', minWidth: 0, bgcolor: '#fff',
-                  '& .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d3240' },
-                  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
-                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
-                }}
-              >
-                {DURATION_OPTIONS.map(option => (
-                  <MenuItem key={option.value} value={option.value} sx={{ fontSize: '12px' }}>{option.label}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </Box>
-
-          {duration === 'custom' && (
-            <>
-              <TextField
-                type="date"
-                size="small"
-                label="Start"
-                value={customStartDate}
-                onChange={(e) => setCustomStartDate(e.target.value)}
-                InputLabelProps={{ shrink: true }}
-                inputProps={{ max: customEndDate || toInputDate(new Date()) }}
-                error={Boolean(customRangeError)}
-                sx={{ flex: '1 1 180px', minWidth: { xs: '100%', sm: 180 }, '& .MuiInputBase-root': { fontSize: '12px', bgcolor: '#fff' }, '& .MuiInputLabel-root': { fontSize: '11px' } }}
-              />
-              <TextField
-                type="date"
-                size="small"
-                label="End"
-                value={customEndDate}
-                onChange={(e) => setCustomEndDate(e.target.value)}
-                InputLabelProps={{ shrink: true }}
-                inputProps={{ min: customStartDate, max: toInputDate(new Date()) }}
-                error={Boolean(customRangeError)}
-                sx={{ flex: '1 1 180px', minWidth: { xs: '100%', sm: 180 }, '& .MuiInputBase-root': { fontSize: '12px', bgcolor: '#fff' }, '& .MuiInputLabel-root': { fontSize: '11px' } }}
-              />
-              <Typography sx={{ fontSize: '10px', color: customRangeError ? '#c62828' : '#888', whiteSpace: { xs: 'normal', md: 'nowrap' }, flex: '1 1 220px', minWidth: { xs: '100%', md: 220 }, pt: { xs: 0, md: 0.75 } }}>
-                {customRangeError ?? 'Custom range max: 3 months'}
-              </Typography>
-            </>
-          )}
-
           {/* Clear Filters */}
-          {(selectedJobs.length > 0 || duration !== '2w' || (selected && !selectedPlatform) || (selectedPlatform && platformSummary.length > 0 && selectedPlatform !== platformSummary[0].platform)) && (
+          {(selectedJobs.length > 0 || (selected && !selectedPlatform) || (selectedPlatform && platformSummary.length > 0 && selectedPlatform !== platformSummary[0].platform)) && (
             <Button
               size="small"
               onClick={() => {
@@ -754,9 +639,6 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                 setSelectedJobs([])
                 setSelected('')
                 setSelectedPlatform(first)
-                setDuration('2w')
-                setCustomStartDate(shiftDateByDays(-13))
-                setCustomEndDate(toInputDate(new Date()))
               }}
               sx={{ fontSize: '10px', color: '#d32f2f', textTransform: 'none', height: 26, whiteSpace: 'nowrap', px: 1.25, border: '1px solid #ef9a9a', borderRadius: 1, ml: { xs: 0, lg: 'auto' }, '&:hover': { bgcolor: '#fce4ec' } }}
             >
@@ -816,7 +698,9 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
             <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
               <WidgetShell
                 title="Job List"
-                source={`${filteredJobList.length}${filteredJobList.length !== data.job_list.length ? ` / ${data.job_list.length}` : ''} jobs · click a job to view its trend`}
+                source={selectedPlatform
+                  ? `${filteredJobList.length}${filteredJobList.length >= ESP_PLATFORM_RECENT_JOB_LIMIT ? '+' : ''} recent jobs · select an application for full detail`
+                  : `${filteredJobList.length}${filteredJobList.length !== data.job_list.length ? ` / ${data.job_list.length}` : ''} jobs · click a job to view its trend`}
                 titleIcon={<WorkIcon sx={{ color: '#1976d2', fontSize: 18 }} />}
               >
                 <Box sx={{ flex: 1, overflowY: 'auto', px: 1.5, pb: 1 }}>
@@ -838,7 +722,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
               <WidgetShell
                 title={drillJob
                   ? `Job Trend — ${drillJob}`
-                  : `Job Run Trend — ${durationLabel}`}
+                  : 'Job Run Trend — 2 Days'}
                 source={drillJob ? 'esp_job_stats_recent · click job again or × to reset' : 'ESP · esp_job_stats_recent'}
                 titleIcon={<TrendingUpIcon sx={{ color: '#1565c0', fontSize: 18 }} />}
                 actions={
@@ -870,7 +754,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                       />
                     ))} */}
                     <Chip
-                      label={durationLabel}
+                      label="2 Days"
                       size="small"
                       sx={{
                         fontSize: '10px', height: 20,
@@ -1124,10 +1008,16 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
           <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #37474f', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
             <WidgetShell
               title="Metadata Table (esp_job_cmnd)"
-              source={`${metadataDetail.length} records · SELECT * FROM esp_job_cmnd`}
+              source={selectedPlatform ? 'Disabled at platform level to avoid loading every job across all mapped applications' : `${metadataDetail.length} records · SELECT * FROM esp_job_cmnd`}
               titleIcon={<TableChartIcon sx={{ color: '#37474f', fontSize: 18 }} />}
             >
-              {tableLoading ? (
+              {selectedPlatform ? (
+                <Box sx={{ px: 2, py: 3 }}>
+                  <Typography sx={{ fontSize: '12px', color: '#666' }}>
+                    Choose a single application to load metadata rows. Platform view keeps this table off to avoid pulling the full esp_job_cmnd detail set for every mapped app.
+                  </Typography>
+                </Box>
+              ) : tableLoading ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress size={22} sx={{ color: '#37474f' }} /></Box>
               ) : (
                 <Box sx={{ px: 1.5, pb: 1 }}>
@@ -1149,10 +1039,16 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
           <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #1565c0', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
             <WidgetShell
               title="Job Run Table (esp_job_cmnd ⋈ esp_job_stats_recent)"
-              source={`${jobRunTable.length} records · JOIN on jobname = job_longname`}
+              source={selectedPlatform ? 'Disabled at platform level to avoid loading a multi-application run-history join' : `${jobRunTable.length} records · JOIN on jobname = job_longname`}
               titleIcon={<ScheduleIcon sx={{ color: '#1565c0', fontSize: 18 }} />}
             >
-              {tableLoading ? (
+              {selectedPlatform ? (
+                <Box sx={{ px: 2, py: 3 }}>
+                  <Typography sx={{ fontSize: '12px', color: '#666' }}>
+                    Choose a single application to inspect run history. Platform view now keeps the joined run table off because that query can become too large when it spans every mapped application.
+                  </Typography>
+                </Box>
+              ) : tableLoading ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress size={22} sx={{ color: '#1565c0' }} /></Box>
               ) : (
                 <Box sx={{ px: 1.5, pb: 1 }}>

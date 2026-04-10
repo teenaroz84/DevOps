@@ -474,7 +474,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
               source="edoops.talend_logs_dashboard · fatal/error/warn/info count > 0 · latest 200"
             >
               <Box sx={{ px: 1.5, pt: 1, pb: 0, display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
-                {['All', 'FATAL', 'ERROR', 'WARN', 'INFO'].map(l => (
+                {['All', 'FATAL', 'ERROR', 'WARN'].map(l => (
                   <Chip
                     key={l}
                     label={l}
