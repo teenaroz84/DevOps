@@ -67,27 +67,28 @@ router.get('/platform-summary', async (_req: Request, res: Response) => {
     const runPlatformQuery = async (plt: any) => {
       try {
         const r = await pool.query(`
+          WITH job_max AS (
+            SELECT jobname, appl_name, MAX(last_run_date) AS last_run_date
+            FROM edoops.esp_job_cmnd_plt
+            WHERE plt_name IN (SELECT keys FROM edoops.esp_plt_mapping WHERE plt_name = $1)
+            GROUP BY jobname, appl_name
+          )
           SELECT
-            COUNT(DISTINCT c.jobname)                                                        AS total,
-            COUNT(DISTINCT CASE
-              WHEN c.last_run_date IS NOT NULL AND c.last_run_date::timestamp < NOW() - INTERVAL '2 days'
-              THEN c.jobname END)                                                            AS idle,
-            COUNT(DISTINCT CASE
-              WHEN c.jobname LIKE '%JSDELAY%' OR c.jobname LIKE '%RETRIG%'
-              THEN c.jobname END)                                                            AS special,
-            COUNT(DISTINCT c.appl_name)                                                     AS app_count
-          FROM edoops.esp_plt_mapping m
-          LEFT JOIN edoops.esp_job_cmnd_plt c ON c.plt_name = m.keys
-          WHERE m.plt_name = $1
+            COUNT(*)                                                                         AS total,
+            COUNT(CASE WHEN last_run_date IS NOT NULL
+                         AND last_run_date::timestamp < NOW() - INTERVAL '2 days'
+                       THEN 1 END)                                                           AS idle,
+            COUNT(CASE WHEN jobname LIKE '%JSDELAY%' OR jobname LIKE '%RETRIG%'
+                       THEN 1 END)                                                           AS special
+          FROM job_max
         `, [plt.plt_name]);
         const row = r.rows[0];
         res.write(JSON.stringify({
           platform:      plt.platform_id,
           platform_name: plt.plt_name,
-          total:         parseInt(row?.total     || '0', 10),
-          idle:          parseInt(row?.idle      || '0', 10),
-          special:       parseInt(row?.special   || '0', 10),
-          app_count:     parseInt(row?.app_count || '0', 10),
+          total:         parseInt(row?.total   || '0', 10),
+          idle:          parseInt(row?.idle    || '0', 10),
+          special:       parseInt(row?.special || '0', 10),
         }) + '\n');
       } catch (e: any) {
         console.warn(`[ESP] platform-summary skipped ${plt.plt_name}: ${e.message}`);
@@ -155,7 +156,14 @@ router.get('/platform-detail/:platformId', async (req: Request, res: Response) =
         `SELECT COUNT(*) AS cnt FROM (SELECT DISTINCT jobname, appl_name FROM edoops.esp_job_cmnd_plt WHERE plt_name IN ${pltKeysSubquery}) AS sub`, [pltName])
         .then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
       safe(() => pool.query(
-        `SELECT COUNT(*) AS cnt FROM (SELECT DISTINCT jobname, appl_name FROM edoops.esp_job_cmnd_plt WHERE plt_name IN ${pltKeysSubquery} AND last_run_date IS NOT NULL AND last_run_date::timestamp < NOW() - INTERVAL '2 days') AS sub`, [pltName])
+        `SELECT COUNT(*) AS cnt FROM (
+           SELECT jobname, appl_name
+           FROM edoops.esp_job_cmnd_plt
+           WHERE plt_name IN ${pltKeysSubquery}
+           GROUP BY jobname, appl_name
+           HAVING MAX(last_run_date) IS NOT NULL
+              AND MAX(last_run_date)::timestamp < NOW() - INTERVAL '2 days'
+         ) AS sub`, [pltName])
         .then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
       safe(() => pool.query(
         `SELECT COUNT(DISTINCT jobname) AS cnt FROM edoops.esp_job_cmnd_plt WHERE plt_name IN ${pltKeysSubquery} AND (jobname LIKE '%JSDELAY%' OR jobname LIKE '%RETRIG%')`, [pltName])

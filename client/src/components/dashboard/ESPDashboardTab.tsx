@@ -17,7 +17,7 @@ import {
 import type { ColumnDef } from '../widgets'
 import { espService } from '../../services'
 import { useMockData } from '../../context/MockDataContext'
-import { MOCK_ESP_APPLICATIONS, MOCK_ESP_PLATFORM_SUMMARY, getMockAppData } from '../../services/espMockData'
+import { MOCK_ESP_PLATFORM_SUMMARY, getMockAppData } from '../../services/espMockData'
 
 // ─── Types ────────────────────────────────────────────────
 interface NameCount { name: string; count: number }
@@ -69,12 +69,9 @@ const getEspRunStatus = (row: { run_status?: string | null; last_run_date?: stri
 export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void }> = ({ onOpenAgent }) => {
   const { useMock } = useMockData()
   const didAutoSelectPlatform = React.useRef(false)
-  const [applications, setApplications] = React.useState<string[]>([])
-  const [applicationPlatformMap, setApplicationPlatformMap] = React.useState<Record<string, string>>({})
   const [selected, setSelected] = React.useState<string>('')
   const [data, setData] = React.useState<AppData | null>(null)
   const [loading, setLoading] = React.useState(false)
-  const [appsLoading, setAppsLoading] = React.useState(true)
   const [trendData, setTrendData] = React.useState<Array<{ day: string; hour: number; job_count: number; job_fail_count: number }>>([])
   const [trendLoading, setTrendLoading] = React.useState(false)
   const [metadataDetail, setMetadataDetail] = React.useState<AppData['metadata_detail']>([])
@@ -93,11 +90,11 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
 
   // ── Platform state ───────────────────────────────────────
   // platform_id is the `keys` column from edoops.esp_plt_mapping; platform_name is plt_name
-  const [platformSummary, setPlatformSummary] = React.useState<{ platform: string; platform_name?: string; total: number; idle: number; special: number; app_count: number }[]>([])
+  const [platformSummary, setPlatformSummary] = React.useState<{ platform: string; platform_name?: string; total: number; idle: number; special: number }[]>([])
   const [platformLoading, setPlatformLoading] = React.useState(true)
   const [selectedPlatform, setSelectedPlatform] = React.useState<string | null>(null)
   const [platformApplications, setPlatformApplications] = React.useState<string[]>([])
-  const selectedApplibPlatform = selected ? (applicationPlatformMap[selected] ?? null) : null
+  const selectedApplibPlatform = selectedPlatform
 
   const [days, setDays] = React.useState(2)
 
@@ -186,42 +183,9 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       .catch(() => setPlatformApplications([]))
   }, [selectedPlatform, useMock])
 
-  // Load application list on mount or when mock mode changes
-  React.useEffect(() => {
-    setAppsLoading(true)
-    setApplications([])
-    setApplicationPlatformMap({})
-    if (useMock) {
-      const apps = MOCK_ESP_APPLICATIONS.map(a => a.appl_name)
-      const nextPlatformMap = Object.fromEntries(
-        MOCK_ESP_APPLICATIONS
-          .filter((app) => app.platform_id)
-          .map((app) => [app.appl_name, app.platform_id as string]),
-      )
-      setApplications(apps)
-      setApplicationPlatformMap(nextPlatformMap)
-      // don't pre-select an applib — platform drives the initial view
-      setAppsLoading(false)
-      return
-    }
-    espService.getApplications()
-      .then((res: any) => {
-        const list = Array.isArray(res.applications) ? res.applications : []
-        const apps: string[] = list.map((a: any) => a.appl_name)
-        // Map appl_name → platform_id so the Platform dropdown reflects
-        // the owning platform when an applib is selected without a platform choice
-        const nextPlatformMap = Object.fromEntries(
-          list
-            .filter((app: any) => app?.appl_name && app?.platform_id)
-            .map((app: any) => [app.appl_name, app.platform_id]),
-        )
-        setApplications(apps)
-        setApplicationPlatformMap(nextPlatformMap)
-        // do NOT auto-select apps[0] — platform selection drives default load
-      })
-      .catch(() => {})
-      .finally(() => setAppsLoading(false))
-  }, [useMock])
+  // Application list is no longer eagerly loaded — applibs are fetched per-platform
+  // via getPlatformApplications when a platform is selected, avoiding a heavy
+  // full-table scan on mount that froze the UI.
 
   // Load detail whenever selection or mock mode changes (skipped when platform is active)
   React.useEffect(() => {
@@ -602,9 +566,9 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                   if (!val) setData(null)
                 }}
                 displayEmpty
-                disabled={platformLoading || appsLoading}
+                disabled={platformLoading}
                 renderValue={(val) => {
-                  if (platformLoading || appsLoading) {
+                  if (platformLoading) {
                     return (
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <CircularProgress size={11} sx={{ color: '#2e7d32' }} />
@@ -626,7 +590,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                   <MenuItem key={p.platform} value={p.platform} sx={{ fontSize: '12px', p: 0 }}>
                     <Tooltip title={p.platform_name ?? p.platform} placement="right" arrow>
                       <Box sx={{ width: '100%', px: 2, py: 0.75, display: 'flex', alignItems: 'center' }}>
-                        {p.platform_name ?? p.platform}&ensp;<span style={{ fontSize: '10px', color: '#999' }}>({p.app_count} apps)</span>
+                        {p.platform_name ?? p.platform}
                       </Box>
                     </Tooltip>
                   </MenuItem>
@@ -638,51 +602,36 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
           {/* Applib */}
           <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'stretch', sm: 'center' }, gap: 0.75, flex: '1 1 260px', minWidth: { xs: '100%', md: 260 } }}>
             <Typography sx={{ fontSize: '11px', color: '#666', fontWeight: 500, whiteSpace: 'nowrap' }}>Applib:</Typography>
-            {selectedPlatform ? (
-              platformApplications.length === 0 ? (
-                <CircularProgress size={12} sx={{ color: '#2e7d32' }} />
-              ) : (
-                <Autocomplete
-                  options={platformApplications}
-                  value={selected || null}
-                  onChange={(_, val) => {
-                    if (val) {
-                      setSelected(val)
-                      setSelectedPlatform(null)
-                    }
-                  }}
-                  size="small"
-                  sx={{ width: '100%', minWidth: 0 }}
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      placeholder={`${platformApplications.length} applib(s)`}
-                      sx={{
-                        '& .MuiOutlinedInput-root': {
-                          fontSize: '12px', fontWeight: 600, borderRadius: 1, bgcolor: '#fff',
-                          '& .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d3240' },
-                          '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
-                          '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
-                        },
-                      }}
-                    />
-                  )}
-                />
-              )
-            ) : appsLoading ? (
-              <CircularProgress size={14} sx={{ color: '#2e7d32' }} />
+            {!selectedPlatform ? (
+              <TextField
+                disabled
+                size="small"
+                placeholder="Select a platform first"
+                sx={{
+                  width: '100%', minWidth: 0,
+                  '& .MuiOutlinedInput-root': {
+                    fontSize: '12px', borderRadius: 1, bgcolor: '#f5f5f5',
+                  },
+                }}
+              />
+            ) : platformApplications.length === 0 ? (
+              <CircularProgress size={12} sx={{ color: '#2e7d32' }} />
             ) : (
               <Autocomplete
-                options={applications}
-                value={selected}
-                onChange={(_, val) => setSelected(val ?? '')}
-                disableClearable={false}
+                options={platformApplications}
+                value={selected || null}
+                onChange={(_, val) => {
+                  if (val) {
+                    setSelected(val)
+                    setSelectedPlatform(null)
+                  }
+                }}
                 size="small"
                 sx={{ width: '100%', minWidth: 0 }}
                 renderInput={(params) => (
                   <TextField
                     {...params}
-                    placeholder="Search applib…"
+                    placeholder={`${platformApplications.length} applib(s)`}
                     sx={{
                       '& .MuiOutlinedInput-root': {
                         fontSize: '12px', fontWeight: 600, borderRadius: 1, bgcolor: '#fff',
