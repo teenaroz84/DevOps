@@ -274,6 +274,7 @@ const MOCK_APPS: AppData[] = [
 
 export const MOCK_ESP_APPLICATIONS = MOCK_APPS.map(a => ({
   appl_name: a.appl_name,
+  platform_id: a.platform_id ?? null,
   platform_name: a.platform_name ?? null,
 }))
 
@@ -285,10 +286,12 @@ export const MOCK_ESP_PLATFORMS = Array.from(
   ).values(),
 )
 
+// platform-summary response shape — `platform` is now platform_id (keys column),
+// `platform_name` is the human-readable name shown on hover
 export const MOCK_ESP_PLATFORM_SUMMARY = MOCK_ESP_PLATFORMS.map((platform) => {
   const apps = MOCK_APPS.filter((app) => app.platform_id === platform.platform_id)
   return {
-    platform_id: platform.platform_id,
+    platform: platform.platform_id,
     platform_name: platform.platform_name,
     total: apps.reduce((sum, app) => sum + app.job_count, 0),
     idle: apps.reduce((sum, app) => sum + app.idle_job_count, 0),

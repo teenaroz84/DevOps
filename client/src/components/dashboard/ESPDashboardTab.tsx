@@ -17,7 +17,7 @@ import {
 import type { ColumnDef } from '../widgets'
 import { espService } from '../../services'
 import { useMockData } from '../../context/MockDataContext'
-import { MOCK_ESP_APPLICATIONS, getMockAppData } from '../../services/espMockData'
+import { MOCK_ESP_APPLICATIONS, MOCK_ESP_PLATFORM_SUMMARY, getMockAppData } from '../../services/espMockData'
 
 // ─── Types ────────────────────────────────────────────────
 interface NameCount { name: string; count: number }
@@ -43,17 +43,6 @@ interface AppData {
 const TREND_RUN_COLORS  = ['#1565c0', '#2e7d32', '#6a1b9a', '#00838f']
 const TREND_FAIL_COLORS = ['#e53935', '#f57c00', '#d81b60', '#ff6f00']
 
-// Full display names shown on hover of platform dropdown items
-const PLATFORM_FULL_NAMES: Record<string, string> = {
-  'PowerCenter':       'Informatica PowerCenter (SPO)',
-  'Abinitio':          'Ab Initio — Data Processing Platform',
-  'EDL':               'Enterprise Data Lake (EDL)',
-  'IICS/SF':           'Informatica Intelligent Cloud Services / Salesforce',
-  'Talend':            'Talend Data Integration Platform',
-  'PPCM':              'Privacy, Preference & Consent Management (PPCM)',
-  'PDA':               'Personal Data Request - Personal Data Amalgamation Services (PDA)',
-  'Permissible Call':  'Permissible Call Utility',
-}
 
 const BAR_COLORS = ['#1976d2', '#f57c00', '#c62828', '#2e7d32', '#6a1b9a', '#00838f']
 const ESP_PLATFORM_RECENT_JOB_LIMIT = 500
@@ -103,7 +92,8 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   const [widgetFilter, setWidgetFilter] = React.useState<{ field: 'agent' | 'job_type' | 'user_job'; value: string } | null>(null)
 
   // ── Platform state ───────────────────────────────────────
-  const [platformSummary, setPlatformSummary] = React.useState<{ platform: string; total: number; idle: number; special: number; app_count: number }[]>([])
+  // platform_id is the `keys` column from edoops.esp_plt_mapping; platform_name is plt_name
+  const [platformSummary, setPlatformSummary] = React.useState<{ platform: string; platform_name?: string; total: number; idle: number; special: number; app_count: number }[]>([])
   const [selectedPlatform, setSelectedPlatform] = React.useState<string | null>(null)
   const [platformApplications, setPlatformApplications] = React.useState<string[]>([])
   const selectedApplibPlatform = selected ? (applicationPlatformMap[selected] ?? null) : null
@@ -114,7 +104,14 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   // Load platform summary once on mount (and when mock changes).
   // Only auto-select the first platform on initial load so applib picks are not overridden.
   React.useEffect(() => {
-    if (useMock) return  // no mock data for platforms
+    if (useMock) {
+      setPlatformSummary(MOCK_ESP_PLATFORM_SUMMARY)
+      if (!didAutoSelectPlatform.current && MOCK_ESP_PLATFORM_SUMMARY.length > 0) {
+        didAutoSelectPlatform.current = true
+        setSelectedPlatform(MOCK_ESP_PLATFORM_SUMMARY[0].platform)
+      }
+      return
+    }
     espService.getPlatformSummary()
       .then((res: any) => {
         const list = Array.isArray(res) ? res : []
@@ -176,12 +173,12 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       const apps = MOCK_ESP_APPLICATIONS.map(a => a.appl_name)
       const nextPlatformMap = Object.fromEntries(
         MOCK_ESP_APPLICATIONS
-          .filter((app) => app.platform_name)
-          .map((app) => [app.appl_name, app.platform_name as string]),
+          .filter((app) => app.platform_id)
+          .map((app) => [app.appl_name, app.platform_id as string]),
       )
       setApplications(apps)
       setApplicationPlatformMap(nextPlatformMap)
-      setSelected(apps[0] ?? '')
+      // don't pre-select an applib — platform drives the initial view
       setAppsLoading(false)
       return
     }
@@ -189,10 +186,12 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       .then((res: any) => {
         const list = Array.isArray(res.applications) ? res.applications : []
         const apps: string[] = list.map((a: any) => a.appl_name)
+        // Map appl_name → platform_id (keys column) so the Platform dropdown
+        // can reflect the owning platform when an applib is selected
         const nextPlatformMap = Object.fromEntries(
           list
-            .filter((app: any) => app?.appl_name && app?.platform_name)
-            .map((app: any) => [app.appl_name, app.platform_name]),
+            .filter((app: any) => app?.appl_name && app?.platform_id)
+            .map((app: any) => [app.appl_name, app.platform_id]),
         )
         setApplications(apps)
         setApplicationPlatformMap(nextPlatformMap)
@@ -573,9 +572,9 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                 <MenuItem value="" sx={{ fontSize: '12px', color: '#888' }}><em>All</em></MenuItem>
                 {platformSummary.map(p => (
                   <MenuItem key={p.platform} value={p.platform} sx={{ fontSize: '12px', p: 0 }}>
-                    <Tooltip title={PLATFORM_FULL_NAMES[p.platform] ?? p.platform} placement="right" arrow>
+                    <Tooltip title={p.platform_name ?? p.platform} placement="right" arrow>
                       <Box sx={{ width: '100%', px: 2, py: 0.75, display: 'flex', alignItems: 'center' }}>
-                        {p.platform}&ensp;<span style={{ fontSize: '10px', color: '#999' }}>({p.app_count} apps)</span>
+                        {p.platform_name ?? p.platform}&ensp;<span style={{ fontSize: '10px', color: '#999' }}>({p.app_count} apps)</span>
                       </Box>
                     </Tooltip>
                   </MenuItem>
