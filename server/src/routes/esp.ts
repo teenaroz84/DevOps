@@ -67,7 +67,7 @@ router.get('/platform-summary', async (_req: Request, res: Response) => {
           SELECT
             COUNT(DISTINCT c.jobname)                                                        AS total,
             COUNT(DISTINCT CASE
-              WHEN c.last_run_date IS NULL OR c.last_run_date::timestamp < NOW() - INTERVAL '2 days'
+              WHEN c.last_run_date IS NOT NULL AND c.last_run_date::timestamp < NOW() - INTERVAL '2 days'
               THEN c.jobname END)                                                            AS idle,
             COUNT(DISTINCT CASE
               WHEN c.jobname LIKE '%JSDELAY%' OR c.jobname LIKE '%RETRIG%'
@@ -143,10 +143,10 @@ router.get('/platform-detail/:platformId', async (req: Request, res: Response) =
 
     const [jobCount, idleCount, splCount, agents, jobTypes, cmplCodes, accounts, jobList, successors, predecessors] = await Promise.all([
       safe(() => pool.query(
-        `SELECT COUNT(DISTINCT jobname) AS cnt FROM edoops.esp_job_cmnd_plt WHERE plt_name IN ${pltKeysSubquery}`, [pltName])
+        `SELECT COUNT(*) AS cnt FROM (SELECT DISTINCT jobname, appl_name FROM edoops.esp_job_cmnd_plt WHERE plt_name IN ${pltKeysSubquery}) AS sub`, [pltName])
         .then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
       safe(() => pool.query(
-        `SELECT COUNT(DISTINCT jobname) AS cnt FROM edoops.esp_job_cmnd_plt WHERE plt_name IN ${pltKeysSubquery} AND (last_run_date IS NULL OR last_run_date::timestamp < NOW() - INTERVAL '2 days')`, [pltName])
+        `SELECT COUNT(*) AS cnt FROM (SELECT DISTINCT jobname, appl_name FROM edoops.esp_job_cmnd_plt WHERE plt_name IN ${pltKeysSubquery} AND last_run_date IS NOT NULL AND last_run_date::timestamp < NOW() - INTERVAL '2 days') AS sub`, [pltName])
         .then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
       safe(() => pool.query(
         `SELECT COUNT(DISTINCT jobname) AS cnt FROM edoops.esp_job_cmnd_plt WHERE plt_name IN ${pltKeysSubquery} AND (jobname LIKE '%JSDELAY%' OR jobname LIKE '%RETRIG%')`, [pltName])
@@ -165,11 +165,11 @@ router.get('/platform-detail/:platformId', async (req: Request, res: Response) =
         .then(r => r.rows.map((x: any) => ({ name: x.name, count: parseInt(x.count) }))), []),
       safe(() => pool.query(`
         WITH filtered_jobs AS (
-          SELECT c.jobname, c.appl_name, c.jobtype AS job_type,
+          SELECT c.jobname, c.appl_name, MAX(c.jobtype) AS job_type,
                  MAX(c.last_run_date) AS last_run_date
           FROM edoops.esp_job_cmnd_plt c
           WHERE c.plt_name IN ${pltKeysSubquery}
-          GROUP BY c.jobname, c.appl_name, c.jobtype
+          GROUP BY c.jobname, c.appl_name
         ),
         latest_status AS (
           SELECT DISTINCT ON (s.appl_name, s.job_longname)

@@ -121,8 +121,14 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
     const ctrl = espService.streamPlatformSummary(
       (row) => {
         setPlatformSummary(prev => {
-          const updated = [...prev, row].sort((a, b) =>
-            (a.platform_name ?? '').localeCompare(b.platform_name ?? ''))
+          const isTalend = (p: { platform_name?: string }) =>
+            (p.platform_name ?? '').toLowerCase().includes('talend')
+          const updated = [...prev, row].sort((a, b) => {
+            const at = isTalend(a), bt = isTalend(b)
+            if (at && !bt) return -1
+            if (!at && bt) return 1
+            return (a.platform_name ?? '').localeCompare(b.platform_name ?? '')
+          })
           if (!didAutoSelectPlatform.current && !selectedPlatform && updated.length > 0) {
             didAutoSelectPlatform.current = true
             setSelectedPlatform(updated[0].platform)
@@ -1183,6 +1189,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                     rowKey="jobname"
                     compact
                     maxHeight={280}
+                    pageSize={500}
                     accentColor="#37474f"
                     emptyMessage="No metadata records"
                   />
@@ -1214,6 +1221,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                     rowKey={(r) => `${r.job_longname}-${r.start_date}-${r.start_time}`}
                     compact
                     maxHeight={320}
+                    pageSize={500}
                     accentColor="#1565c0"
                     emptyMessage="No run records found"
                   />

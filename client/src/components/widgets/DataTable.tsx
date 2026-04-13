@@ -27,6 +27,7 @@ import {
   TableCell,
   Typography,
   InputBase,
+  TablePagination,
 } from '@mui/material'
 import TableRowsIcon from '@mui/icons-material/TableRows'
 import SearchIcon from '@mui/icons-material/Search'
@@ -72,6 +73,11 @@ interface DataTableProps<T = any> {
   accentColor?: string
   /** Optional minimum width for the inner table to enable horizontal scrolling */
   tableMinWidth?: number | string
+  /**
+   * When set, enables pagination once rows exceed this threshold.
+   * E.g. pageSize={500} shows pages of 500 rows when total > 500.
+   */
+  pageSize?: number
 }
 
 function getKey<T>(row: T, rowKey: DataTableProps<T>['rowKey'], idx: number): string {
@@ -92,6 +98,7 @@ export function DataTable<T = any>({
   rowTooltip,
   accentColor = '#1976d2',
   tableMinWidth,
+  pageSize,
 }: DataTableProps<T>) {
   const cellPy = compact ? 0.6 : 1
   const resolvedHeaderBg = headerBg ?? '#f0f4f8'
@@ -99,6 +106,9 @@ export function DataTable<T = any>({
   // ── Sort ─────────────────────────────────────────────────
   const [sortKey, setSortKey] = useState<string | null>(null)
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+
+  // ── Pagination ────────────────────────────────────────────
+  const [page, setPage] = useState(0)
 
   // ── Global filter ─────────────────────────────────────────
   const [filterText, setFilterText] = useState('')
@@ -166,6 +176,12 @@ export function DataTable<T = any>({
         return sortDir === 'asc' ? cmp : -cmp
       })
     : filtered
+
+  // ── Pagination ────────────────────────────────────────────
+  const usePagination = pageSize != null && displayRows.length > pageSize
+  const pagedRows = usePagination
+    ? displayRows.slice(page * pageSize!, (page + 1) * pageSize!)
+    : displayRows
 
   const resolvedTableMinWidth = typeof tableMinWidth === 'number'
     ? `${tableMinWidth}px`
@@ -344,7 +360,7 @@ export function DataTable<T = any>({
                 </TableCell>
               </TableRow>
             ) : (
-              displayRows.map((row, idx) => (
+              pagedRows.map((row, idx) => (
                 <TableRow
                   key={getKey(row, rowKey, idx)}
                   onClick={() => onRowClick?.(row)}
@@ -392,6 +408,24 @@ export function DataTable<T = any>({
           </TableBody>
         </Table>
       </Box>
+
+      {/* ── Pagination footer ── */}
+      {usePagination && (
+        <TablePagination
+          component="div"
+          count={displayRows.length}
+          page={page}
+          onPageChange={(_e, p) => setPage(p)}
+          rowsPerPage={pageSize!}
+          rowsPerPageOptions={[pageSize!]}
+          sx={{
+            fontSize: '11px',
+            '& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows': { fontSize: '11px' },
+            '& .MuiTablePagination-toolbar': { minHeight: 36, pl: 1 },
+            borderTop: '1px solid #e8ecf1',
+          }}
+        />
+      )}
     </Box>
   )
 }
