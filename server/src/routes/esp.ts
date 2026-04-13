@@ -153,14 +153,14 @@ router.get('/platform-detail/:platformId', async (req: Request, res: Response) =
 
     const [jobCount, idleCount, splCount, agents, jobTypes, cmplCodes, accounts, jobList, successors, predecessors] = await Promise.all([
       safe(() => pool.query(
-        `SELECT COUNT(*) AS cnt FROM (SELECT DISTINCT jobname, appl_name FROM edoops.esp_job_cmnd_plt WHERE plt_name IN ${pltKeysSubquery}) AS sub`, [pltName])
+        `SELECT COUNT(DISTINCT jobname) AS cnt FROM edoops.esp_job_cmnd_plt WHERE plt_name IN ${pltKeysSubquery}`, [pltName])
         .then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
       safe(() => pool.query(
         `SELECT COUNT(*) AS cnt FROM (
-           SELECT jobname, appl_name
+           SELECT jobname
            FROM edoops.esp_job_cmnd_plt
            WHERE plt_name IN ${pltKeysSubquery}
-           GROUP BY jobname, appl_name
+           GROUP BY jobname
            HAVING MAX(last_run_date) IS NOT NULL
               AND MAX(last_run_date)::timestamp < NOW() - INTERVAL '2 days'
          ) AS sub`, [pltName])
@@ -182,18 +182,21 @@ router.get('/platform-detail/:platformId', async (req: Request, res: Response) =
         .then(r => r.rows.map((x: any) => ({ name: x.name, count: parseInt(x.count) }))), []),
       safe(() => pool.query(`
         WITH filtered_jobs AS (
-          SELECT c.jobname, c.appl_name, MAX(c.jobtype) AS job_type,
-                 MAX(c.last_run_date) AS last_run_date
+          -- One row per unique jobname: pick the entry with the most recent last_run_date.
+          -- This prevents the same job appearing twice with different statuses when it
+          -- exists under multiple appl_name values.
+          SELECT DISTINCT ON (c.jobname)
+            c.jobname, c.appl_name, c.jobtype AS job_type, c.last_run_date
           FROM edoops.esp_job_cmnd_plt c
           WHERE c.plt_name IN ${pltKeysSubquery}
-          GROUP BY c.jobname, c.appl_name
+          ORDER BY c.jobname, c.last_run_date DESC NULLS LAST
         ),
         latest_status AS (
-          SELECT DISTINCT ON (s.appl_name, s.job_longname)
-            s.appl_name, s.job_longname, s.ccfail
+          SELECT DISTINCT ON (s.job_longname)
+            s.job_longname, s.ccfail
           FROM edoops.esp_job_stats_recent_plt s
-          JOIN filtered_jobs f ON f.appl_name = s.appl_name AND f.jobname = s.job_longname
-          ORDER BY s.appl_name, s.job_longname,
+          JOIN filtered_jobs f ON f.jobname = s.job_longname AND f.appl_name = s.appl_name
+          ORDER BY s.job_longname,
                    s.end_date DESC NULLS LAST, s.end_time DESC NULLS LAST,
                    s.start_date DESC NULLS LAST, s.start_time DESC NULLS LAST
         )
@@ -206,7 +209,7 @@ router.get('/platform-detail/:platformId', async (req: Request, res: Response) =
             ELSE 'UNKNOWN'
           END AS run_status
         FROM filtered_jobs f
-        LEFT JOIN latest_status ls ON ls.appl_name = f.appl_name AND ls.job_longname = f.jobname
+        LEFT JOIN latest_status ls ON ls.job_longname = f.jobname
         ORDER BY f.last_run_date DESC NULLS LAST, f.jobname`, [pltName])
         .then(r => r.rows.map((x: any) => ({
           jobname: x.jobname, appl_name: x.appl_name,

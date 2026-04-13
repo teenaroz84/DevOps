@@ -602,7 +602,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
           {/* Applib */}
           <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'stretch', sm: 'center' }, gap: 0.75, flex: '1 1 260px', minWidth: { xs: '100%', md: 260 } }}>
             <Typography sx={{ fontSize: '11px', color: '#666', fontWeight: 500, whiteSpace: 'nowrap' }}>Applib:</Typography>
-            {!selectedPlatform ? (
+            {platformApplications.length === 0 ? (
               <TextField
                 disabled
                 size="small"
@@ -821,6 +821,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                     rowKey="jobname"
                     compact
                     maxHeight={280}
+                    pageSize={200}
                     accentColor="#2e7d32"
                     emptyMessage="No jobs found"
                   />
