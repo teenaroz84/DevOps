@@ -94,6 +94,11 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   const [platformLoading, setPlatformLoading] = React.useState(true)
   const [selectedPlatform, setSelectedPlatform] = React.useState<string | null>(null)
   const [platformApplications, setPlatformApplications] = React.useState<string[]>([])
+  const [applibTotal, setApplibTotal] = React.useState(0)
+  const [applibHasMore, setApplibHasMore] = React.useState(false)
+  const [applibLoading, setApplibLoading] = React.useState(false)
+  const [applibSearch, setApplibSearch] = React.useState('')
+  const applibSearchRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   const selectedApplibPlatform = selectedPlatform
   const [jobListLoading, setJobListLoading] = React.useState(false)
   const [jobListLimited, setJobListLimited] = React.useState<{ showing: number; total: number } | null>(null)
@@ -193,12 +198,32 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
     setTableLoading(false)
   }, [selectedPlatform, selected, useMock])
 
-  // Load application names for the selected platform (shown as qualifiers)
+  // Load first 200 application names when platform changes; supports search-as-you-type
+  const fetchApplibs = React.useCallback((platform: string, search: string, append = false) => {
+    const offset = append ? platformApplications.length : 0
+    setApplibLoading(true)
+    espService.getPlatformApplications(platform, 200, offset, search)
+      .then((res: any) => {
+        const items: string[] = Array.isArray(res?.items) ? res.items : []
+        setPlatformApplications(prev => append ? [...prev, ...items] : items)
+        setApplibTotal(res?.total ?? 0)
+        setApplibHasMore(!!res?.hasMore)
+      })
+      .catch(() => {})
+      .finally(() => setApplibLoading(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPlatform, platformApplications.length])
+
   React.useEffect(() => {
-    if (!selectedPlatform || useMock) { setPlatformApplications([]); return }
-    espService.getPlatformApplications(selectedPlatform)
-      .then((res: any) => setPlatformApplications(Array.isArray(res) ? res : []))
-      .catch(() => setPlatformApplications([]))
+    if (!selectedPlatform || useMock) {
+      setPlatformApplications([])
+      setApplibTotal(0)
+      setApplibHasMore(false)
+      setApplibSearch('')
+      return
+    }
+    fetchApplibs(selectedPlatform, '')
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPlatform, useMock])
 
   // Append the next page of jobs to the existing job list
@@ -637,7 +662,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
           {/* Applib */}
           <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'stretch', sm: 'center' }, gap: 0.75, flex: '1 1 260px', minWidth: { xs: '100%', md: 260 } }}>
             <Typography sx={{ fontSize: '11px', color: '#666', fontWeight: 500, whiteSpace: 'nowrap' }}>Applib:</Typography>
-            {platformApplications.length === 0 ? (
+            {!selectedPlatform ? (
               <TextField
                 disabled
                 size="small"
@@ -651,22 +676,51 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
               />
             ) : (
               <Autocomplete
-                options={platformApplications}
+                options={applibHasMore ? [...platformApplications, '__LOAD_MORE__'] : platformApplications}
                 value={selected || null}
-                onChange={(_, val) => {
-                  if (val) setSelected(val)
-                  else setSelected('')
+                inputValue={applibSearch}
+                onInputChange={(_, val, reason) => {
+                  if (reason === 'reset') return
+                  setApplibSearch(val)
+                  if (!selectedPlatform) return
+                  if (applibSearchRef.current) clearTimeout(applibSearchRef.current)
+                  applibSearchRef.current = setTimeout(() => {
+                    fetchApplibs(selectedPlatform, val)
+                  }, 300)
                 }}
+                onChange={(_, val) => {
+                  if (val === '__LOAD_MORE__' || !val) { setSelected(''); return }
+                  setSelected(val)
+                  setApplibSearch(val)
+                }}
+                filterOptions={(opts) => opts}
+                loading={applibLoading}
                 size="small"
                 sx={{ width: '100%', minWidth: 0 }}
                 componentsProps={{ paper: { sx: { fontSize: '12px' } } }}
-                renderOption={(props, option) => (
-                  <li {...props} style={{ fontSize: '12px', padding: '4px 12px' }}>{option}</li>
-                )}
+                getOptionLabel={(opt) => opt === '__LOAD_MORE__' ? '' : opt}
+                isOptionEqualToValue={(opt, val) => opt === val}
+                renderOption={(props, option) => {
+                  if (option === '__LOAD_MORE__') {
+                    const { key, ...rest } = props as any
+                    return (
+                      <li key="__LOAD_MORE__" {...rest}
+                        onClick={(e) => { e.stopPropagation(); if (selectedPlatform) fetchApplibs(selectedPlatform, applibSearch, true) }}
+                        style={{ justifyContent: 'center', borderTop: '1px solid #e8ecf1', padding: '6px' }}
+                      >
+                        <Typography sx={{ fontSize: '11px', color: '#1976d2', fontWeight: 700, cursor: 'pointer' }}>
+                          {applibLoading ? 'Loading…' : `Load more (${(applibTotal - platformApplications.length).toLocaleString()} remaining)`}
+                        </Typography>
+                      </li>
+                    )
+                  }
+                  const { key, ...rest } = props as any
+                  return <li key={option} {...rest} style={{ fontSize: '12px', padding: '4px 12px' }}>{option}</li>
+                }}
                 renderInput={(params) => (
                   <TextField
                     {...params}
-                    placeholder={`${platformApplications.length} applib(s)`}
+                    placeholder={applibTotal > 0 ? `${applibTotal.toLocaleString()} applib(s)` : `${platformApplications.length} applib(s)`}
                     sx={{
                       '& .MuiOutlinedInput-root': {
                         fontSize: '12px', fontWeight: 600, borderRadius: 1, bgcolor: '#fff',

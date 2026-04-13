@@ -112,22 +112,49 @@ router.get('/platform-summary', async (_req: Request, res: Response) => {
   }
 });
 
-// GET /api/esp/platform-applications/:platformId
-// Returns distinct appl_name values for a platform (for qualifiers display)
+// GET /api/esp/platform-applications/:platformId?limit=200&offset=0&search=<text>
+// Returns distinct appl_name values for a platform.
+// Supports server-side filtering (search) and pagination (limit/offset).
 router.get('/platform-applications/:platformId', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
     const platformId = decodeURIComponent(req.params.platformId);
-    console.log('[ESP] platform-applications → platformId:', platformId);
+    const rawLimit  = parseInt(String(req.query.limit  ?? '200'), 10);
+    const rawOffset = parseInt(String(req.query.offset ?? '0'),   10);
+    const limit  = isNaN(rawLimit)  || rawLimit  < 1 ? 200 : Math.min(rawLimit, 1000);
+    const offset = isNaN(rawOffset) || rawOffset < 0 ? 0   : rawOffset;
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+    console.log('[ESP] platform-applications → platformId:', platformId, 'limit:', limit, 'offset:', offset, 'search:', search);
     const plt = await getPlatformRow(platformId);
     if (!plt) return res.status(404).json({ error: 'Unknown platform' });
-    const result = await pool.query(
-      `SELECT DISTINCT appl_name FROM edoops.esp_job_cmnd_plt
-       WHERE plt_name IN ${pltKeysSubquery}
-       ORDER BY appl_name`,
-      [plt.platform_name]
-    );
-    res.json(result.rows.map((r: any) => r.appl_name));
+
+    const params: any[] = [plt.platform_name];
+    const searchClause = search ? `AND appl_name ILIKE $2` : '';
+    if (search) params.push(`%${search}%`);
+
+    const [totalResult, rowsResult] = await Promise.all([
+      pool.query(
+        `SELECT COUNT(DISTINCT appl_name) AS cnt FROM edoops.esp_job_cmnd_plt
+         WHERE plt_name IN ${pltKeysSubquery} ${searchClause}`,
+        params
+      ),
+      pool.query(
+        `SELECT DISTINCT appl_name FROM edoops.esp_job_cmnd_plt
+         WHERE plt_name IN ${pltKeysSubquery} ${searchClause}
+         ORDER BY appl_name
+         LIMIT ${limit} OFFSET ${offset}`,
+        params
+      ),
+    ]);
+
+    const total = parseInt(totalResult.rows[0]?.cnt || '0', 10);
+    res.json({
+      items: rowsResult.rows.map((r: any) => r.appl_name),
+      total,
+      hasMore: offset + limit < total,
+      offset,
+      limit,
+    });
   } catch (err: any) {
     res.status(500).json({ error: 'Query failed', details: err.message });
   }

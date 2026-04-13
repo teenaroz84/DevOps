@@ -69,9 +69,12 @@ export const espService = {
   getPlatformJobRunTable: (platform: string, days = 2) =>
     apiClient.get(`/api/esp/platform-job-run-table/${encodeURIComponent(platform)}?days=${days}`),
 
-  /** Returns distinct appl_name values for a platform group (for qualifiers display) */
-  getPlatformApplications: (platform: string) =>
-    apiClient.get(`/api/esp/platform-applications/${encodeURIComponent(platform)}`),
+  /** Returns paginated/filtered appl_name values for a platform group */
+  getPlatformApplications: (platform: string, limit = 200, offset = 0, search = '') => {
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+    if (search) params.set('search', search)
+    return apiClient.get(`/api/esp/platform-applications/${encodeURIComponent(platform)}?${params}`)
+  },
 
   /** Returns { applications: [{appl_name}] } — used to populate the dropdown */
   getApplications: () => apiClient.get('/api/esp/applications'),
