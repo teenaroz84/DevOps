@@ -286,12 +286,11 @@ export const MOCK_ESP_PLATFORMS = Array.from(
   ).values(),
 )
 
-// platform-summary response shape — `platform` is now platform_id (keys column),
-// `platform_name` is the human-readable name shown on hover
+// platform-summary response shape — `platform` is platform_id (canonical keys value); platform_name is plt_name display label
 export const MOCK_ESP_PLATFORM_SUMMARY = MOCK_ESP_PLATFORMS.map((platform) => {
   const apps = MOCK_APPS.filter((app) => app.platform_id === platform.platform_id)
   return {
-    platform: platform.platform_id,
+    platform: platform.platform_id,        // canonical keys value — matches the real API
     platform_name: platform.platform_name,
     total: apps.reduce((sum, app) => sum + app.job_count, 0),
     idle: apps.reduce((sum, app) => sum + app.idle_job_count, 0),

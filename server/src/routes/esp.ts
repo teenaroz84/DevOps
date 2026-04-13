@@ -2,13 +2,14 @@
 /**
  * ESP routes — queries against PostgreSQL edoops ESP tables
  *
- * Platform resolution is now driven by edoops.esp_plt_mapping:
- *   keys     → platform_id (used to JOIN all _plt tables)
- *   plt_name → human-readable platform name (shown in UI)
+ * Platform resolution is driven by edoops.esp_plt_mapping:
+ *   keys     → one pattern/key value per row (multiple rows per platform)
+ *   plt_name → platform display name shared across multiple keys rows
  *
- * All _plt tables carry a `keys` column (platform_id FK) so every
- * platform-scoped query simply adds  WHERE keys = $N  instead of
- * building complex wildcard conditions.
+ * A single canonical keys value is chosen per plt_name with DISTINCT ON to serve
+ * as the stable platform_id used in URLs and state.  All data queries still span
+ * every keys row for the platform via:
+ *     WHERE c.keys IN (SELECT keys FROM edoops.esp_plt_mapping WHERE plt_name = $1)
  */
 import { Router, Request, Response } from 'express';
 import { getPgPool } from '../db/postgres';
@@ -19,62 +20,63 @@ const ESP_RECENT_WINDOW = '2 days';
 const ESP_PLATFORM_JOB_LIST_LIMIT = 1000;
 const ESP_PLATFORM_DEPENDENCY_LIMIT = 1000;
 
-// ─── Helper: fetch a platform row from esp_plt_mapping ────
-// Returns { platform_id, platform_name } or null if not found.
-// platform_id comes from the `keys` column; name from `plt_name`.
+// ─── Helper: look up a platform by its canonical keys value (platform_id) ────
+// Returns { platform_id, platform_name } or null if the keys value is unknown.
 async function getPlatformRow(platformId: string): Promise<{ platform_id: string; platform_name: string } | null> {
   const pool = getPgPool();
   const r = await pool.query(
-    `SELECT keys AS platform_id, plt_name AS platform_name FROM edoops.esp_plt_mapping WHERE keys = $1 LIMIT 1`,
+    `SELECT keys AS platform_id, plt_name AS platform_name
+     FROM edoops.esp_plt_mapping WHERE keys = $1 LIMIT 1`,
     [platformId]
   );
   if (!r.rows.length) return null;
   return { platform_id: r.rows[0].platform_id, platform_name: r.rows[0].platform_name };
 }
 
+// Reusable subquery — receives plt_name as $1, returns all keys for that platform.
+const pltKeysSubquery = `(SELECT keys FROM edoops.esp_plt_mapping WHERE plt_name = $1)`;
+
 // GET /api/esp/platform-summary
-// Returns per-platform totals+idle+special job counts for KPI cards
-// Reads platform list from edoops.esp_plt_mapping
+// DISTINCT ON (plt_name) picks one canonical keys value per platform as platform_id.
+// Counts are aggregated across all keys rows for the same plt_name.
 router.get('/platform-summary', async (_req: Request, res: Response) => {
   try {
     const pool = getPgPool();
-    // Fetch all platforms from the mapping table
-    const platforms = await pool.query(
-      `SELECT keys AS platform_id, plt_name AS platform_name FROM edoops.esp_plt_mapping ORDER BY plt_name`
-    );
-
-    const safe = async <T>(fn: () => Promise<T>, fallback: T): Promise<T> => {
-      try { return await fn(); } catch { return fallback; }
-    };
-
-    const results = await Promise.all(
-      platforms.rows.map(async (p: any) => {
-        const pid = p.platform_id;
-        const [total, idle, special, app_count] = await Promise.all([
-          safe(() => pool.query(
-            `SELECT COUNT(DISTINCT jobname) AS cnt FROM edoops.esp_job_cmnd_plt WHERE keys = $1`, [pid])
-            .then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
-          safe(() => pool.query(
-            `SELECT COUNT(DISTINCT jobname) AS cnt FROM edoops.esp_job_cmnd_plt WHERE keys = $1 AND (last_run_date IS NULL OR last_run_date < NOW() - INTERVAL '2 days')`, [pid])
-            .then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
-          safe(() => pool.query(
-            `SELECT COUNT(DISTINCT jobname) AS cnt FROM edoops.esp_job_cmnd_plt WHERE keys = $1 AND (jobname LIKE '%JSDELAY%' OR jobname LIKE '%RETRIG%')`, [pid])
-            .then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
-          safe(() => pool.query(
-            `SELECT COUNT(DISTINCT appl_name) AS cnt FROM edoops.esp_job_cmnd_plt WHERE keys = $1`, [pid])
-            .then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
-        ]);
-        return {
-          platform: pid,
-          platform_name: p.platform_name,
-          total,
-          idle,
-          special,
-          app_count,
-        };
-      })
-    );
-    res.json(results);
+    const result = await pool.query(`
+      WITH plt_ids AS (
+        SELECT DISTINCT ON (plt_name) keys AS platform_id, plt_name
+        FROM edoops.esp_plt_mapping
+        ORDER BY plt_name, keys
+      ),
+      counts AS (
+        SELECT
+          m.plt_name,
+          COUNT(DISTINCT c.jobname)                                                           AS total,
+          COUNT(DISTINCT CASE
+            WHEN c.last_run_date IS NULL OR c.last_run_date < NOW() - INTERVAL '2 days'
+            THEN c.jobname END)                                                               AS idle,
+          COUNT(DISTINCT CASE
+            WHEN c.jobname LIKE '%JSDELAY%' OR c.jobname LIKE '%RETRIG%'
+            THEN c.jobname END)                                                               AS special,
+          COUNT(DISTINCT c.appl_name)                                                         AS app_count
+        FROM edoops.esp_plt_mapping m
+        LEFT JOIN edoops.esp_job_cmnd_plt c ON c.keys = m.keys
+        GROUP BY m.plt_name
+      )
+      SELECT pi.platform_id, pi.plt_name AS platform_name,
+             cnt.total, cnt.idle, cnt.special, cnt.app_count
+      FROM plt_ids pi
+      JOIN counts cnt ON cnt.plt_name = pi.plt_name
+      ORDER BY pi.plt_name
+    `);
+    res.json(result.rows.map((r: any) => ({
+      platform:      r.platform_id,
+      platform_name: r.platform_name,
+      total:         parseInt(r.total     || '0', 10),
+      idle:          parseInt(r.idle      || '0', 10),
+      special:       parseInt(r.special   || '0', 10),
+      app_count:     parseInt(r.app_count || '0', 10),
+    })));
   } catch (err: any) {
     res.status(500).json({ error: 'Query failed', details: err.message });
   }
@@ -90,8 +92,10 @@ router.get('/platform-applications/:platformId', async (req: Request, res: Respo
     const plt = await getPlatformRow(platformId);
     if (!plt) return res.status(404).json({ error: 'Unknown platform' });
     const result = await pool.query(
-      `SELECT DISTINCT appl_name FROM edoops.esp_job_cmnd_plt WHERE keys = $1 ORDER BY appl_name`,
-      [platformId]
+      `SELECT DISTINCT appl_name FROM edoops.esp_job_cmnd_plt
+       WHERE keys IN ${pltKeysSubquery}
+       ORDER BY appl_name`,
+      [plt.platform_name]
     );
     res.json(result.rows.map((r: any) => r.appl_name));
   } catch (err: any) {
@@ -108,6 +112,7 @@ router.get('/platform-detail/:platformId', async (req: Request, res: Response) =
     console.log('[ESP] platform-detail → platformId:', platformId);
     const plt = await getPlatformRow(platformId);
     if (!plt) return res.status(404).json({ error: 'Unknown platform' });
+    const pltName = plt.platform_name;
 
     const safe = async <T>(fn: () => Promise<T>, fallback: T): Promise<T> => {
       try { return await fn(); } catch (e: any) {
@@ -118,31 +123,31 @@ router.get('/platform-detail/:platformId', async (req: Request, res: Response) =
 
     const [jobCount, idleCount, splCount, agents, jobTypes, cmplCodes, accounts, jobList, successors, predecessors] = await Promise.all([
       safe(() => pool.query(
-        `SELECT COUNT(DISTINCT jobname) AS cnt FROM edoops.esp_job_cmnd_plt WHERE keys = $1`, [platformId])
+        `SELECT COUNT(DISTINCT jobname) AS cnt FROM edoops.esp_job_cmnd_plt WHERE keys IN ${pltKeysSubquery}`, [pltName])
         .then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
       safe(() => pool.query(
-        `SELECT COUNT(DISTINCT jobname) AS cnt FROM edoops.esp_job_cmnd_plt WHERE keys = $1 AND (last_run_date IS NULL OR last_run_date < NOW() - INTERVAL '2 days')`, [platformId])
+        `SELECT COUNT(DISTINCT jobname) AS cnt FROM edoops.esp_job_cmnd_plt WHERE keys IN ${pltKeysSubquery} AND (last_run_date IS NULL OR last_run_date < NOW() - INTERVAL '2 days')`, [pltName])
         .then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
       safe(() => pool.query(
-        `SELECT COUNT(DISTINCT jobname) AS cnt FROM edoops.esp_job_cmnd_plt WHERE keys = $1 AND (jobname LIKE '%JSDELAY%' OR jobname LIKE '%RETRIG%')`, [platformId])
+        `SELECT COUNT(DISTINCT jobname) AS cnt FROM edoops.esp_job_cmnd_plt WHERE keys IN ${pltKeysSubquery} AND (jobname LIKE '%JSDELAY%' OR jobname LIKE '%RETRIG%')`, [pltName])
         .then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
       safe(() => pool.query(
-        `SELECT COALESCE(agent, 'Null') AS name, COUNT(*) AS count FROM edoops.esp_job_cmnd_plt WHERE keys = $1 GROUP BY agent ORDER BY count DESC`, [platformId])
+        `SELECT COALESCE(agent, 'Null') AS name, COUNT(*) AS count FROM edoops.esp_job_cmnd_plt WHERE keys IN ${pltKeysSubquery} GROUP BY agent ORDER BY count DESC`, [pltName])
         .then(r => r.rows.map((x: any) => ({ name: x.name, count: parseInt(x.count) }))), []),
       safe(() => pool.query(
-        `SELECT COALESCE(jobtype, 'Null') AS name, COUNT(*) AS count FROM edoops.esp_job_cmnd_plt WHERE keys = $1 GROUP BY jobtype ORDER BY count DESC`, [platformId])
+        `SELECT COALESCE(jobtype, 'Null') AS name, COUNT(*) AS count FROM edoops.esp_job_cmnd_plt WHERE keys IN ${pltKeysSubquery} GROUP BY jobtype ORDER BY count DESC`, [pltName])
         .then(r => r.rows.map((x: any) => ({ name: x.name, count: parseInt(x.count) }))), []),
       safe(() => pool.query(
-        `SELECT COALESCE(CAST(cmpl_cd AS TEXT), 'Null') AS name, COUNT(*) AS count FROM edoops.esp_job_cmnd_plt WHERE keys = $1 GROUP BY cmpl_cd ORDER BY count DESC`, [platformId])
+        `SELECT COALESCE(CAST(cmpl_cd AS TEXT), 'Null') AS name, COUNT(*) AS count FROM edoops.esp_job_cmnd_plt WHERE keys IN ${pltKeysSubquery} GROUP BY cmpl_cd ORDER BY count DESC`, [pltName])
         .then(r => r.rows.map((x: any) => ({ name: x.name, count: parseInt(x.count) }))), []),
       safe(() => pool.query(
-        `SELECT COALESCE(user_job, 'Null') AS name, COUNT(*) AS count FROM edoops.esp_job_cmnd_plt WHERE keys = $1 GROUP BY user_job ORDER BY count DESC`, [platformId])
+        `SELECT COALESCE(user_job, 'Null') AS name, COUNT(*) AS count FROM edoops.esp_job_cmnd_plt WHERE keys IN ${pltKeysSubquery} GROUP BY user_job ORDER BY count DESC`, [pltName])
         .then(r => r.rows.map((x: any) => ({ name: x.name, count: parseInt(x.count) }))), []),
       safe(() => pool.query(`
         WITH filtered_jobs AS (
           SELECT c.jobname, c.appl_name, c.jobtype AS job_type, c.last_run_date
           FROM edoops.esp_job_cmnd_plt c
-          WHERE c.keys = $1
+          WHERE c.keys IN ${pltKeysSubquery}
           ORDER BY c.last_run_date DESC NULLS LAST, c.jobname
           LIMIT ${ESP_PLATFORM_JOB_LIST_LIMIT}
         ),
@@ -165,7 +170,7 @@ router.get('/platform-detail/:platformId', async (req: Request, res: Response) =
           END AS run_status
         FROM filtered_jobs f
         LEFT JOIN latest_status ls ON ls.appl_name = f.appl_name AND ls.job_longname = f.jobname
-        ORDER BY f.last_run_date DESC NULLS LAST, f.jobname`, [platformId])
+        ORDER BY f.last_run_date DESC NULLS LAST, f.jobname`, [pltName])
         .then(r => r.rows.map((x: any) => ({
           jobname: x.jobname, appl_name: x.appl_name,
           job_type: x.job_type ?? null, last_run_date: x.last_run_date, run_status: x.run_status ?? null,
@@ -174,16 +179,16 @@ router.get('/platform-detail/:platformId', async (req: Request, res: Response) =
         `SELECT d.jobname, d.release AS successor_job
          FROM edoops.esp_job_dpndnt_plt d
          JOIN edoops.esp_job_cmnd_plt c ON d.appl_name = c.appl_name
-         WHERE c.keys = $1
+         WHERE c.keys IN ${pltKeysSubquery}
          ORDER BY d.jobname
-         LIMIT ${ESP_PLATFORM_DEPENDENCY_LIMIT}`, [platformId])
+         LIMIT ${ESP_PLATFORM_DEPENDENCY_LIMIT}`, [pltName])
         .then(r => r.rows.map((x: any) => ({ jobname: x.jobname, successor_job: x.successor_job }))), []),
       safe(() => pool.query(
         `SELECT d.jobname, d.release AS predecessor_job
          FROM edoops.esp_job_dpndnt_plt d
-         WHERE d.keys = $1
+         WHERE d.keys IN ${pltKeysSubquery}
          ORDER BY d.jobname
-         LIMIT ${ESP_PLATFORM_DEPENDENCY_LIMIT}`, [platformId])
+         LIMIT ${ESP_PLATFORM_DEPENDENCY_LIMIT}`, [pltName])
         .then(r => r.rows.map((x: any) => ({ jobname: x.jobname, predecessor_job: x.predecessor_job }))), []),
     ]);
 
@@ -209,13 +214,14 @@ router.get('/platform-run-trend/:platformId', async (req: Request, res: Response
     console.log('[ESP] platform-run-trend → platformId:', platformId);
     const plt = await getPlatformRow(platformId);
     if (!plt) return res.status(404).json({ error: 'Unknown platform' });
+    const pltName = plt.platform_name;
 
     const result = await pool.query(`
       WITH base AS (
         SELECT s.end_date, s.end_time::time AS et, s.jobname, s.ccfail
         FROM edoops.esp_job_stats_recent_plt s
         JOIN edoops.esp_job_cmnd_plt c ON c.appl_name = s.appl_name AND c.jobname = s.job_longname
-        WHERE c.keys = $1
+        WHERE c.keys IN ${pltKeysSubquery}
           AND s.end_date >= CURRENT_DATE - INTERVAL '${ESP_RECENT_WINDOW}'
       )
       SELECT
@@ -226,7 +232,7 @@ router.get('/platform-run-trend/:platformId', async (req: Request, res: Response
       FROM base
       GROUP BY end_date, EXTRACT(HOUR FROM et)
       ORDER BY end_date, EXTRACT(HOUR FROM et)
-    `, [platformId]);
+    `, [pltName]);
     res.json(result.rows.map((r: any) => ({
       day:            r.day ? String(r.day).split('T')[0] : null,
       hour:           parseInt(r.hour, 10),
@@ -250,9 +256,9 @@ router.get('/platform-metadata/:platformId', async (req: Request, res: Response)
       SELECT jobname, command, argument, agent, jobtype AS job_type,
              esp_command AS comp_code, runs, user_job, appl_name
       FROM edoops.esp_job_cmnd_plt
-      WHERE keys = $1
+      WHERE keys IN ${pltKeysSubquery}
       ORDER BY jobname
-    `, [platformId]);
+    `, [plt.platform_name]);
     res.json(result.rows.map((r: any) => ({
       jobname: r.jobname, command: r.command ?? null, argument: r.argument ?? null,
       agent: r.agent ?? null, job_type: r.job_type ?? null, comp_code: r.comp_code ?? null,
@@ -279,10 +285,10 @@ router.get('/platform-job-run-table/:platformId', async (req: Request, res: Resp
       FROM edoops.esp_job_cmnd_plt ec
       JOIN edoops.esp_job_stats_recent_plt es
         ON ec.appl_name = es.appl_name AND ec.jobname = es.job_longname
-      WHERE ec.keys = $1
+      WHERE ec.keys IN ${pltKeysSubquery}
         AND es.end_date >= CURRENT_DATE - INTERVAL '${ESP_RECENT_WINDOW}'
       ORDER BY es.end_date DESC, es.end_time DESC
-    `, [platformId]);
+    `, [plt.platform_name]);
     res.json(result.rows.map((r: any) => ({
       job_longname: r.job_longname, command: r.command ?? null, argument: r.argument ?? null,
       runs: r.runs != null ? parseInt(r.runs, 10) : null,
@@ -299,20 +305,29 @@ router.get('/platform-job-run-table/:platformId', async (req: Request, res: Resp
 });
 
 // GET /api/esp/applications
-// Returns all distinct appl_names, including their platform_id and platform_name
+// Returns all distinct appl_names with their canonical platform_id and plt_name
 router.get('/applications', async (_req: Request, res: Response) => {
   try {
     const pool = getPgPool();
     const result = await pool.query(`
-      SELECT DISTINCT c.appl_name, c.keys AS platform_id, m.plt_name AS platform_name
+      WITH plt_ids AS (
+        SELECT DISTINCT ON (plt_name) keys AS platform_id, plt_name
+        FROM edoops.esp_plt_mapping
+        ORDER BY plt_name, keys
+      )
+      SELECT DISTINCT ON (c.appl_name)
+        c.appl_name,
+        pi.platform_id,
+        pi.plt_name AS platform_name
       FROM edoops.esp_job_cmnd_plt c
-      LEFT JOIN edoops.esp_plt_mapping m ON m.keys = c.keys
+      LEFT JOIN edoops.esp_plt_mapping m  ON m.keys = c.keys
+      LEFT JOIN plt_ids pi                ON pi.plt_name = m.plt_name
       ORDER BY c.appl_name
     `);
     res.json({
       applications: result.rows.map((row: any) => ({
-        appl_name: row.appl_name,
-        platform_id: row.platform_id ?? null,
+        appl_name:     row.appl_name,
+        platform_id:   row.platform_id   ?? null,
         platform_name: row.platform_name ?? null,
       }))
     });

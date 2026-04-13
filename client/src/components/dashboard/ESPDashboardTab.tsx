@@ -186,8 +186,8 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       .then((res: any) => {
         const list = Array.isArray(res.applications) ? res.applications : []
         const apps: string[] = list.map((a: any) => a.appl_name)
-        // Map appl_name → platform_id (keys column) so the Platform dropdown
-        // can reflect the owning platform when an applib is selected
+        // Map appl_name → platform_id so the Platform dropdown reflects
+        // the owning platform when an applib is selected without a platform choice
         const nextPlatformMap = Object.fromEntries(
           list
             .filter((app: any) => app?.appl_name && app?.platform_id)
