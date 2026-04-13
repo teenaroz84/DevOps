@@ -808,7 +808,7 @@ router.get('/summary/:appl_name', async (req: Request, res: Response) => {
         [appl_name]).then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
 
       safe(() => pool.query(
-        `SELECT COUNT(DISTINCT jobname) AS cnt FROM edoops.esp_job_cmnd_plt WHERE appl_name = $1 AND (last_run_date IS NULL OR last_run_date::timestamp < NOW() - INTERVAL '2 days')`,
+        `SELECT COUNT(DISTINCT jobname) AS cnt FROM edoops.esp_job_cmnd_plt WHERE appl_name = $1 AND last_run_date IS NOT NULL AND last_run_date::timestamp < NOW() - INTERVAL '2 days'`,
         [appl_name]).then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
 
       safe(() => pool.query(
@@ -842,7 +842,12 @@ router.get('/summary/:appl_name', async (req: Request, res: Response) => {
               WHEN c.last_run_date IS NULL THEN 'NEVER RUN'
               ELSE 'UNKNOWN'
             END AS run_status
-         FROM edoops.esp_job_cmnd_plt c
+         FROM (
+           SELECT DISTINCT ON (jobname) jobname, jobtype, last_run_date, appl_name
+           FROM edoops.esp_job_cmnd_plt
+           WHERE appl_name = $1
+           ORDER BY jobname, last_run_date DESC NULLS LAST
+         ) c
          LEFT JOIN LATERAL (
            SELECT s.ccfail
            FROM edoops.esp_job_stats_recent_plt s
@@ -851,7 +856,6 @@ router.get('/summary/:appl_name', async (req: Request, res: Response) => {
            ORDER BY s.end_date DESC NULLS LAST, s.end_time DESC NULLS LAST, s.start_date DESC NULLS LAST, s.start_time DESC NULLS LAST
            LIMIT 1
          ) latest ON true
-         WHERE c.appl_name = $1
          ORDER BY c.last_run_date DESC NULLS LAST, c.jobname`,
         [appl_name]).then(r => r.rows.map((x: any) => ({ jobname: x.jobname, job_type: x.job_type ?? null, last_run_date: x.last_run_date, run_status: x.run_status ?? null }))), []),
 

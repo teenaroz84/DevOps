@@ -143,9 +143,9 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
     return () => ctrl.abort()
   }, [useMock])
 
-  // When platform selected, load its detail + metadata + run table
+  // When platform selected (and no applib), load platform-wide data
   React.useEffect(() => {
-    if (!selectedPlatform || useMock) return
+    if (!selectedPlatform || selected || useMock) return
     setLoading(true)
     setData(null)
     espService.getPlatformDetail(selectedPlatform)
@@ -166,14 +166,14 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       })
       .catch(() => setData(null))
       .finally(() => setLoading(false))
-  }, [selectedPlatform, useMock])
+  }, [selectedPlatform, selected, useMock])
 
   React.useEffect(() => {
-    if (!selectedPlatform || useMock) return
+    if (!selectedPlatform || selected || useMock) return
     setMetadataDetail([])
     setJobRunTable([])
     setTableLoading(false)
-  }, [selectedPlatform, useMock])
+  }, [selectedPlatform, selected, useMock])
 
   // Load application names for the selected platform (shown as qualifiers)
   React.useEffect(() => {
@@ -187,9 +187,9 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   // via getPlatformApplications when a platform is selected, avoiding a heavy
   // full-table scan on mount that froze the UI.
 
-  // Load detail whenever selection or mock mode changes (skipped when platform is active)
+  // Load detail whenever an applib is selected
   React.useEffect(() => {
-    if (!selected || selectedPlatform) return
+    if (!selected) return
     setLoading(true)
     setData(null)
     if (useMock) {
@@ -215,11 +215,11 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       })
       .catch(() => setData(null))
       .finally(() => setLoading(false))
-  }, [selected, selectedPlatform, useMock, days])
+  }, [selected, useMock, days])
 
   // Load metadata detail + job run table whenever selection or mock mode changes
   React.useEffect(() => {
-    if (!selected || selectedPlatform) return
+    if (!selected) return
     setTableLoading(true)
     setMetadataDetail([])
     setJobRunTable([])
@@ -237,7 +237,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       setMetadataDetail(Array.isArray(meta) ? meta : [])
       setJobRunTable(Array.isArray(runs) ? runs : [])
     }).finally(() => setTableLoading(false))
-  }, [selected, selectedPlatform, useMock, days])
+  }, [selected, useMock, days])
 
   // Load trend data independently — uses platform or app selection
   React.useEffect(() => {
@@ -614,17 +614,13 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                   },
                 }}
               />
-            ) : platformApplications.length === 0 ? (
-              <CircularProgress size={12} sx={{ color: '#2e7d32' }} />
             ) : (
               <Autocomplete
                 options={platformApplications}
                 value={selected || null}
                 onChange={(_, val) => {
-                  if (val) {
-                    setSelected(val)
-                    setSelectedPlatform(null)
-                  }
+                  if (val) setSelected(val)
+                  else setSelected('')
                 }}
                 size="small"
                 sx={{ width: '100%', minWidth: 0 }}
@@ -717,7 +713,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
             </Box>
 
           {/* Clear Filters */}
-          {(selectedJobs.length > 0 || (selected && !selectedPlatform) || (selectedPlatform && platformSummary.length > 0 && selectedPlatform !== platformSummary[0].platform)) && (
+          {(selectedJobs.length > 0 || selected || (selectedPlatform && platformSummary.length > 0 && selectedPlatform !== platformSummary[0].platform)) && (
             <Button
               size="small"
               onClick={() => {
