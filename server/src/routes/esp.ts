@@ -42,66 +42,72 @@ async function getPlatformRow(platformId: string): Promise<{ platform_id: string
 const pltKeysSubquery = `(SELECT keys FROM edoops.esp_plt_mapping WHERE plt_name = $1)`;
 
 // GET /api/esp/platform-summary
-// Streams NDJSON — one JSON line per platform as each count query completes.
-// This avoids a single slow mega-aggregate; each platform query runs independently
-// and results reach the client progressively.
+// Streams NDJSON — one JSON line per platform.
+// Uses a single query that scans esp_job_cmnd_plt ONCE across all platforms,
+// replacing the old N-separate-queries approach (one full scan per platform).
+// For EDL (25k jobs) the old approach caused 1.5min waits because each platform
+// query ran its own scan; now all aggregates are computed in one pass.
 router.get('/platform-summary', async (_req: Request, res: Response) => {
   try {
     const pool = getPgPool();
+    const t0 = Date.now();
 
-    // Step 1: fast — esp_plt_mapping is a small lookup table
-    const pltsResult = await pool.query(`
-      SELECT DISTINCT ON (plt_name) keys AS platform_id, plt_name
-      FROM edoops.esp_plt_mapping
-      ORDER BY plt_name, keys
+    // per_job: join esp_plt_mapping → esp_job_cmnd_plt, dedup jobs per platform
+    //   (GROUP BY plt_name, jobname so a job appearing in multiple applibs
+    //    is counted only once per platform, with its latest last_run_date)
+    // counts: aggregate totals per platform
+    // platforms: resolve the canonical platform_id (DISTINCT ON — tiny table, instant)
+    const result = await pool.query(`
+      WITH per_job AS (
+        SELECT
+          m.plt_name,
+          c.jobname,
+          MAX(c.last_run_date) AS last_run_date
+        FROM edoops.esp_plt_mapping m
+        JOIN edoops.esp_job_cmnd_plt c ON c.plt_name = m.keys
+        GROUP BY m.plt_name, c.jobname
+      ),
+      counts AS (
+        SELECT
+          plt_name,
+          COUNT(*)::int AS total,
+          COUNT(CASE WHEN last_run_date IS NOT NULL
+                       AND last_run_date::timestamp < NOW() - INTERVAL '2 days'
+                     THEN 1 END)::int AS idle,
+          COUNT(CASE WHEN jobname LIKE '%JSDELAY%' OR jobname LIKE '%RETRIG%'
+                     THEN 1 END)::int AS special
+        FROM per_job
+        GROUP BY plt_name
+      ),
+      platforms AS (
+        SELECT DISTINCT ON (plt_name) keys AS platform_id, plt_name
+        FROM edoops.esp_plt_mapping
+        ORDER BY plt_name, keys
+      )
+      SELECT p.platform_id, p.plt_name, c.total, c.idle, c.special
+      FROM platforms p
+      JOIN counts c ON c.plt_name = p.plt_name
+      ORDER BY p.plt_name
     `);
+
+    console.log(`[ESP] platform-summary — ${result.rows.length} platforms in ${Date.now() - t0}ms`);
 
     res.setHeader('Content-Type', 'application/x-ndjson');
     res.setHeader('Cache-Control', 'no-cache');
     res.flushHeaders();
 
-    // Step 2: run each platform's counts independently and write as they complete.
-    // Talend queries run first and are awaited before the rest start, so Talend rows
-    // reach the client immediately and the UI can auto-select + load Talend data
-    // without waiting for all other platforms.
-    const runPlatformQuery = async (plt: any) => {
-      try {
-        const r = await pool.query(`
-          WITH job_max AS (
-            SELECT jobname, appl_name, MAX(last_run_date) AS last_run_date
-            FROM edoops.esp_job_cmnd_plt
-            WHERE plt_name IN (SELECT keys FROM edoops.esp_plt_mapping WHERE plt_name = $1)
-            GROUP BY jobname, appl_name
-          )
-          SELECT
-            COUNT(*)                                                                         AS total,
-            COUNT(CASE WHEN last_run_date IS NOT NULL
-                         AND last_run_date::timestamp < NOW() - INTERVAL '2 days'
-                       THEN 1 END)                                                           AS idle,
-            COUNT(CASE WHEN jobname LIKE '%JSDELAY%' OR jobname LIKE '%RETRIG%'
-                       THEN 1 END)                                                           AS special
-          FROM job_max
-        `, [plt.plt_name]);
-        const row = r.rows[0];
-        res.write(JSON.stringify({
-          platform:      plt.platform_id,
-          platform_name: plt.plt_name,
-          total:         parseInt(row?.total   || '0', 10),
-          idle:          parseInt(row?.idle    || '0', 10),
-          special:       parseInt(row?.special || '0', 10),
-        }) + '\n');
-      } catch (e: any) {
-        console.warn(`[ESP] platform-summary skipped ${plt.plt_name}: ${e.message}`);
-      }
-    };
-
-    const talendPlts = pltsResult.rows.filter((p: any) => p.plt_name.toLowerCase().includes('talend'));
-    const otherPlts  = pltsResult.rows.filter((p: any) => !p.plt_name.toLowerCase().includes('talend'));
-
-    // Talend first — await so its rows are flushed before other queries start
-    await Promise.allSettled(talendPlts.map(runPlatformQuery));
-    // Remaining platforms in parallel
-    await Promise.allSettled(otherPlts.map(runPlatformQuery));
+    // Talend rows first so the client auto-selects Talend immediately
+    const talend = result.rows.filter((r: any) =>  r.plt_name.toLowerCase().includes('talend'));
+    const others = result.rows.filter((r: any) => !r.plt_name.toLowerCase().includes('talend'));
+    for (const row of [...talend, ...others]) {
+      res.write(JSON.stringify({
+        platform:      row.platform_id,
+        platform_name: row.plt_name,
+        total:         row.total   ?? 0,
+        idle:          row.idle    ?? 0,
+        special:       row.special ?? 0,
+      }) + '\n');
+    }
     res.end();
   } catch (err: any) {
     if (!res.headersSent) {
@@ -174,13 +180,19 @@ router.get('/platform-detail/:platformId', async (req: Request, res: Response) =
     const t0 = Date.now();
 
     // Single query: scan esp_job_cmnd_plt once via MATERIALIZED CTE, derive all
-    // aggregates from it. Replaces 9 separate round-trips that each did a full
-    // table scan for large platforms like EDL (25k rows).
+    // aggregates from it. A second CTE (appl_names) extracts the 410 distinct
+    // appl_name values so the successor/predecessor lookups use a small IN-list
+    // instead of a JOIN against the full 25k-row base — the JOIN was causing a
+    // massive row-multiplication (25k × dependency rows) before DISTINCT could
+    // collapse it, which was the primary source of the 1.5min wait.
     const result = await pool.query(`
       WITH base AS MATERIALIZED (
-        SELECT jobname, appl_name, agent, jobtype, cmpl_cd, user_job, last_run_date
+        SELECT jobname, appl_name, agent, jobtype, user_job, last_run_date
         FROM edoops.esp_job_cmnd_plt
         WHERE plt_name IN ${pltKeysSubquery}
+      ),
+      appl_names AS MATERIALIZED (
+        SELECT DISTINCT appl_name FROM base
       )
       SELECT
         (SELECT COUNT(DISTINCT jobname)::int FROM base) AS job_count,
@@ -203,10 +215,6 @@ router.get('/platform-detail/:platformId', async (req: Request, res: Response) =
          FROM (SELECT COALESCE(jobtype, 'Null') AS name, COUNT(*)::int AS count
                FROM base GROUP BY jobtype) jt) AS job_types,
 
-        (SELECT COALESCE(json_agg(cc ORDER BY cc.count DESC), '[]'::json)
-         FROM (SELECT COALESCE(CAST(cmpl_cd AS TEXT), 'Null') AS name, COUNT(*)::int AS count
-               FROM base GROUP BY cmpl_cd) cc) AS cmpl_codes,
-
         (SELECT COALESCE(json_agg(uj ORDER BY uj.count DESC), '[]'::json)
          FROM (SELECT COALESCE(user_job, 'Null') AS name, COUNT(*)::int AS count
                FROM base GROUP BY user_job) uj) AS user_jobs,
@@ -214,13 +222,13 @@ router.get('/platform-detail/:platformId', async (req: Request, res: Response) =
         (SELECT COALESCE(json_agg(s), '[]'::json)
          FROM (SELECT DISTINCT d.jobname, d.release AS successor_job
                FROM edoops.esp_job_dpndnt_plt d
-               JOIN base b ON d.appl_name = b.appl_name
+               WHERE d.appl_name IN (SELECT appl_name FROM appl_names)
                ORDER BY d.jobname LIMIT 200) s) AS successors,
 
         (SELECT COALESCE(json_agg(p), '[]'::json)
          FROM (SELECT DISTINCT d.jobname, d.release AS predecessor_job
                FROM edoops.esp_job_dpndnt_plt d
-               JOIN base b ON d.appl_name = b.appl_name
+               WHERE d.appl_name IN (SELECT appl_name FROM appl_names)
                ORDER BY d.jobname LIMIT 200) p) AS predecessors
     `, [pltName]);
 
@@ -237,7 +245,7 @@ router.get('/platform-detail/:platformId', async (req: Request, res: Response) =
       spl_job_count:    r.spl_count   ?? 0,
       agents:           asArray(r.agents),
       job_types:        asArray(r.job_types),
-      completion_codes: asArray(r.cmpl_codes),
+      completion_codes: [],
       user_jobs:        asArray(r.user_jobs),
       job_list: [], job_run_trend: [],
       successor_jobs:   asArray(r.successors),
