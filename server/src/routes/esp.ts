@@ -84,9 +84,12 @@ router.get('/platform-summary', async (_req: Request, res: Response) => {
         FROM edoops.esp_plt_mapping
         ORDER BY plt_name, keys
       )
-      SELECT p.platform_id, p.plt_name, c.total, c.idle, c.special
+      SELECT p.platform_id, p.plt_name,
+             COALESCE(c.total,   0) AS total,
+             COALESCE(c.idle,    0) AS idle,
+             COALESCE(c.special, 0) AS special
       FROM platforms p
-      JOIN counts c ON c.plt_name = p.plt_name
+      LEFT JOIN counts c ON c.plt_name = p.plt_name
       ORDER BY p.plt_name
     `);
 

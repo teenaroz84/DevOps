@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { Box, Typography, Chip, Paper, TextField, InputAdornment, Button, Autocomplete, CircularProgress, Snackbar, Alert } from '@mui/material'
+import { Box, Typography, Chip, Paper, TextField, InputAdornment, Button, Autocomplete, CircularProgress, Snackbar, Alert, TablePagination } from '@mui/material'
 import BugReportIcon from '@mui/icons-material/BugReport'
 import SearchIcon from '@mui/icons-material/Search'
 import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber'
@@ -21,6 +21,8 @@ import {
   MOCK_SERVICENOW_INCIDENT_LIST,
   MOCK_SERVICENOW_EMERGENCY_CHANGES,
   MOCK_SERVICENOW_PLATFORMS,
+  MOCK_SERVICENOW_BY_CAPABILITY,
+  MOCK_SERVICENOW_BY_ASSIGNMENT_GROUP,
 } from '../../services/servicenowMockData'
 
 const SEV_CONFIG: Record<string, { color: string; bg: string; dot: string }> = {
@@ -531,7 +533,7 @@ export const IncidentsWidget: React.FC<{ platform?: string | null }> = ({ platfo
   return (
     <>
       <WidgetShell
-        title="Open Incidents by Priority (P1 / P2 / P3)"
+        title="Critical Incidents (P1 / P2)"
         titleIcon={<WarningAmberIcon sx={{ color: '#c62828', fontSize: 18 }} />}
         source="PostgreSQL · edoops.service_now_inc"
         loading={loading}
@@ -616,7 +618,7 @@ export const MissedIncidentsWidget: React.FC<{ platform?: string | null }> = ({ 
   return (
     <>
       <WidgetShell
-        title="Open Incidents Missed SLA (P3 / P4)"
+        title="Lower Priority Incidents (P3 / P4)"
         titleIcon={<WarningAmberIcon sx={{ color: '#e65100', fontSize: 18 }} />}
         source="PostgreSQL · edoops.service_now_inc"
         loading={loading}
@@ -697,14 +699,11 @@ export const IncidentListWidget: React.FC<{ platform?: string | null }> = ({ pla
   const [error, setError] = useState<string | null>(null)
   const [priorityFilter, setPriorityFilter] = useState('All')
   const [search, setSearch] = useState('')
+  const [page, setPage] = useState(0)
+  const rowsPerPage = 100
   const { useMock } = useMockData()
 
   useEffect(() => {
-    // Require a platform selection before loading
-    if (!platform && !useMock) {
-      setData([]); setLoading(false); setError(null)
-      return
-    }
     setLoading(true); setData([]); setError(null)
     if (useMock) {
       setData(MOCK_SERVICENOW_INCIDENT_LIST)
@@ -724,6 +723,12 @@ export const IncidentListWidget: React.FC<{ platform?: string | null }> = ({ pla
       ].some(v => (v || '').toLowerCase().includes(search.toLowerCase()))),
   [data, priorityFilter, search])
 
+  // Reset to first page whenever filters change
+  const handlePriorityChange = (p: string) => { setPriorityFilter(p); setPage(0) }
+  const handleSearchChange = (val: string) => { setSearch(val); setPage(0) }
+
+  const paginated = filtered.slice(page * rowsPerPage, (page + 1) * rowsPerPage)
+
   const incidentColumns: ColumnDef[] = [
     {
       key: 'sninc_inc_num', header: 'Incident #', width: 100,
@@ -735,7 +740,7 @@ export const IncidentListWidget: React.FC<{ platform?: string | null }> = ({ pla
         <Chip label={row.priority_field} size="small"
           sx={{ height: 20, fontSize: '10px', fontWeight: 700,
             color: INCIDENT_COLORS[row.priority_field] || '#555',
-            backgroundColor: ({ P3: '#e8f5e9', P4: '#e3f2fd' } as Record<string,string>)[row.priority_field] || '#eee' }} />
+            backgroundColor: ({ P1: '#fce4ec', P2: '#fff3e0', P3: '#e8f5e9', P4: '#e3f2fd' } as Record<string,string>)[row.priority_field] || '#eee' }} />
       ),
     },
     { key: 'sninc_capability',     header: 'Capability',        width: 140, render: row => <Typography sx={{ fontSize: '11px', color: '#555' }}>{row.sninc_capability || '—'}</Typography> },
@@ -745,35 +750,29 @@ export const IncidentListWidget: React.FC<{ platform?: string | null }> = ({ pla
 
   return (
     <WidgetShell
-      title="Incident List — P3 / P4 Open"
+      title="Open Incidents"
       titleIcon={<WarningAmberIcon sx={{ color: '#1565c0', fontSize: 18 }} />}
       source="PostgreSQL · edoops.service_now_inc"
       loading={loading}
       error={error ?? undefined}
     >
-      {!platform && !useMock ? (
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 4, gap: 1, color: '#bbb' }}>
-          <WarningAmberIcon sx={{ fontSize: 32, color: '#ddd' }} />
-          <Typography sx={{ fontSize: '13px', color: '#bbb', fontWeight: 500 }}>Select a platform to load incident list</Typography>
-          <Typography sx={{ fontSize: '11px', color: '#ccc' }}>Use the platform filter above to scope results</Typography>
-        </Box>
-      ) : !error && (
+      {!error && (
         <>
           <Box sx={{ px: 1.5, pt: 0.5, pb: 0.5, display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap', borderBottom: '1px solid #f0f0f0' }}>
             <TextField
               size="small"
               placeholder="Search incidents…"
               value={search}
-              onChange={e => setSearch(e.target.value)}
+              onChange={e => handleSearchChange(e.target.value)}
               InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 14, color: '#aaa' }} /></InputAdornment> }}
               sx={{ minWidth: 200, '& .MuiOutlinedInput-root': { fontSize: '11px', borderRadius: 2, height: 28 } }}
             />
-            {['All', 'P3', 'P4'].map(p => (
-              <Chip key={p} label={p} size="small" onClick={() => setPriorityFilter(p)}
+            {['All', 'P1', 'P2', 'P3', 'P4'].map(p => (
+              <Chip key={p} label={p} size="small" onClick={() => handlePriorityChange(p)}
                 sx={{
                   fontSize: '10px', height: 22, cursor: 'pointer',
                   fontWeight: priorityFilter === p ? 700 : 400,
-                  backgroundColor: priorityFilter === p ? (({ P3: '#e8f5e9', P4: '#e3f2fd' } as Record<string,string>)[p] ?? '#e3f2fd') : '#f5f5f5',
+                  backgroundColor: priorityFilter === p ? (({ P1: '#fce4ec', P2: '#fff3e0', P3: '#e8f5e9', P4: '#e3f2fd' } as Record<string,string>)[p] ?? '#e3f2fd') : '#f5f5f5',
                   color: priorityFilter === p ? (INCIDENT_COLORS[p] ?? '#1565c0') : '#aaa',
                   border: priorityFilter === p ? `1px solid ${INCIDENT_COLORS[p] ?? '#1565c0'}40` : '1px solid transparent',
                   '& .MuiChip-label': { px: 1 },
@@ -783,8 +782,114 @@ export const IncidentListWidget: React.FC<{ platform?: string | null }> = ({ pla
             <Typography sx={{ fontSize: '10px', color: '#aaa', ml: 'auto' }}>{filtered.length} records</Typography>
           </Box>
           <Box sx={{ flex: 1, overflowY: 'auto', px: 1.5, pb: 1 }}>
-            <DataTable columns={incidentColumns} rows={filtered} rowKey="sninc_inc_num" compact accentColor="#1565c0" />
+            <DataTable columns={incidentColumns} rows={paginated} rowKey="sninc_inc_num" compact accentColor="#1565c0" />
           </Box>
+          {filtered.length > rowsPerPage && (
+            <TablePagination
+              component="div"
+              count={filtered.length}
+              page={page}
+              onPageChange={(_e, newPage) => setPage(newPage)}
+              rowsPerPage={rowsPerPage}
+              rowsPerPageOptions={[rowsPerPage]}
+              sx={{ borderTop: '1px solid #f0f0f0', '& .MuiTablePagination-toolbar': { minHeight: 36, fontSize: '11px' }, '& .MuiTablePagination-displayedRows': { fontSize: '11px' } }}
+            />
+          )}
+        </>
+      )}
+    </WidgetShell>
+  )
+}
+
+// ─── By Capability Widget ──────────────────────────────────
+
+const CAPABILITY_COLORS = ['#1565c0','#2e7d32','#e65100','#7b1fa2','#c62828','#00838f','#37474f']
+
+export const CapabilityWidget: React.FC<{ platform?: string | null }> = ({ platform }) => {
+  const [data, setData] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const { useMock } = useMockData()
+
+  useEffect(() => {
+    setLoading(true); setData([]); setError(null)
+    if (useMock) { setData(MOCK_SERVICENOW_BY_CAPABILITY); setLoading(false); return }
+    servicenowService.getByCapability(platform ?? undefined)
+      .then(d => { setData(Array.isArray(d) ? d : []); setLoading(false) })
+      .catch(err => { setError(err.message || 'Failed to fetch'); setLoading(false) })
+  }, [useMock, platform])
+
+  const max = Math.max(...data.map(r => r.incident_count || 0), 1)
+
+  return (
+    <WidgetShell
+      title="Incidents by Capability"
+      titleIcon={<BugReportIcon sx={{ color: '#1565c0', fontSize: 18 }} />}
+      source="PostgreSQL · edoops.service_now_inc"
+      loading={loading}
+      error={error ?? undefined}
+    >
+      {!error && (
+        <Box sx={{ px: 2, py: 1, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+          {data.map((r, i) => {
+            const pct = Math.round(((r.incident_count || 0) / max) * 100)
+            const color = CAPABILITY_COLORS[i % CAPABILITY_COLORS.length]
+            return (
+              <Box key={r.capability}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.3 }}>
+                  <Typography sx={{ fontSize: '11px', fontWeight: 500, color: '#333' }}>{r.capability}</Typography>
+                  <Typography sx={{ fontSize: '11px', color: '#888', fontWeight: 600 }}>{r.incident_count}</Typography>
+                </Box>
+                <Box sx={{ height: 7, backgroundColor: '#f0f0f0', borderRadius: 4, overflow: 'hidden' }}>
+                  <Box sx={{ height: '100%', width: `${pct}%`, backgroundColor: color, borderRadius: 4, transition: 'width 0.4s ease' }} />
+                </Box>
+              </Box>
+            )
+          })}
+        </Box>
+      )}
+    </WidgetShell>
+  )
+}
+
+// ─── By Assignment Group Widget ────────────────────────────
+
+export const AssignmentGroupWidget: React.FC<{ platform?: string | null }> = ({ platform }) => {
+  const [data, setData] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const { useMock } = useMockData()
+
+  useEffect(() => {
+    setLoading(true); setData([]); setError(null)
+    if (useMock) { setData(MOCK_SERVICENOW_BY_ASSIGNMENT_GROUP); setLoading(false); return }
+    servicenowService.getByAssignmentGroup(platform ?? undefined)
+      .then(d => { setData(Array.isArray(d) ? d : []); setLoading(false) })
+      .catch(err => { setError(err.message || 'Failed to fetch'); setLoading(false) })
+  }, [useMock, platform])
+
+  const total = data.reduce((s, r) => s + (r.incident_count || 0), 0)
+  const donutData = data.map((r, i) => ({
+    name: r.assignment_group,
+    value: r.incident_count || 0,
+    color: CAPABILITY_COLORS[i % CAPABILITY_COLORS.length],
+  }))
+
+  return (
+    <WidgetShell
+      title="Incidents by Assignment Group"
+      titleIcon={<ConfirmationNumberIcon sx={{ color: '#2e7d32', fontSize: 18 }} />}
+      source="PostgreSQL · edoops.service_now_inc"
+      loading={loading}
+      error={error ?? undefined}
+    >
+      {!error && (
+        <>
+          {donutData.length > 0 && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', pt: 1 }}>
+              <DonutChart data={donutData} centerLabel={total} showLegend size={130} />
+            </Box>
+          )}
         </>
       )}
     </WidgetShell>
@@ -1005,7 +1110,7 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
               ListboxProps={{ sx: { fontSize: '12px' } }}
             />
           <Typography sx={{ fontSize: '11px', color: '#aaa', ml: 'auto' }}>
-            Source: PostgreSQL · edoops.service_now_inc / service_now_chg
+            Source: PostgreSQL · edoops.service_now_inc
           </Typography>
           {onOpenAgent && (
             <Button
@@ -1039,15 +1144,20 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
         </Paper>
       </Box>
 
-      {/* ── Row 2: Incident list P3/P4 (full width) ── */}
+      {/* ── Row 2: Incident list (full width) ── */}
       <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #1565c0', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
         <IncidentListWidget platform={selectedPlatform} />
       </Paper>
 
-      {/* ── Row 3: Emergency Changes ── */}
-      <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #7b1fa2', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-        <EmergencyChangesWidget platform={selectedPlatform} />
-      </Paper>
+      {/* ── Row 3: By Capability + By Assignment Group ── */}
+      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, alignItems: 'start' }}>
+        <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #1565c0', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+          <CapabilityWidget platform={selectedPlatform} />
+        </Paper>
+        <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #2e7d32', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+          <AssignmentGroupWidget platform={selectedPlatform} />
+        </Paper>
+      </Box>
 
     </Box>
   )

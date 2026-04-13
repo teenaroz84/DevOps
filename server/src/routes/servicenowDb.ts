@@ -9,7 +9,7 @@ import { getPgPool } from '../db/postgres';
 const router = Router();
 
 // GET /api/servicenow/incidents?platform=<value>
-// Open P1/P2/P3 incident count grouped by priority; optionally filtered by platform
+// Open P1/P2 incident count grouped by priority; optionally filtered by platform
 router.get('/incidents', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
@@ -28,7 +28,7 @@ router.get('/incidents', async (req: Request, res: Response) => {
       ) sn
       JOIN   edoops.sla_glossary sg
         ON   sn.sninc_priority = sg.snow_priority
-      WHERE  sg.short_priority IN ('P1','P2','P3')
+      WHERE  sg.short_priority IN ('P1','P2')
         ${platformClause}
       GROUP BY sg.short_priority
       ORDER BY sg.short_priority
@@ -73,7 +73,7 @@ router.get('/missed-incidents', async (req: Request, res: Response) => {
 });
 
 // GET /api/servicenow/incident-list?platform=<value>
-// Detailed P3/P4 incident records; optionally filtered by platform
+// All open incident records; optionally filtered by platform
 router.get('/incident-list', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
@@ -95,7 +95,7 @@ router.get('/incident-list', async (req: Request, res: Response) => {
           ON   sn.sninc_priority = sg.snow_priority
         ORDER BY sn.sninc_inc_num, sn.sninc_last_updt_dttm DESC
       ) latest
-      WHERE  priority_field IN ('P3','P4')
+      WHERE  1=1
         ${platformClause}
     `, params);
     res.json(result.rows);
@@ -166,6 +166,68 @@ router.get('/incident-detail', async (req: Request, res: Response) => {
     res.json(result.rows);
   } catch (err: any) {
     console.error('ServiceNow incident-detail error:', err.message);
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
+// GET /api/servicenow/by-capability?platform=<value>
+// Open incident counts grouped by capability
+router.get('/by-capability', async (req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const platform = req.query.platform as string | undefined;
+    const platformClause = platform ? `AND latest.sninc_applkp_pltf_nm = $1` : '';
+    const params = platform ? [platform] : [];
+    const result = await pool.query(`
+      SELECT sninc_capability AS capability,
+             COUNT(*)::int    AS incident_count
+      FROM (
+        SELECT DISTINCT ON (sn.sninc_inc_num)
+               sn.sninc_capability,
+               sn.sninc_applkp_pltf_nm
+        FROM   edoops.service_now_inc sn
+        ORDER BY sn.sninc_inc_num, sn.sninc_last_updt_dttm DESC
+      ) latest
+      WHERE  sninc_capability IS NOT NULL
+        ${platformClause}
+      GROUP BY sninc_capability
+      ORDER BY incident_count DESC
+      LIMIT 10
+    `, params);
+    res.json(result.rows);
+  } catch (err: any) {
+    console.error('ServiceNow by-capability error:', err.message);
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
+// GET /api/servicenow/by-assignment-group?platform=<value>
+// Open incident counts grouped by assignment group
+router.get('/by-assignment-group', async (req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const platform = req.query.platform as string | undefined;
+    const platformClause = platform ? `AND latest.sninc_applkp_pltf_nm = $1` : '';
+    const params = platform ? [platform] : [];
+    const result = await pool.query(`
+      SELECT sninc_assignment_grp AS assignment_group,
+             COUNT(*)::int        AS incident_count
+      FROM (
+        SELECT DISTINCT ON (sn.sninc_inc_num)
+               sn.sninc_assignment_grp,
+               sn.sninc_applkp_pltf_nm
+        FROM   edoops.service_now_inc sn
+        ORDER BY sn.sninc_inc_num, sn.sninc_last_updt_dttm DESC
+      ) latest
+      WHERE  sninc_assignment_grp IS NOT NULL
+        ${platformClause}
+      GROUP BY sninc_assignment_grp
+      ORDER BY incident_count DESC
+      LIMIT 10
+    `, params);
+    res.json(result.rows);
+  } catch (err: any) {
+    console.error('ServiceNow by-assignment-group error:', err.message);
     res.status(500).json({ error: 'Query failed', details: err.message });
   }
 });

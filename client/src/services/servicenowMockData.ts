@@ -33,11 +33,10 @@ export const MOCK_SERVICENOW_TICKETS = [
   },
 ]
 
-// Query 1: Open P1/P2/P3 incident counts (service_now_inc + sla_glossary, short_priority IN ('P1','P2','P3'))
+// Query 1: Open P1/P2 incident counts (service_now_inc + sla_glossary, short_priority IN ('P1','P2'))
 export const MOCK_SERVICENOW_INCIDENTS = [
   { priority_field: 'P1', incident_count: 3 },
   { priority_field: 'P2', incident_count: 5 },
-  { priority_field: 'P3', incident_count: 8 },
 ]
 
 // Query 2: P3/P4 open ("missed") incident counts — bar chart
@@ -98,6 +97,24 @@ export const MOCK_SERVICENOW_EMERGENCY_CHANGES = [
   { priority_field: 'P1', incident_count: 1 },
   { priority_field: 'P2', incident_count: 4 },
   { priority_field: 'P3', incident_count: 2 },
+]
+
+export const MOCK_SERVICENOW_BY_CAPABILITY = [
+  { capability: 'BI Reporting',      incident_count: 12 },
+  { capability: 'Data Integration',  incident_count: 9  },
+  { capability: 'ESP Scheduler',     incident_count: 7  },
+  { capability: 'DMF Orchestration', incident_count: 6  },
+  { capability: 'Monitoring',        incident_count: 4  },
+  { capability: 'Cloud Analytics',   incident_count: 3  },
+  { capability: 'Database Layer',    incident_count: 2  },
+]
+
+export const MOCK_SERVICENOW_BY_ASSIGNMENT_GROUP = [
+  { assignment_group: 'DataOps Platform', incident_count: 18 },
+  { assignment_group: 'Cloud Analytics',  incident_count: 8  },
+  { assignment_group: 'BI Dev Team',      incident_count: 6  },
+  { assignment_group: 'Database Team',    incident_count: 5  },
+  { assignment_group: 'Platform Ops',     incident_count: 4  },
 ]
 
 export const MOCK_SERVICENOW_PLATFORMS = [

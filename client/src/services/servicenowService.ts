@@ -18,4 +18,8 @@ export const servicenowService = {
   },
   getEmergencyChanges:  (platform?: string) =>
     apiClient.get(`/api/servicenow/emergency-changes${platform ? `?platform=${encodeURIComponent(platform)}` : ''}`),
+  getByCapability:      (platform?: string) =>
+    apiClient.get(`/api/servicenow/by-capability${platform ? `?platform=${encodeURIComponent(platform)}` : ''}`),
+  getByAssignmentGroup: (platform?: string) =>
+    apiClient.get(`/api/servicenow/by-assignment-group${platform ? `?platform=${encodeURIComponent(platform)}` : ''}`),
 }
