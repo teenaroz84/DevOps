@@ -60,8 +60,11 @@ router.get('/platform-summary', async (_req: Request, res: Response) => {
     res.setHeader('Cache-Control', 'no-cache');
     res.flushHeaders();
 
-    // Step 2: run each platform's counts independently and write as they complete
-    const queries = pltsResult.rows.map(async (plt: any) => {
+    // Step 2: run each platform's counts independently and write as they complete.
+    // Talend queries run first and are awaited before the rest start, so Talend rows
+    // reach the client immediately and the UI can auto-select + load Talend data
+    // without waiting for all other platforms.
+    const runPlatformQuery = async (plt: any) => {
       try {
         const r = await pool.query(`
           SELECT
@@ -89,9 +92,15 @@ router.get('/platform-summary', async (_req: Request, res: Response) => {
       } catch (e: any) {
         console.warn(`[ESP] platform-summary skipped ${plt.plt_name}: ${e.message}`);
       }
-    });
+    };
 
-    await Promise.allSettled(queries);
+    const talendPlts = pltsResult.rows.filter((p: any) => p.plt_name.toLowerCase().includes('talend'));
+    const otherPlts  = pltsResult.rows.filter((p: any) => !p.plt_name.toLowerCase().includes('talend'));
+
+    // Talend first — await so its rows are flushed before other queries start
+    await Promise.allSettled(talendPlts.map(runPlatformQuery));
+    // Remaining platforms in parallel
+    await Promise.allSettled(otherPlts.map(runPlatformQuery));
     res.end();
   } catch (err: any) {
     if (!res.headersSent) {

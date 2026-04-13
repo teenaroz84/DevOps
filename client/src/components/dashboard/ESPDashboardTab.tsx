@@ -130,8 +130,11 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
             return (a.platform_name ?? '').localeCompare(b.platform_name ?? '')
           })
           if (!didAutoSelectPlatform.current && !selectedPlatform && updated.length > 0) {
+            // Prefer a Talend platform; fall back to first in sorted list
+            const talendRow = updated.find(p => (p.platform_name ?? '').toLowerCase().includes('talend'))
+            const pick = talendRow ?? updated[0]
             didAutoSelectPlatform.current = true
-            setSelectedPlatform(updated[0].platform)
+            setSelectedPlatform(pick.platform)
           }
           return updated
         })
