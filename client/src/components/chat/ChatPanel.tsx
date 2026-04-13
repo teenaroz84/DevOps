@@ -291,21 +291,18 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
   }
 
   // Get the last message with data
-  const lastMessageWithData = [...messages].reverse().find(msg => msg.data)
-
   if (!isOpen && !fullScreen) return null
 
   if (fullScreen) {
-    // Full-screen split layout
+    // Full-screen chat layout — results panel hidden
     return (
       <Box sx={{ display: 'flex', height: '100vh', backgroundColor: '#fff' }}>
-        {/* Left Side - Chat */}
+        {/* Chat — full width */}
         <Box
           sx={{
             flex: 1,
             display: 'flex',
             flexDirection: 'column',
-            borderRight: '1px solid #e0e0e0',
           }}
         >
           {/* Header */}
@@ -562,84 +559,6 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
               <SendIcon sx={{ fontSize: '18px' }} />
             </Button>
           </Box>
-        </Box>
-
-        {/* Right Side - Results */}
-        <Box
-          sx={{
-            flex: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            backgroundColor: '#f5f5f5',
-            overflow: 'hidden',
-          }}
-        >
-          {lastMessageWithData ? (
-            <>
-              <Box sx={{ p: 2.5, borderBottom: '1px solid #e0e0e0', backgroundColor: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#1976d2' }}>
-                  Results
-                </Typography>
-                {lastMessageWithData.data && lastMessageWithData.data.length > 0 && (
-                  <IconButton
-                    size="small"
-                    onClick={() => exportDataAsCsv(lastMessageWithData.data)}
-                    title="Export as CSV"
-                    sx={{ color: '#1976d2', '&:hover': { backgroundColor: 'rgba(25,118,210,0.08)' } }}
-                  >
-                    <FileDownloadIcon sx={{ fontSize: 20 }} />
-                  </IconButton>
-                )}
-              </Box>
-              <Box sx={{ flex: 1, overflowY: 'auto', p: 2.5 }}>
-                <Paper sx={{ p: 2, backgroundColor: '#fff' }}>
-                  <Typography variant="body2" sx={{ mb: 2, color: '#666', fontSize: '13px' }}>
-                    {lastMessageWithData.content}
-                  </Typography>
-                  {lastMessageWithData.data && lastMessageWithData.data.length > 0 && (
-                    <Box sx={{ overflowX: 'auto' }}>
-                      <Table size="small">
-                        <TableHead>
-                          <TableRow sx={{ backgroundColor: '#f5f5f5' }}>
-                            {Object.keys(lastMessageWithData.data[0] || {}).map(key => (
-                              <TableCell key={key} sx={{ fontSize: '12px', fontWeight: 600, py: 1 }}>
-                                {key}
-                              </TableCell>
-                            ))}
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {lastMessageWithData.data.map((row: any, rowIdx: number) => (
-                            <TableRow key={rowIdx} sx={{ '&:hover': { backgroundColor: '#f9f9f9' } }}>
-                              {Object.values(row).map((val: any, colIdx) => (
-                                <TableCell key={colIdx} sx={{ fontSize: '12px', py: 1 }}>
-                                  {String(val).substring(0, 30)}
-                                </TableCell>
-                              ))}
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </Box>
-                  )}
-                </Paper>
-              </Box>
-            </>
-          ) : (
-            <Box
-              sx={{
-                flex: 1,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#999',
-              }}
-            >
-              <Typography variant="body2" sx={{ textAlign: 'center' }}>
-                Results will appear here
-              </Typography>
-            </Box>
-          )}
         </Box>
       </Box>
     )
