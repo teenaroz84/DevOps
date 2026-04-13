@@ -23,6 +23,8 @@ import SmartToyIcon from '@mui/icons-material/SmartToy'
 import FileDownloadIcon from '@mui/icons-material/FileDownload'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import PersonIcon from '@mui/icons-material/Person'
+import OpenInFullIcon from '@mui/icons-material/OpenInFull'
+import CloseFullscreenIcon from '@mui/icons-material/CloseFullscreen'
 import { chatService } from '../../services'
 import { AGENTS } from '../../config/agentConfig'
 import type { AgentConfig } from '../../config/agentConfig'
@@ -105,6 +107,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
   // Resolved config — fall back to global knowledge agent
   const agent: AgentConfig = agentConfig ?? AGENTS.knowledge
   const [input, setInput] = useState('')
+  const [expanded, setExpanded] = useState(false)
 
   const WELCOME_MESSAGE: Message = React.useMemo(() => ({
     role: 'agent',
@@ -646,10 +649,11 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
         right: 0,
         top: 0,
         height: '100vh',
-        width: 400,
+        width: expanded ? 760 : 440,
+        transition: 'width 0.22s cubic-bezier(0.4,0,0.2,1)',
         display: 'flex',
         flexDirection: 'column',
-        boxShadow: '-2px 0 8px rgba(0,0,0,0.15)',
+        boxShadow: '-2px 0 12px rgba(0,0,0,0.18)',
         backgroundColor: '#fff',
         zIndex: 3000,
         '@media (max-width: 600px)': {
@@ -696,6 +700,11 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
               ↺ Clear
             </Button>
           )}
+          <Tooltip title={expanded ? 'Collapse panel' : 'Expand panel'} placement="bottom">
+            <IconButton size="small" onClick={() => setExpanded(e => !e)} sx={{ color: '#fff' }}>
+              {expanded ? <CloseFullscreenIcon sx={{ fontSize: 18 }} /> : <OpenInFullIcon sx={{ fontSize: 18 }} />}
+            </IconButton>
+          </Tooltip>
           <IconButton size="small" onClick={onClose} sx={{ color: '#fff' }}>
             <CloseIcon />
           </IconButton>
@@ -728,7 +737,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
                 <SmartToyIcon sx={{ fontSize: 14, color: '#fff' }} />
               </Box>
             )}
-            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '80%' }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: expanded ? '88%' : '80%' }}>
               <Box sx={{ position: 'relative', '&:hover .msg-copy': { opacity: 1 } }}>
                 <Paper
                   sx={{
@@ -772,7 +781,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
                             <TableRow key={rowIdx} sx={{ '&:hover': { backgroundColor: 'rgba(25, 118, 210, 0.05)' } }}>
                               {Object.values(row).map((val: any, colIdx) => (
                                 <TableCell key={colIdx} sx={{ p: 0.75, fontSize: '11px' }}>
-                                  {String(val).substring(0, 25)}
+                                  {expanded ? String(val) : String(val).substring(0, 40)}
                                 </TableCell>
                               ))}
                             </TableRow>

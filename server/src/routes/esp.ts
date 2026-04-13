@@ -50,7 +50,7 @@ router.get('/platform-summary', async (_req: Request, res: Response) => {
           m.plt_name,
           COUNT(DISTINCT c.jobname)                                                           AS total,
           COUNT(DISTINCT CASE
-            WHEN c.last_run_date IS NULL OR c.last_run_date < NOW() - INTERVAL '2 days'
+            WHEN c.last_run_date IS NULL OR c.last_run_date::timestamp < NOW() - INTERVAL '2 days'
             THEN c.jobname END)                                                               AS idle,
           COUNT(DISTINCT CASE
             WHEN c.jobname LIKE '%JSDELAY%' OR c.jobname LIKE '%RETRIG%'
@@ -123,7 +123,7 @@ router.get('/platform-detail/:platformId', async (req: Request, res: Response) =
         `SELECT COUNT(DISTINCT jobname) AS cnt FROM edoops.esp_job_cmnd_plt WHERE plt_name = $1`, [pltName])
         .then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
       safe(() => pool.query(
-        `SELECT COUNT(DISTINCT jobname) AS cnt FROM edoops.esp_job_cmnd_plt WHERE plt_name = $1 AND (last_run_date IS NULL OR last_run_date < NOW() - INTERVAL '2 days')`, [pltName])
+        `SELECT COUNT(DISTINCT jobname) AS cnt FROM edoops.esp_job_cmnd_plt WHERE plt_name = $1 AND (last_run_date IS NULL OR last_run_date::timestamp < NOW() - INTERVAL '2 days')`, [pltName])
         .then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
       safe(() => pool.query(
         `SELECT COUNT(DISTINCT jobname) AS cnt FROM edoops.esp_job_cmnd_plt WHERE plt_name = $1 AND (jobname LIKE '%JSDELAY%' OR jobname LIKE '%RETRIG%')`, [pltName])
@@ -408,7 +408,7 @@ router.get('/idle-jobs', async (_req: Request, res: Response) => {
     const result = await pool.query(`
       SELECT appl_name, COUNT(DISTINCT jobname) AS idle_jobs
       FROM edoops.esp_job_cmnd_plt
-      WHERE last_run_date < NOW() - INTERVAL '2 days'
+      WHERE last_run_date::timestamp < NOW() - INTERVAL '2 days'
       GROUP BY appl_name
     `);
     res.json({
@@ -761,7 +761,7 @@ router.get('/summary/:appl_name', async (req: Request, res: Response) => {
         [appl_name]).then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
 
       safe(() => pool.query(
-        `SELECT COUNT(DISTINCT jobname) AS cnt FROM edoops.esp_job_cmnd_plt WHERE appl_name = $1 AND (last_run_date IS NULL OR last_run_date < NOW() - INTERVAL '2 days')`,
+        `SELECT COUNT(DISTINCT jobname) AS cnt FROM edoops.esp_job_cmnd_plt WHERE appl_name = $1 AND (last_run_date IS NULL OR last_run_date::timestamp < NOW() - INTERVAL '2 days')`,
         [appl_name]).then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
 
       safe(() => pool.query(
@@ -906,7 +906,7 @@ router.get('/summary-actual', async (_req: Request, res: Response) => {
 
       // Idle job count (not run in last 2 days)
       const idleJobResult = await pool.query(`
-        SELECT COUNT(DISTINCT jobname) AS idle_job_count FROM edoops.esp_job_cmnd_plt WHERE appl_name = $1 AND last_run_date < NOW() - INTERVAL '2 days'
+        SELECT COUNT(DISTINCT jobname) AS idle_job_count FROM edoops.esp_job_cmnd_plt WHERE appl_name = $1 AND last_run_date::timestamp < NOW() - INTERVAL '2 days'
       `, [appl_name]);
       const idle_job_count = parseInt(idleJobResult.rows[0]?.idle_job_count || '0', 10);
 
