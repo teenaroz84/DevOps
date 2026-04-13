@@ -1,5 +1,5 @@
 import React from 'react'
-import { Box, Typography, CircularProgress, Paper, Chip, Autocomplete, TextField, Button, Checkbox, Select, MenuItem, FormControl, Tooltip, IconButton } from '@mui/material'
+import { Box, Typography, CircularProgress, Paper, Chip, Autocomplete, TextField, Button, Checkbox, Select, MenuItem, FormControl, Tooltip, IconButton, Slider } from '@mui/material'
 import WorkIcon from '@mui/icons-material/Work'
 import ScheduleIcon from '@mui/icons-material/Schedule'
 import AccountTreeIcon from '@mui/icons-material/AccountTree'
@@ -99,6 +99,8 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   const [platformApplications, setPlatformApplications] = React.useState<string[]>([])
   const selectedApplibPlatform = selected ? (applicationPlatformMap[selected] ?? null) : null
 
+  const [days, setDays] = React.useState(2)
+
   // Reset job filter + drill-down when application or platform changes
   React.useEffect(() => { setSelectedJobs([]); setDrillJob(null); setWidgetFilter(null); setJobStatusFilter('All') }, [selected, selectedPlatform])
 
@@ -115,17 +117,24 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       return
     }
     setPlatformLoading(true)
-    espService.getPlatformSummary()
-      .then((res: any) => {
-        const list = Array.isArray(res) ? res : []
-        setPlatformSummary(list)
-        if (!didAutoSelectPlatform.current && !selectedPlatform && list.length > 0) {
-          didAutoSelectPlatform.current = true
-          setSelectedPlatform(list[0].platform)
-        }
-      })
-      .catch(() => {})
-      .finally(() => setPlatformLoading(false))
+    setPlatformSummary([])
+    const ctrl = espService.streamPlatformSummary(
+      (row) => {
+        setPlatformSummary(prev => {
+          const updated = [...prev, row].sort((a, b) =>
+            (a.platform_name ?? '').localeCompare(b.platform_name ?? ''))
+          if (!didAutoSelectPlatform.current && !selectedPlatform && updated.length > 0) {
+            didAutoSelectPlatform.current = true
+            setSelectedPlatform(updated[0].platform)
+          }
+          return updated
+        })
+        setPlatformLoading(false)
+      },
+      () => setPlatformLoading(false),
+      () => setPlatformLoading(false),
+    )
+    return () => ctrl.abort()
   }, [useMock])
 
   // When platform selected, load its detail + metadata + run table
@@ -215,7 +224,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       setLoading(false)
       return
     }
-    espService.getAppSummary(selected)
+    espService.getAppSummary(selected, days)
       .then((res: any) => {
         if (!res || res.error) { setData(null); return }
         setData({
@@ -233,7 +242,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       })
       .catch(() => setData(null))
       .finally(() => setLoading(false))
-  }, [selected, selectedPlatform, useMock])
+  }, [selected, selectedPlatform, useMock, days])
 
   // Load metadata detail + job run table whenever selection or mock mode changes
   React.useEffect(() => {
@@ -250,12 +259,12 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
     }
     Promise.all([
       espService.getMetadata(selected).catch(() => []),
-      espService.getJobRunTable(selected).catch(() => []),
+      espService.getJobRunTable(selected, days).catch(() => []),
     ]).then(([meta, runs]: any) => {
       setMetadataDetail(Array.isArray(meta) ? meta : [])
       setJobRunTable(Array.isArray(runs) ? runs : [])
     }).finally(() => setTableLoading(false))
-  }, [selected, selectedPlatform, useMock])
+  }, [selected, selectedPlatform, useMock, days])
 
   // Load trend data independently — uses platform or app selection
   React.useEffect(() => {
@@ -270,23 +279,23 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       return
     }
     const req = selectedPlatform
-      ? espService.getPlatformRunTrend(selectedPlatform)
-      : espService.getJobRunTrend(selected)
+      ? espService.getPlatformRunTrend(selectedPlatform, days)
+      : espService.getJobRunTrend(selected, days)
     req
       .then((res: any) => setTrendData(Array.isArray(res) ? res : []))
       .catch(() => setTrendData([]))
       .finally(() => setTrendLoading(false))
-  }, [selected, selectedPlatform, useMock])
+  }, [selected, selectedPlatform, useMock, days])
 
   // Load per-job trend when drillJob or trendDays changes
   React.useEffect(() => {
     if (!drillJob) { setDrillJobTrend([]); return }
     setDrillJobTrendLoading(true)
-    espService.getJobRunTrendByJob(drillJob)
+    espService.getJobRunTrendByJob(drillJob, days)
       .then((res: any) => setDrillJobTrend(Array.isArray(res) ? res : []))
       .catch(() => setDrillJobTrend([]))
       .finally(() => setDrillJobTrendLoading(false))
-  }, [drillJob])
+  }, [drillJob, days])
 
   // Transform trend data for recharts: keys ${day}_count and ${day}_fail per hour
   const buildTrendChart = (rows: Array<{ day: string; hour: number; job_count: number; job_fail_count: number }>) => {
@@ -526,7 +535,26 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
           {useMock && (
             <Chip label="MOCK DATA" size="small" sx={{ fontSize: '9px', height: 18, bgcolor: '#fff3e0', color: '#f57c00', fontWeight: 700, border: '1px solid #f57c0040' }} />
           )}
-          <Box sx={{ ml: 'auto' }}>
+          <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            {/* ── Date range slider ── */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 200 }}>
+              <Typography sx={{ fontSize: '11px', color: '#777', whiteSpace: 'nowrap' }}>Last {days}d</Typography>
+              <Slider
+                value={days}
+                min={1}
+                max={5}
+                step={1}
+                onChange={(_e, v) => setDays(v as number)}
+                size="small"
+                sx={{
+                  color: '#2e7d32',
+                  width: 120,
+                  '& .MuiSlider-thumb': { width: 12, height: 12 },
+                  '& .MuiSlider-rail': { opacity: 0.3 },
+                }}
+              />
+              <Typography sx={{ fontSize: '10px', color: '#bbb', whiteSpace: 'nowrap' }}>5d</Typography>
+            </Box>
             {onOpenAgent && (
               <Button
                 size="small"
@@ -584,8 +612,8 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                   '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
                 }}
               >
-                <MenuItem value="" sx={{ fontSize: '12px', color: '#888' }}><em>All</em></MenuItem>
-                {platformSummary.map(p => (
+                <MenuItem key="__all__" value="" sx={{ fontSize: '12px', color: '#888' }}><em>All</em></MenuItem>
+                {platformSummary.filter(p => p.platform).map(p => (
                   <MenuItem key={p.platform} value={p.platform} sx={{ fontSize: '12px', p: 0 }}>
                     <Tooltip title={p.platform_name ?? p.platform} placement="right" arrow>
                       <Box sx={{ width: '100%', px: 2, py: 0.75, display: 'flex', alignItems: 'center' }}>

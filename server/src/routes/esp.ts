@@ -16,7 +16,13 @@ import { getPgPool } from '../db/postgres';
 
 const router = Router();
 
-const ESP_RECENT_WINDOW = '2 days';
+const ESP_DEFAULT_DAYS = 2;
+const ESP_MAX_DAYS = 5;
+
+function parseDays(query: any): number {
+  const n = parseInt(String(query.days ?? ESP_DEFAULT_DAYS), 10);
+  return Math.min(Math.max(isNaN(n) ? ESP_DEFAULT_DAYS : n, 1), ESP_MAX_DAYS);
+}
 
 // ─── Helper: look up a platform by its canonical keys value (platform_id) ────
 // Returns { platform_id, platform_name } or null if the keys value is unknown.
@@ -36,48 +42,63 @@ async function getPlatformRow(platformId: string): Promise<{ platform_id: string
 const pltKeysSubquery = `(SELECT keys FROM edoops.esp_plt_mapping WHERE plt_name = $1)`;
 
 // GET /api/esp/platform-summary
-// DISTINCT ON (plt_name) picks one canonical keys value per platform as platform_id.
-// Counts are aggregated across all keys rows for the same plt_name.
+// Streams NDJSON — one JSON line per platform as each count query completes.
+// This avoids a single slow mega-aggregate; each platform query runs independently
+// and results reach the client progressively.
 router.get('/platform-summary', async (_req: Request, res: Response) => {
   try {
     const pool = getPgPool();
-    const result = await pool.query(`
-      WITH plt_ids AS (
-        SELECT DISTINCT ON (plt_name) keys AS platform_id, plt_name
-        FROM edoops.esp_plt_mapping
-        ORDER BY plt_name, keys
-      ),
-      counts AS (
-        SELECT
-          m.plt_name,
-          COUNT(DISTINCT c.jobname)                                                           AS total,
-          COUNT(DISTINCT CASE
-            WHEN c.last_run_date IS NULL OR c.last_run_date::timestamp < NOW() - INTERVAL '2 days'
-            THEN c.jobname END)                                                               AS idle,
-          COUNT(DISTINCT CASE
-            WHEN c.jobname LIKE '%JSDELAY%' OR c.jobname LIKE '%RETRIG%'
-            THEN c.jobname END)                                                               AS special,
-          COUNT(DISTINCT c.appl_name)                                                         AS app_count
-        FROM edoops.esp_plt_mapping m
-        LEFT JOIN edoops.esp_job_cmnd_plt c ON c.plt_name IN (SELECT keys FROM edoops.esp_plt_mapping WHERE plt_name = m.plt_name)
-        GROUP BY m.plt_name
-      )
-      SELECT pi.platform_id, pi.plt_name AS platform_name,
-             cnt.total, cnt.idle, cnt.special, cnt.app_count
-      FROM plt_ids pi
-      JOIN counts cnt ON cnt.plt_name = pi.plt_name
-      ORDER BY pi.plt_name
+
+    // Step 1: fast — esp_plt_mapping is a small lookup table
+    const pltsResult = await pool.query(`
+      SELECT DISTINCT ON (plt_name) keys AS platform_id, plt_name
+      FROM edoops.esp_plt_mapping
+      ORDER BY plt_name, keys
     `);
-    res.json(result.rows.map((r: any) => ({
-      platform:      r.platform_id,
-      platform_name: r.platform_name,
-      total:         parseInt(r.total     || '0', 10),
-      idle:          parseInt(r.idle      || '0', 10),
-      special:       parseInt(r.special   || '0', 10),
-      app_count:     parseInt(r.app_count || '0', 10),
-    })));
+
+    res.setHeader('Content-Type', 'application/x-ndjson');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.flushHeaders();
+
+    // Step 2: run each platform's counts independently and write as they complete
+    const queries = pltsResult.rows.map(async (plt: any) => {
+      try {
+        const r = await pool.query(`
+          SELECT
+            COUNT(DISTINCT c.jobname)                                                        AS total,
+            COUNT(DISTINCT CASE
+              WHEN c.last_run_date IS NULL OR c.last_run_date::timestamp < NOW() - INTERVAL '2 days'
+              THEN c.jobname END)                                                            AS idle,
+            COUNT(DISTINCT CASE
+              WHEN c.jobname LIKE '%JSDELAY%' OR c.jobname LIKE '%RETRIG%'
+              THEN c.jobname END)                                                            AS special,
+            COUNT(DISTINCT c.appl_name)                                                     AS app_count
+          FROM edoops.esp_plt_mapping m
+          LEFT JOIN edoops.esp_job_cmnd_plt c ON c.plt_name = m.keys
+          WHERE m.plt_name = $1
+        `, [plt.plt_name]);
+        const row = r.rows[0];
+        res.write(JSON.stringify({
+          platform:      plt.platform_id,
+          platform_name: plt.plt_name,
+          total:         parseInt(row?.total     || '0', 10),
+          idle:          parseInt(row?.idle      || '0', 10),
+          special:       parseInt(row?.special   || '0', 10),
+          app_count:     parseInt(row?.app_count || '0', 10),
+        }) + '\n');
+      } catch (e: any) {
+        console.warn(`[ESP] platform-summary skipped ${plt.plt_name}: ${e.message}`);
+      }
+    });
+
+    await Promise.allSettled(queries);
+    res.end();
   } catch (err: any) {
-    res.status(500).json({ error: 'Query failed', details: err.message });
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Query failed', details: err.message });
+    } else {
+      res.end();
+    }
   }
 });
 
@@ -204,12 +225,13 @@ router.get('/platform-detail/:platformId', async (req: Request, res: Response) =
   }
 });
 
-// GET /api/esp/platform-run-trend/:platformId
+// GET /api/esp/platform-run-trend/:platformId?days=N
 router.get('/platform-run-trend/:platformId', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
     const platformId = decodeURIComponent(req.params.platformId);
-    console.log('[ESP] platform-run-trend → platformId:', platformId);
+    const days = parseDays(req.query);
+    console.log('[ESP] platform-run-trend → platformId:', platformId, 'days:', days);
     const plt = await getPlatformRow(platformId);
     if (!plt) return res.status(404).json({ error: 'Unknown platform' });
     const pltName = plt.platform_name;
@@ -220,7 +242,7 @@ router.get('/platform-run-trend/:platformId', async (req: Request, res: Response
         FROM edoops.esp_job_stats_recent_plt s
         JOIN edoops.esp_job_cmnd_plt c ON c.appl_name = s.appl_name AND c.jobname = s.job_longname
         WHERE c.plt_name IN ${pltKeysSubquery}
-          AND s.end_date >= CURRENT_DATE - INTERVAL '${ESP_RECENT_WINDOW}'
+          AND s.end_date >= CURRENT_DATE - INTERVAL '${days} days'
       )
       SELECT
         end_date AS day,
@@ -268,12 +290,13 @@ router.get('/platform-metadata/:platformId', async (req: Request, res: Response)
   }
 });
 
-// GET /api/esp/platform-job-run-table/:platformId
+// GET /api/esp/platform-job-run-table/:platformId?days=N
 router.get('/platform-job-run-table/:platformId', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
     const platformId = decodeURIComponent(req.params.platformId);
-    console.log('[ESP] platform-job-run-table → platformId:', platformId);
+    const days = parseDays(req.query);
+    console.log('[ESP] platform-job-run-table → platformId:', platformId, 'days:', days);
     const plt = await getPlatformRow(platformId);
     if (!plt) return res.status(404).json({ error: 'Unknown platform' });
     const result = await pool.query(`
@@ -284,7 +307,7 @@ router.get('/platform-job-run-table/:platformId', async (req: Request, res: Resp
       JOIN edoops.esp_job_stats_recent_plt es
         ON ec.appl_name = es.appl_name AND ec.jobname = es.job_longname
       WHERE ec.plt_name IN ${pltKeysSubquery}
-        AND es.end_date >= CURRENT_DATE - INTERVAL '${ESP_RECENT_WINDOW}'
+        AND es.end_date >= CURRENT_DATE - INTERVAL '${days} days'
       ORDER BY es.end_date DESC, es.end_time DESC
     `, [plt.platform_name]);
     res.json(result.rows.map((r: any) => ({
@@ -526,13 +549,14 @@ router.get('/metadata/:appl_name', async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/esp/job-run-table/:appl_name
+// GET /api/esp/job-run-table/:appl_name?days=N
 // Joins edoops.esp_job_cmnd_plt + edoops.esp_job_stats_recent_plt for detailed run records
 router.get('/job-run-table/:appl_name', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
     const appl_name = decodeURIComponent(req.params.appl_name);
-    console.log('[ESP] job-run-table → appl_name:', appl_name);
+    const days = parseDays(req.query);
+    console.log('[ESP] job-run-table → appl_name:', appl_name, 'days:', days);
     const result = await pool.query(
       `SELECT ec.appl_name,
               es.job_longname,
@@ -551,7 +575,7 @@ router.get('/job-run-table/:appl_name', async (req: Request, res: Response) => {
          ON ec.appl_name = es.appl_name
         AND ec.jobname   = es.job_longname
        WHERE ec.appl_name = $1
-        AND es.end_date >= CURRENT_DATE - INTERVAL '${ESP_RECENT_WINDOW}'
+        AND es.end_date >= CURRENT_DATE - INTERVAL '${days} days'
        ORDER BY es.end_date DESC, es.end_time DESC`,
       [appl_name]
     );
@@ -580,7 +604,8 @@ router.get('/job-run-trend/:appl_name', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
     const appl_name = decodeURIComponent(req.params.appl_name);
-    console.log('[ESP] job-run-trend → appl_name:', appl_name);
+    const days = parseDays(req.query);
+    console.log('[ESP] job-run-trend → appl_name:', appl_name, 'days:', days);
 
     const result = await pool.query(
       `WITH base AS (
@@ -591,7 +616,7 @@ router.get('/job-run-trend/:appl_name', async (req: Request, res: Response) => {
            ccfail
          FROM edoops.esp_job_stats_recent_plt
          WHERE appl_name = $1
-           AND end_date >= CURRENT_DATE - INTERVAL '${ESP_RECENT_WINDOW}'
+           AND end_date >= CURRENT_DATE - INTERVAL '${days} days'
        )
        SELECT
          end_date                                               AS day,
@@ -622,7 +647,8 @@ router.get('/run-trend-by-job/:jobname', async (req: Request, res: Response) => 
   try {
     const pool = getPgPool();
     const jobname = decodeURIComponent(req.params.jobname);
-    console.log('[ESP] run-trend-by-job → jobname:', jobname);
+    const days = parseDays(req.query);
+    console.log('[ESP] run-trend-by-job → jobname:', jobname, 'days:', days);
 
     const result = await pool.query(
       `WITH base AS (
@@ -633,7 +659,7 @@ router.get('/run-trend-by-job/:jobname', async (req: Request, res: Response) => 
            ccfail
          FROM edoops.esp_job_stats_recent_plt
          WHERE job_longname = $1
-           AND end_date >= CURRENT_DATE - INTERVAL '${ESP_RECENT_WINDOW}'
+           AND end_date >= CURRENT_DATE - INTERVAL '${days} days'
        )
        SELECT
          end_date                                               AS day,
@@ -666,7 +692,7 @@ router.get('/run-trend-by-dimension', async (req: Request, res: Response) => {
     const field = String(req.query.field ?? '');
     const value = String(req.query.value ?? '');
     const rawDays = parseInt(String(req.query.days ?? '2'), 10);
-    const days = Math.min(Math.max(rawDays, 1), 7);
+    const days = Math.min(Math.max(rawDays, 1), ESP_MAX_DAYS);
 
     const ALLOWED_FIELDS: Record<string, string> = { agent: 'agent', job_type: 'jobtype', user_job: 'user_job' };
     const col = ALLOWED_FIELDS[field];
@@ -736,12 +762,13 @@ router.get('/job-run-trend', async (_req: Request, res: Response) => {
     res.status(500).json({ error: 'Query failed', details: err.message });
   }
 });
-// GET /api/esp/summary/:appl_name  — all widget data for one application
+// GET /api/esp/summary/:appl_name?days=N  — all widget data for one application
 router.get('/summary/:appl_name', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
     const appl_name = decodeURIComponent(req.params.appl_name);
-    console.log('[ESP] summary → appl_name:', appl_name);
+    const days = parseDays(req.query);
+    console.log('[ESP] summary → appl_name:', appl_name, 'days:', days);
 
     // Helper: run query safely; return fallback on any DB error
     const safe = async <T>(fn: () => Promise<T>, fallback: T): Promise<T> => {
@@ -810,7 +837,7 @@ router.get('/summary/:appl_name', async (req: Request, res: Response) => {
 
       safe(() => pool.query(
         `SELECT DATE(last_run_date::timestamp) AS day, EXTRACT(HOUR FROM last_run_date::timestamp)::int AS hour, COUNT(*)::int AS count
-         FROM edoops.esp_job_cmnd_plt WHERE appl_name = $1 AND last_run_date >= NOW() - INTERVAL '${ESP_RECENT_WINDOW}'
+         FROM edoops.esp_job_cmnd_plt WHERE appl_name = $1 AND last_run_date >= NOW() - INTERVAL '${days} days'
          GROUP BY DATE(last_run_date::timestamp), EXTRACT(HOUR FROM last_run_date::timestamp) ORDER BY DATE(last_run_date::timestamp), EXTRACT(HOUR FROM last_run_date::timestamp)`,
         [appl_name]).then(r => r.rows.map((x: any) => ({ day: String(x.day), hour: parseInt(x.hour), count: parseInt(x.count) }))), []),
 
