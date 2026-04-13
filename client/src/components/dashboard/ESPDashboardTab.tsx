@@ -97,6 +97,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   const selectedApplibPlatform = selectedPlatform
   const [jobListLoading, setJobListLoading] = React.useState(false)
   const [jobListLimited, setJobListLimited] = React.useState<{ showing: number; total: number } | null>(null)
+  const [jobListHasMore, setJobListHasMore] = React.useState(false)
 
   const [days, setDays] = React.useState(2)
 
@@ -153,6 +154,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
     setData(null)
     setJobListLoading(false)
     setJobListLimited(null)
+    setJobListHasMore(false)
     espService.getPlatformDetail(selectedPlatform)
       .then((res: any) => {
         if (!res || res.error) { setData(null); setLoading(false); return }
@@ -176,6 +178,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
             if (!jobRes) return
             setData(prev => prev ? { ...prev, job_list: Array.isArray(jobRes.jobs) ? jobRes.jobs : [] } : prev)
             if (jobRes.limited) setJobListLimited({ showing: jobRes.limit, total: jobRes.total })
+            setJobListHasMore(!!jobRes.hasMore)
           })
           .catch(() => {})
           .finally(() => setJobListLoading(false))
@@ -197,6 +200,24 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       .then((res: any) => setPlatformApplications(Array.isArray(res) ? res : []))
       .catch(() => setPlatformApplications([]))
   }, [selectedPlatform, useMock])
+
+  // Append the next page of jobs to the existing job list
+  const loadMoreJobs = React.useCallback(() => {
+    if (!selectedPlatform || jobListLoading || !jobListHasMore) return
+    const currentCount = data?.job_list?.length ?? 0
+    setJobListLoading(true)
+    espService.getPlatformJobList(selectedPlatform, 2000, currentCount)
+      .then((jobRes: any) => {
+        if (!jobRes) return
+        const newJobs = Array.isArray(jobRes.jobs) ? jobRes.jobs : []
+        setData(prev => prev ? { ...prev, job_list: [...(prev.job_list ?? []), ...newJobs] } : prev)
+        const loaded = currentCount + newJobs.length
+        setJobListLimited({ showing: loaded, total: jobRes.total })
+        setJobListHasMore(!!jobRes.hasMore)
+      })
+      .catch(() => {})
+      .finally(() => setJobListLoading(false))
+  }, [selectedPlatform, jobListLoading, jobListHasMore, data?.job_list?.length])
 
   // Application list is no longer eagerly loaded — applibs are fetched per-platform
   // via getPlatformApplications when a platform is selected, avoiding a heavy
@@ -841,8 +862,26 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                     maxHeight={280}
                     pageSize={200}
                     accentColor="#2e7d32"
-                    emptyMessage="No jobs found"
+                    emptyMessage={jobListLoading ? 'Loading jobs…' : 'No jobs found'}
                   />
+                  {jobListHasMore && (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', pt: 1 }}>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        disabled={jobListLoading}
+                        onClick={loadMoreJobs}
+                        sx={{
+                          fontSize: '11px', textTransform: 'none', borderColor: '#2e7d3240',
+                          color: '#2e7d32', '&:hover': { borderColor: '#2e7d32', bgcolor: '#e8f5e9' },
+                        }}
+                      >
+                        {jobListLoading
+                          ? 'Loading…'
+                          : `Load more (${((jobListLimited?.total ?? 0) - (data?.job_list?.length ?? 0)).toLocaleString()} remaining)`}
+                      </Button>
+                    </Box>
+                  )}
                 </Box>
               </WidgetShell>
             </Paper>

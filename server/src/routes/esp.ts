@@ -224,6 +224,8 @@ router.get('/platform-job-list/:platformId', async (req: Request, res: Response)
     const platformId = decodeURIComponent(req.params.platformId);
     const rawLimit = parseInt(String(req.query.limit ?? PLATFORM_JOB_LIST_DEFAULT), 10);
     const limit = Math.min(Math.max(isNaN(rawLimit) ? PLATFORM_JOB_LIST_DEFAULT : rawLimit, 1), PLATFORM_JOB_LIST_MAX);
+    const rawOffset = parseInt(String(req.query.offset ?? '0'), 10);
+    const offset = isNaN(rawOffset) || rawOffset < 0 ? 0 : rawOffset;
     const plt = await getPlatformRow(platformId);
     if (!plt) return res.status(404).json({ error: 'Unknown platform' });
     const pltName = plt.platform_name;
@@ -261,8 +263,8 @@ router.get('/platform-job-list/:platformId', async (req: Request, res: Response)
         FROM filtered_jobs f
         LEFT JOIN latest_status ls ON ls.job_longname = f.jobname
         ORDER BY f.last_run_date DESC NULLS LAST, f.jobname
-        LIMIT $2
-      `, [pltName, limit]),
+        LIMIT $2 OFFSET $3
+      `, [pltName, limit, offset]),
     ]);
 
     const total = parseInt(totalResult.rows[0]?.cnt || '0', 10);
@@ -272,8 +274,10 @@ router.get('/platform-job-list/:platformId', async (req: Request, res: Response)
         job_type: x.job_type ?? null, last_run_date: x.last_run_date, run_status: x.run_status ?? null,
       })),
       total,
-      limited: total > limit,
+      limited: total > limit || offset > 0,
       limit,
+      offset,
+      hasMore: offset + limit < total,
     });
   } catch (err: any) {
     console.error('ESP platform-job-list error:', err.message);
