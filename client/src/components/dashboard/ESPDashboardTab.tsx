@@ -94,6 +94,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   // ── Platform state ───────────────────────────────────────
   // platform_id is the `keys` column from edoops.esp_plt_mapping; platform_name is plt_name
   const [platformSummary, setPlatformSummary] = React.useState<{ platform: string; platform_name?: string; total: number; idle: number; special: number; app_count: number }[]>([])
+  const [platformLoading, setPlatformLoading] = React.useState(true)
   const [selectedPlatform, setSelectedPlatform] = React.useState<string | null>(null)
   const [platformApplications, setPlatformApplications] = React.useState<string[]>([])
   const selectedApplibPlatform = selected ? (applicationPlatformMap[selected] ?? null) : null
@@ -106,12 +107,14 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   React.useEffect(() => {
     if (useMock) {
       setPlatformSummary(MOCK_ESP_PLATFORM_SUMMARY)
+      setPlatformLoading(false)
       if (!didAutoSelectPlatform.current && MOCK_ESP_PLATFORM_SUMMARY.length > 0) {
         didAutoSelectPlatform.current = true
         setSelectedPlatform(MOCK_ESP_PLATFORM_SUMMARY[0].platform)
       }
       return
     }
+    setPlatformLoading(true)
     espService.getPlatformSummary()
       .then((res: any) => {
         const list = Array.isArray(res) ? res : []
@@ -122,6 +125,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
         }
       })
       .catch(() => {})
+      .finally(() => setPlatformLoading(false))
   }, [useMock])
 
   // When platform selected, load its detail + metadata + run table
@@ -561,7 +565,18 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                   if (!val) setData(null)
                 }}
                 displayEmpty
-                renderValue={(val) => val ? String(val) : <em style={{ color: '#888' }}>All</em>}
+                disabled={platformLoading || appsLoading}
+                renderValue={(val) => {
+                  if (platformLoading || appsLoading) {
+                    return (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <CircularProgress size={11} sx={{ color: '#2e7d32' }} />
+                        <em style={{ color: '#888', fontSize: '12px' }}>Loading…</em>
+                      </Box>
+                    )
+                  }
+                  return val ? String(val) : <em style={{ color: '#888' }}>All</em>
+                }}
                 sx={{
                   fontSize: '12px', fontWeight: 600, width: '100%', minWidth: 0, bgcolor: '#fff',
                   '& .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d3240' },

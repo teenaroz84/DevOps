@@ -25,6 +25,8 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import PersonIcon from '@mui/icons-material/Person'
 import OpenInFullIcon from '@mui/icons-material/OpenInFull'
 import CloseFullscreenIcon from '@mui/icons-material/CloseFullscreen'
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
+import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import { chatService } from '../../services'
 import { AGENTS } from '../../config/agentConfig'
 import type { AgentConfig } from '../../config/agentConfig'
@@ -108,6 +110,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
   const agent: AgentConfig = agentConfig ?? AGENTS.knowledge
   const [input, setInput] = useState('')
   const [expanded, setExpanded] = useState(false)
+  const [showQuickActions, setShowQuickActions] = useState(true)
 
   const WELCOME_MESSAGE: Message = React.useMemo(() => ({
     role: 'agent',
@@ -716,11 +719,11 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
         sx={{
           flex: 1,
           overflowY: 'auto',
-          p: 2,
+          p: 1.5,
           backgroundColor: '#fafafa',
           display: 'flex',
           flexDirection: 'column',
-          gap: 2,
+          gap: 1.5,
         }}
       >
         {/* Session loading from DynamoDB */}
@@ -902,41 +905,56 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
         <div ref={messagesEndRef} />
       </Box>
 
-      {/* Quick Actions Strip */}
-      <Box sx={{ px: 1.5, py: 1, backgroundColor: '#fff', borderTop: '1px solid #f0f0f0', flexShrink: 0 }}>
-        <Typography sx={{ color: '#78909c', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', mb: 0.75 }}>
-          Quick Actions
-        </Typography>
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
-          {quickActions.map((action, idx) => (
-            <Chip
-              key={idx}
-              label={action.label}
-              size="small"
-              onClick={() => sendMessage(action.query)}
-              disabled={loading}
-              sx={{
-                fontSize: '11px',
-                height: 28,
-                cursor: 'pointer',
-                backgroundColor: '#e3f2fd',
-                color: '#1565c0',
-                border: '1px solid #bbdefb',
-                fontWeight: 500,
-                '&:hover': { backgroundColor: '#bbdefb' },
-                '& .MuiChip-label': { px: 1.2 },
-              }}
-            />
-          ))}
+      {/* Collapsible Quick Actions */}
+      <Box sx={{ borderTop: '1px solid #f0f0f0', flexShrink: 0, backgroundColor: '#fff' }}>
+        <Box
+          onClick={() => setShowQuickActions(v => !v)}
+          sx={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            px: 1.5, py: 0.5, cursor: 'pointer',
+            '&:hover': { backgroundColor: '#f9f9f9' },
+          }}
+        >
+          <Typography sx={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', color: '#78909c' }}>
+            Quick Actions
+          </Typography>
+          {showQuickActions
+            ? <ExpandLessIcon sx={{ fontSize: 16, color: '#90a4ae' }} />
+            : <ExpandMoreIcon sx={{ fontSize: 16, color: '#90a4ae' }} />
+          }
         </Box>
+        {showQuickActions && (
+          <Box sx={{ px: 1.5, pb: 0.75, display: 'flex', gap: 0.6, flexWrap: 'wrap' }}>
+            {quickActions.map((action, idx) => (
+              <Chip
+                key={idx}
+                label={action.label}
+                size="small"
+                onClick={() => sendMessage(action.query)}
+                disabled={loading}
+                sx={{
+                  fontSize: '11px',
+                  height: 26,
+                  cursor: 'pointer',
+                  backgroundColor: '#e3f2fd',
+                  color: '#1565c0',
+                  border: '1px solid #bbdefb',
+                  fontWeight: 500,
+                  '&:hover': { backgroundColor: '#bbdefb' },
+                  '& .MuiChip-label': { px: 1 },
+                }}
+              />
+            ))}
+          </Box>
+        )}
       </Box>
 
       {/* Divider */}
       <Divider />
 
       {/* Input Area */}
-      <Box sx={{ p: 1.5, backgroundColor: '#fff' }}>
-        <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end' }}>
+      <Box sx={{ p: 1.25, backgroundColor: '#fff' }}>
+        <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'flex-end' }}>
           <Box sx={{ flex: 1, position: 'relative' }}>
             <TextField
               fullWidth
@@ -982,7 +1000,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
             </span>
           </Tooltip>
         </Box>
-        <Typography sx={{ fontSize: '10px', color: '#ccc', mt: 0.75, textAlign: 'center' }}>
+        <Typography sx={{ fontSize: '10px', color: '#ccc', mt: 0.5, textAlign: 'center' }}>
           Enter to send · Shift+Enter for new line · ↑↓ history
         </Typography>
       </Box>
