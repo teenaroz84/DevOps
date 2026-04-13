@@ -95,6 +95,8 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   const [selectedPlatform, setSelectedPlatform] = React.useState<string | null>(null)
   const [platformApplications, setPlatformApplications] = React.useState<string[]>([])
   const selectedApplibPlatform = selectedPlatform
+  const [jobListLoading, setJobListLoading] = React.useState(false)
+  const [jobListLimited, setJobListLimited] = React.useState<{ showing: number; total: number } | null>(null)
 
   const [days, setDays] = React.useState(2)
 
@@ -143,29 +145,42 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
     return () => ctrl.abort()
   }, [useMock])
 
-  // When platform selected (and no applib), load platform-wide data
+  // When platform selected (and no applib), load platform-wide data.
+  // Aggregates load first so widgets appear immediately; job list is fetched separately.
   React.useEffect(() => {
     if (!selectedPlatform || selected || useMock) return
     setLoading(true)
     setData(null)
+    setJobListLoading(false)
+    setJobListLimited(null)
     espService.getPlatformDetail(selectedPlatform)
       .then((res: any) => {
-        if (!res || res.error) { setData(null); return }
+        if (!res || res.error) { setData(null); setLoading(false); return }
         setData({
           ...res,
           agents:           Array.isArray(res.agents)           ? res.agents           : [],
           job_types:        Array.isArray(res.job_types)        ? res.job_types        : [],
           completion_codes: Array.isArray(res.completion_codes) ? res.completion_codes : [],
           user_jobs:        Array.isArray(res.user_jobs)        ? res.user_jobs        : [],
-          job_list:         Array.isArray(res.job_list)         ? res.job_list         : [],
+          job_list:         [],   // populated by the separate job-list request below
           job_run_trend:    [],
           successor_jobs:   Array.isArray(res.successor_jobs)   ? res.successor_jobs   : [],
           predecessor_jobs: Array.isArray(res.predecessor_jobs) ? res.predecessor_jobs : [],
           metadata:         Array.isArray(res.metadata)         ? res.metadata         : [],
         })
+        setLoading(false)
+        // Fire job list as a second, non-blocking request
+        setJobListLoading(true)
+        espService.getPlatformJobList(selectedPlatform)
+          .then((jobRes: any) => {
+            if (!jobRes) return
+            setData(prev => prev ? { ...prev, job_list: Array.isArray(jobRes.jobs) ? jobRes.jobs : [] } : prev)
+            if (jobRes.limited) setJobListLimited({ showing: jobRes.limit, total: jobRes.total })
+          })
+          .catch(() => {})
+          .finally(() => setJobListLoading(false))
       })
-      .catch(() => setData(null))
-      .finally(() => setLoading(false))
+      .catch(() => { setData(null); setLoading(false) })
   }, [selectedPlatform, selected, useMock])
 
   React.useEffect(() => {
@@ -561,9 +576,9 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                 value={selectedPlatform ?? selectedApplibPlatform ?? ''}
                 onChange={(e) => {
                   const val = (e.target.value as string) || null
+                  if (!val) return   // no-op — always keep a platform selected
                   setSelected('')
                   setSelectedPlatform(val)
-                  if (!val) setData(null)
                 }}
                 displayEmpty
                 disabled={platformLoading}
@@ -585,7 +600,6 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                   '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
                 }}
               >
-                <MenuItem key="__all__" value="" sx={{ fontSize: '12px', color: '#888' }}><em>All</em></MenuItem>
                 {platformSummary.filter(p => p.platform).map(p => (
                   <MenuItem key={p.platform} value={p.platform} sx={{ fontSize: '12px', p: 0 }}>
                     <Tooltip title={p.platform_name ?? p.platform} placement="right" arrow>
@@ -624,6 +638,10 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                 }}
                 size="small"
                 sx={{ width: '100%', minWidth: 0 }}
+                componentsProps={{ paper: { sx: { fontSize: '12px' } } }}
+                renderOption={(props, option) => (
+                  <li {...props} style={{ fontSize: '12px', padding: '4px 12px' }}>{option}</li>
+                )}
                 renderInput={(params) => (
                   <TextField
                     {...params}
@@ -779,10 +797,14 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
 
             <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
               <WidgetShell
-                title="Job Execution Etatus"
-                source={selectedPlatform
-                  ? `${filteredJobList.length}${filteredJobList.length >= ESP_PLATFORM_RECENT_JOB_LIMIT ? '+' : ''} recent jobs ·`
-                  : `${filteredJobList.length}${filteredJobList.length !== data.job_list.length ? ` / ${data.job_list.length}` : ''} jobs`}
+                title="Job Execution Status"
+                source={jobListLoading
+                  ? 'Loading jobs…'
+                  : jobListLimited
+                    ? `Showing ${jobListLimited.showing.toLocaleString()} of ${jobListLimited.total.toLocaleString()} jobs`
+                    : selectedPlatform
+                      ? `${filteredJobList.length}${filteredJobList.length >= ESP_PLATFORM_RECENT_JOB_LIMIT ? '+' : ''} recent jobs ·`
+                      : `${filteredJobList.length}${filteredJobList.length !== data.job_list.length ? ` / ${data.job_list.length}` : ''} jobs`}
                 titleIcon={<WorkIcon sx={{ color: '#1976d2', fontSize: 18 }} />}
               >
                 <Box sx={{ px: 1.5, pt: 1, pb: 0, display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -829,7 +851,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
               <WidgetShell
                 title={drillJob
                   ? `Job Trend — ${drillJob}`
-                  : 'Job Run Trend — 2 Days'}
+                  : `Job Run Trend — ${days} Day${days !== 1 ? 's' : ''}`}
                 source={drillJob ? 'esp_job_stats_recent · click job again or × to reset' : 'ESP · esp_job_stats_recent'}
                 titleIcon={<TrendingUpIcon sx={{ color: '#1565c0', fontSize: 18 }} />}
                 actions={
@@ -861,7 +883,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                       />
                     ))} */}
                     <Chip
-                      label="2 Days"
+                      label={`${days} Day${days !== 1 ? 's' : ''}`}
                       size="small"
                       sx={{
                         fontSize: '10px', height: 20,

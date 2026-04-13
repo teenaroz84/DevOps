@@ -151,7 +151,7 @@ router.get('/platform-detail/:platformId', async (req: Request, res: Response) =
       }
     };
 
-    const [jobCount, idleCount, splCount, agents, jobTypes, cmplCodes, accounts, jobList, successors, predecessors] = await Promise.all([
+    const [jobCount, idleCount, splCount, agents, jobTypes, cmplCodes, accounts, successors, predecessors] = await Promise.all([
       safe(() => pool.query(
         `SELECT COUNT(DISTINCT jobname) AS cnt FROM edoops.esp_job_cmnd_plt WHERE plt_name IN ${pltKeysSubquery}`, [pltName])
         .then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
@@ -180,11 +180,61 @@ router.get('/platform-detail/:platformId', async (req: Request, res: Response) =
       safe(() => pool.query(
         `SELECT COALESCE(user_job, 'Null') AS name, COUNT(*) AS count FROM edoops.esp_job_cmnd_plt WHERE plt_name IN ${pltKeysSubquery} GROUP BY user_job ORDER BY count DESC`, [pltName])
         .then(r => r.rows.map((x: any) => ({ name: x.name, count: parseInt(x.count) }))), []),
-      safe(() => pool.query(`
+      safe(() => pool.query(
+        `SELECT DISTINCT d.jobname, d.release AS successor_job
+         FROM edoops.esp_job_dpndnt_plt d
+         JOIN edoops.esp_job_cmnd_plt c ON d.appl_name = c.appl_name
+         WHERE c.plt_name IN ${pltKeysSubquery}
+         ORDER BY d.jobname
+         LIMIT 200`, [pltName])
+        .then(r => r.rows.map((x: any) => ({ jobname: x.jobname, successor_job: x.successor_job }))), []),
+      safe(() => pool.query(
+        `SELECT DISTINCT d.jobname, d.release AS predecessor_job
+         FROM edoops.esp_job_dpndnt_plt d
+         JOIN edoops.esp_job_cmnd_plt c ON d.appl_name = c.appl_name
+         WHERE c.plt_name IN ${pltKeysSubquery}
+         ORDER BY d.jobname
+         LIMIT 200`, [pltName])
+        .then(r => r.rows.map((x: any) => ({ jobname: x.jobname, predecessor_job: x.predecessor_job }))), []),
+    ]);
+
+    res.json({
+      appl_name: plt.platform_name,
+      platform_id: platformId,
+      job_count: jobCount, idle_job_count: idleCount, spl_job_count: splCount,
+      agents, job_types: jobTypes, completion_codes: cmplCodes, user_jobs: accounts,
+      job_list: [], job_run_trend: [],
+      successor_jobs: successors, predecessor_jobs: predecessors, metadata: [],
+    });
+  } catch (err: any) {
+    console.error('ESP platform-detail error:', err.message);
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
+// GET /api/esp/platform-job-list/:platformId?limit=N
+// Paginated job list for a platform — kept separate from platform-detail so the
+// aggregate widgets render immediately while this heavier query runs in the background.
+// Default limit = 2000; max = 5000. Returns { jobs, total, limited }.
+const PLATFORM_JOB_LIST_MAX = 5000;
+const PLATFORM_JOB_LIST_DEFAULT = 2000;
+router.get('/platform-job-list/:platformId', async (req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const platformId = decodeURIComponent(req.params.platformId);
+    const rawLimit = parseInt(String(req.query.limit ?? PLATFORM_JOB_LIST_DEFAULT), 10);
+    const limit = Math.min(Math.max(isNaN(rawLimit) ? PLATFORM_JOB_LIST_DEFAULT : rawLimit, 1), PLATFORM_JOB_LIST_MAX);
+    const plt = await getPlatformRow(platformId);
+    if (!plt) return res.status(404).json({ error: 'Unknown platform' });
+    const pltName = plt.platform_name;
+
+    const [totalResult, jobsResult] = await Promise.all([
+      pool.query(
+        `SELECT COUNT(DISTINCT jobname) AS cnt FROM edoops.esp_job_cmnd_plt WHERE plt_name IN ${pltKeysSubquery}`,
+        [pltName]
+      ),
+      pool.query(`
         WITH filtered_jobs AS (
-          -- One row per unique jobname: pick the entry with the most recent last_run_date.
-          -- This prevents the same job appearing twice with different statuses when it
-          -- exists under multiple appl_name values.
           SELECT DISTINCT ON (c.jobname)
             c.jobname, c.appl_name, c.jobtype AS job_type, c.last_run_date
           FROM edoops.esp_job_cmnd_plt c
@@ -210,37 +260,23 @@ router.get('/platform-detail/:platformId', async (req: Request, res: Response) =
           END AS run_status
         FROM filtered_jobs f
         LEFT JOIN latest_status ls ON ls.job_longname = f.jobname
-        ORDER BY f.last_run_date DESC NULLS LAST, f.jobname`, [pltName])
-        .then(r => r.rows.map((x: any) => ({
-          jobname: x.jobname, appl_name: x.appl_name,
-          job_type: x.job_type ?? null, last_run_date: x.last_run_date, run_status: x.run_status ?? null,
-        }))), []),
-      safe(() => pool.query(
-        `SELECT DISTINCT d.jobname, d.release AS successor_job
-         FROM edoops.esp_job_dpndnt_plt d
-         JOIN edoops.esp_job_cmnd_plt c ON d.appl_name = c.appl_name
-         WHERE c.plt_name IN ${pltKeysSubquery}
-         ORDER BY d.jobname`, [pltName])
-        .then(r => r.rows.map((x: any) => ({ jobname: x.jobname, successor_job: x.successor_job }))), []),
-      safe(() => pool.query(
-        `SELECT DISTINCT d.jobname, d.release AS predecessor_job
-         FROM edoops.esp_job_dpndnt_plt d
-         JOIN edoops.esp_job_cmnd_plt c ON d.appl_name = c.appl_name
-         WHERE c.plt_name IN ${pltKeysSubquery}
-         ORDER BY d.jobname`, [pltName])
-        .then(r => r.rows.map((x: any) => ({ jobname: x.jobname, predecessor_job: x.predecessor_job }))), []),
+        ORDER BY f.last_run_date DESC NULLS LAST, f.jobname
+        LIMIT $2
+      `, [pltName, limit]),
     ]);
 
+    const total = parseInt(totalResult.rows[0]?.cnt || '0', 10);
     res.json({
-      appl_name: plt.platform_name,
-      platform_id: platformId,
-      job_count: jobCount, idle_job_count: idleCount, spl_job_count: splCount,
-      agents, job_types: jobTypes, completion_codes: cmplCodes, user_jobs: accounts,
-      job_list: jobList, job_run_trend: [],
-      successor_jobs: successors, predecessor_jobs: predecessors, metadata: [],
+      jobs: jobsResult.rows.map((x: any) => ({
+        jobname: x.jobname, appl_name: x.appl_name,
+        job_type: x.job_type ?? null, last_run_date: x.last_run_date, run_status: x.run_status ?? null,
+      })),
+      total,
+      limited: total > limit,
+      limit,
     });
   } catch (err: any) {
-    console.error('ESP platform-detail error:', err.message);
+    console.error('ESP platform-job-list error:', err.message);
     res.status(500).json({ error: 'Query failed', details: err.message });
   }
 });
