@@ -171,67 +171,78 @@ router.get('/platform-detail/:platformId', async (req: Request, res: Response) =
     if (!plt) return res.status(404).json({ error: 'Unknown platform' });
     const pltName = plt.platform_name;
 
-    const safe = async <T>(fn: () => Promise<T>, fallback: T): Promise<T> => {
-      try { return await fn(); } catch (e: any) {
-        console.warn(`ESP platform query skipped (${e.message?.slice(0, 60)})`);
-        return fallback;
-      }
-    };
+    const t0 = Date.now();
 
-    const [jobCount, idleCount, splCount, agents, jobTypes, cmplCodes, accounts, successors, predecessors] = await Promise.all([
-      safe(() => pool.query(
-        `SELECT COUNT(DISTINCT jobname) AS cnt FROM edoops.esp_job_cmnd_plt WHERE plt_name IN ${pltKeysSubquery}`, [pltName])
-        .then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
-      safe(() => pool.query(
-        `SELECT COUNT(*) AS cnt FROM (
-           SELECT jobname
-           FROM edoops.esp_job_cmnd_plt
-           WHERE plt_name IN ${pltKeysSubquery}
+    // Single query: scan esp_job_cmnd_plt once via MATERIALIZED CTE, derive all
+    // aggregates from it. Replaces 9 separate round-trips that each did a full
+    // table scan for large platforms like EDL (25k rows).
+    const result = await pool.query(`
+      WITH base AS MATERIALIZED (
+        SELECT jobname, appl_name, agent, jobtype, cmpl_cd, user_job, last_run_date
+        FROM edoops.esp_job_cmnd_plt
+        WHERE plt_name IN ${pltKeysSubquery}
+      )
+      SELECT
+        (SELECT COUNT(DISTINCT jobname)::int FROM base) AS job_count,
+
+        (SELECT COUNT(*)::int FROM (
+           SELECT jobname FROM base
            GROUP BY jobname
            HAVING MAX(last_run_date) IS NOT NULL
               AND MAX(last_run_date)::timestamp < NOW() - INTERVAL '2 days'
-         ) AS sub`, [pltName])
-        .then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
-      safe(() => pool.query(
-        `SELECT COUNT(DISTINCT jobname) AS cnt FROM edoops.esp_job_cmnd_plt WHERE plt_name IN ${pltKeysSubquery} AND (jobname LIKE '%JSDELAY%' OR jobname LIKE '%RETRIG%')`, [pltName])
-        .then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
-      safe(() => pool.query(
-        `SELECT COALESCE(agent, 'Null') AS name, COUNT(*) AS count FROM edoops.esp_job_cmnd_plt WHERE plt_name IN ${pltKeysSubquery} GROUP BY agent ORDER BY count DESC`, [pltName])
-        .then(r => r.rows.map((x: any) => ({ name: x.name, count: parseInt(x.count) }))), []),
-      safe(() => pool.query(
-        `SELECT COALESCE(jobtype, 'Null') AS name, COUNT(*) AS count FROM edoops.esp_job_cmnd_plt WHERE plt_name IN ${pltKeysSubquery} GROUP BY jobtype ORDER BY count DESC`, [pltName])
-        .then(r => r.rows.map((x: any) => ({ name: x.name, count: parseInt(x.count) }))), []),
-      safe(() => pool.query(
-        `SELECT COALESCE(CAST(cmpl_cd AS TEXT), 'Null') AS name, COUNT(*) AS count FROM edoops.esp_job_cmnd_plt WHERE plt_name IN ${pltKeysSubquery} GROUP BY cmpl_cd ORDER BY count DESC`, [pltName])
-        .then(r => r.rows.map((x: any) => ({ name: x.name, count: parseInt(x.count) }))), []),
-      safe(() => pool.query(
-        `SELECT COALESCE(user_job, 'Null') AS name, COUNT(*) AS count FROM edoops.esp_job_cmnd_plt WHERE plt_name IN ${pltKeysSubquery} GROUP BY user_job ORDER BY count DESC`, [pltName])
-        .then(r => r.rows.map((x: any) => ({ name: x.name, count: parseInt(x.count) }))), []),
-      safe(() => pool.query(
-        `SELECT DISTINCT d.jobname, d.release AS successor_job
-         FROM edoops.esp_job_dpndnt_plt d
-         JOIN edoops.esp_job_cmnd_plt c ON d.appl_name = c.appl_name
-         WHERE c.plt_name IN ${pltKeysSubquery}
-         ORDER BY d.jobname
-         LIMIT 200`, [pltName])
-        .then(r => r.rows.map((x: any) => ({ jobname: x.jobname, successor_job: x.successor_job }))), []),
-      safe(() => pool.query(
-        `SELECT DISTINCT d.jobname, d.release AS predecessor_job
-         FROM edoops.esp_job_dpndnt_plt d
-         JOIN edoops.esp_job_cmnd_plt c ON d.appl_name = c.appl_name
-         WHERE c.plt_name IN ${pltKeysSubquery}
-         ORDER BY d.jobname
-         LIMIT 200`, [pltName])
-        .then(r => r.rows.map((x: any) => ({ jobname: x.jobname, predecessor_job: x.predecessor_job }))), []),
-    ]);
+         ) s) AS idle_count,
+
+        (SELECT COUNT(DISTINCT jobname)::int FROM base
+         WHERE jobname LIKE '%JSDELAY%' OR jobname LIKE '%RETRIG%') AS spl_count,
+
+        (SELECT COALESCE(json_agg(a ORDER BY a.count DESC), '[]'::json)
+         FROM (SELECT COALESCE(agent, 'Null') AS name, COUNT(*)::int AS count
+               FROM base GROUP BY agent) a) AS agents,
+
+        (SELECT COALESCE(json_agg(jt ORDER BY jt.count DESC), '[]'::json)
+         FROM (SELECT COALESCE(jobtype, 'Null') AS name, COUNT(*)::int AS count
+               FROM base GROUP BY jobtype) jt) AS job_types,
+
+        (SELECT COALESCE(json_agg(cc ORDER BY cc.count DESC), '[]'::json)
+         FROM (SELECT COALESCE(CAST(cmpl_cd AS TEXT), 'Null') AS name, COUNT(*)::int AS count
+               FROM base GROUP BY cmpl_cd) cc) AS cmpl_codes,
+
+        (SELECT COALESCE(json_agg(uj ORDER BY uj.count DESC), '[]'::json)
+         FROM (SELECT COALESCE(user_job, 'Null') AS name, COUNT(*)::int AS count
+               FROM base GROUP BY user_job) uj) AS user_jobs,
+
+        (SELECT COALESCE(json_agg(s), '[]'::json)
+         FROM (SELECT DISTINCT d.jobname, d.release AS successor_job
+               FROM edoops.esp_job_dpndnt_plt d
+               JOIN base b ON d.appl_name = b.appl_name
+               ORDER BY d.jobname LIMIT 200) s) AS successors,
+
+        (SELECT COALESCE(json_agg(p), '[]'::json)
+         FROM (SELECT DISTINCT d.jobname, d.release AS predecessor_job
+               FROM edoops.esp_job_dpndnt_plt d
+               JOIN base b ON d.appl_name = b.appl_name
+               ORDER BY d.jobname LIMIT 200) p) AS predecessors
+    `, [pltName]);
+
+    console.log(`[ESP] platform-detail ${pltName} — ${Date.now() - t0}ms`);
+
+    const r = result.rows[0] ?? {};
+    const asArray = (v: any): any[] => Array.isArray(v) ? v : [];
 
     res.json({
       appl_name: plt.platform_name,
       platform_id: platformId,
-      job_count: jobCount, idle_job_count: idleCount, spl_job_count: splCount,
-      agents, job_types: jobTypes, completion_codes: cmplCodes, user_jobs: accounts,
+      job_count:        r.job_count   ?? 0,
+      idle_job_count:   r.idle_count  ?? 0,
+      spl_job_count:    r.spl_count   ?? 0,
+      agents:           asArray(r.agents),
+      job_types:        asArray(r.job_types),
+      completion_codes: asArray(r.cmpl_codes),
+      user_jobs:        asArray(r.user_jobs),
       job_list: [], job_run_trend: [],
-      successor_jobs: successors, predecessor_jobs: predecessors, metadata: [],
+      successor_jobs:   asArray(r.successors),
+      predecessor_jobs: asArray(r.predecessors),
+      metadata: [],
     });
   } catch (err: any) {
     console.error('ESP platform-detail error:', err.message);
