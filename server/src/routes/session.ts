@@ -76,8 +76,16 @@ router.post('/:sessionId/:agentId', async (req: Request, res: Response) => {
     }));
     res.json({ ok: true, persisted: true });
   } catch (err: any) {
-    console.warn('[sessions] POST failed, skipping remote persistence:', err.message);
-    res.json({ ok: true, persisted: false });
+    const errMsg = err.message || String(err);
+    console.warn('[sessions] POST failed:', {
+      message: errMsg,
+      code: err.code,
+      table: TABLE,
+      region: process.env.AWS_REGION || 'us-east-1',
+      hasAccessKey: !!process.env.AWS_ACCESS_KEY_ID,
+      hasSecretKey: !!process.env.AWS_SECRET_ACCESS_KEY,
+    });
+    res.json({ ok: true, persisted: false, error: errMsg });
   }
 });
 
@@ -94,6 +102,71 @@ router.delete('/:sessionId/:agentId', async (req: Request, res: Response) => {
   } catch (err: any) {
     console.warn('[sessions] DELETE failed, skipping remote delete:', err.message);
     res.json({ ok: true, persisted: false });
+  }
+});
+
+// ─── Diagnostic endpoints ───────────────────────────────────────────────────
+
+// GET /api/sessions/diagnostic/health
+router.get('/diagnostic/health', async (req: Request, res: Response) => {
+  const table = process.env.SESSIONS_TABLE || 'ChatSessions';
+  const region = process.env.AWS_REGION || 'us-east-1';
+  const hasAccessKey = !!process.env.AWS_ACCESS_KEY_ID;
+  const hasSecretKey = !!process.env.AWS_SECRET_ACCESS_KEY;
+  
+  res.json({
+    status: 'Server OK',
+    config: {
+      table,
+      region,
+      hasAccessKey,
+      hasSecretKey,
+      isDev: process.env.NODE_ENV !== 'production',
+    },
+    credentials: {
+      method: hasAccessKey && hasSecretKey ? 'Environment Variables' : 'Instance Role / Default Chain',
+      configured: hasAccessKey && hasSecretKey,
+    }
+  });
+});
+
+// GET /api/sessions/diagnostic/dynamodb
+router.get('/diagnostic/dynamodb', async (req: Request, res: Response) => {
+  const table = process.env.SESSIONS_TABLE || 'ChatSessions';
+  const region = process.env.AWS_REGION || 'us-east-1';
+  
+  try {
+    const result = await getClient().send(new GetCommand({
+      TableName: table,
+      Key: { 
+        session_id: '__test__', 
+        agent_id: '__test__' 
+      },
+    }));
+    
+    res.json({
+      status: 'DynamoDB Connected',
+      table,
+      region,
+      canRead: true,
+      itemExists: !!result.Item
+    });
+  } catch (err: any) {
+    res.json({
+      status: 'DynamoDB Connection Failed',
+      table,
+      region,
+      error: err.message || String(err),
+      code: err.code || 'UNKNOWN',
+      hint: 
+        err.code === 'ResourceNotFoundException' 
+          ? `Table "${table}" does not exist in region ${region}`
+          : err.code === 'UnrecognizedClientException'
+          ? 'AWS credentials not configured (missing AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY or instance role)'
+          : err.code === 'ValidationException'
+          ? 'Invalid table name or request'
+          : 'Check AWS credentials, table name, and region'
+    });
   }
 });
 

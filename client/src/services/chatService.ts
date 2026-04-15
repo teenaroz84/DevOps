@@ -134,6 +134,10 @@ export const chatService = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ messages }),
+    }).then(res => res.json()).then(data => {
+      if (data.error) {
+        console.warn('[chatService] Session save failed:', { agentId, error: data.error, code: data.code })
+      }
     }).catch(() => { /* silent */ })
   },
 
