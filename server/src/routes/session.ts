@@ -18,17 +18,18 @@
  */
 import { Router, Request, Response } from 'express';
 import { DescribeTableCommand, DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { BatchWriteCommand, DeleteCommand, DynamoDBDocumentClient, GetCommand, PutCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
+import { BatchWriteCommand, DeleteCommand, DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 
 const router = Router();
 
-const TABLE = process.env.SESSIONS_TABLE || 'ChatSessions';
+const TABLE = process.env.SESSIONS_TABLE || 'aws3748-dt57-edoops-session-store';
 const PARTITION_KEY = process.env.SESSIONS_PARTITION_KEY || process.env.SESSIONS_PK || 'session_id';
 const SORT_KEY = process.env.SESSIONS_SORT_KEY || process.env.SESSIONS_SK || 'agent_id';
 const TTL_SECONDS = 30 * 24 * 60 * 60; // 30 days
 const DEBUG_SESSIONS = process.env.DEBUG_SESSIONS === '1';
 
 let ddb: DynamoDBDocumentClient | null = null;
+let keySchemaCache: { partitionKey: string; sortKey: string } | null = null;
 
 function getClient(): DynamoDBDocumentClient {
   if (!ddb) {
@@ -41,6 +42,29 @@ function getClient(): DynamoDBDocumentClient {
 function debugLog(event: string, details?: Record<string, unknown>): void {
   if (!DEBUG_SESSIONS) return;
   details ? console.log(`[sessions] ${event}`, details) : console.log(`[sessions] ${event}`);
+}
+
+async function resolveKeySchema(): Promise<{ partitionKey: string; sortKey: string }> {
+  if (keySchemaCache) return keySchemaCache;
+
+  const region = process.env.AWS_REGION || 'us-east-1';
+  const base = new DynamoDBClient({ region });
+  const tableInfo = await base.send(new DescribeTableCommand({ TableName: TABLE }));
+  const schema = tableInfo.Table?.KeySchema || [];
+  const hash = schema.find((k) => k.KeyType === 'HASH')?.AttributeName;
+  const range = schema.find((k) => k.KeyType === 'RANGE')?.AttributeName;
+
+  keySchemaCache = {
+    partitionKey: hash || PARTITION_KEY,
+    sortKey: range || SORT_KEY,
+  };
+  return keySchemaCache;
+}
+
+function getSortKeyValue(sortKey: string, sessionId: string, agentId: string): string {
+  if (sortKey === 'agent_id') return agentId;
+  if (sortKey === 'session_id_timestamp') return `${sessionId}_${Date.now()}`;
+  return agentId;
 }
 
 type SessionRecordInput = {
@@ -92,17 +116,24 @@ function toSessionItem(record: SessionRecordInput): SessionItem | null {
   };
 }
 
-function buildSessionKey(sessionId: string, agentId: string): Record<string, string> {
+function buildSessionKey(sessionId: string, sortValue: string, partitionKey: string, sortKey: string): Record<string, string> {
   return {
-    [PARTITION_KEY]: sessionId,
-    [SORT_KEY]: agentId,
+    [partitionKey]: sessionId,
+    [sortKey]: sortValue,
   };
 }
 
-function buildSessionItem(sessionId: string, agentId: string, messages: unknown[]): Record<string, unknown> {
+function buildSessionItem(
+  sessionId: string,
+  agentId: string,
+  messages: unknown[],
+  partitionKey: string,
+  sortKey: string,
+): Record<string, unknown> {
+  const sortValue = getSortKeyValue(sortKey, sessionId, agentId);
   return {
-    [PARTITION_KEY]: sessionId,
-    [SORT_KEY]: agentId,
+    [partitionKey]: sessionId,
+    [sortKey]: sortValue,
     // Keep canonical fields for backward compatibility and easy querying.
     session_id: sessionId,
     agent_id: agentId,
@@ -124,18 +155,19 @@ function chunk<T>(arr: T[], size: number): T[][] {
 
 // GET /api/sessions/diagnostic/health
 router.get('/diagnostic/health', async (req: Request, res: Response) => {
-  const table = process.env.SESSIONS_TABLE || 'ChatSessions';
+  const table = TABLE;
   const region = process.env.AWS_REGION || 'us-east-1';
   const hasAccessKey = !!process.env.AWS_ACCESS_KEY_ID;
   const hasSecretKey = !!process.env.AWS_SECRET_ACCESS_KEY;
+  const keys = await resolveKeySchema();
   
   res.json({
     status: 'Server OK',
     config: {
       table,
       region,
-      partitionKey: PARTITION_KEY,
-      sortKey: SORT_KEY,
+      partitionKey: keys.partitionKey,
+      sortKey: keys.sortKey,
       hasAccessKey,
       hasSecretKey,
       isDev: process.env.NODE_ENV !== 'production',
@@ -149,7 +181,7 @@ router.get('/diagnostic/health', async (req: Request, res: Response) => {
 
 // GET /api/sessions/diagnostic/dynamodb
 router.get('/diagnostic/dynamodb', async (req: Request, res: Response) => {
-  const table = process.env.SESSIONS_TABLE || 'ChatSessions';
+  const table = TABLE;
   const region = process.env.AWS_REGION || 'us-east-1';
   
   try {
@@ -159,6 +191,7 @@ router.get('/diagnostic/dynamodb', async (req: Request, res: Response) => {
       attributeName: k.AttributeName,
       keyType: k.KeyType,
     }));
+    const keys = await resolveKeySchema();
 
     const result = await getClient().send(new ScanCommand({
       TableName: table,
@@ -169,8 +202,8 @@ router.get('/diagnostic/dynamodb', async (req: Request, res: Response) => {
       status: 'DynamoDB Connected',
       table,
       region,
-      configuredPartitionKey: PARTITION_KEY,
-      configuredSortKey: SORT_KEY,
+      configuredPartitionKey: keys.partitionKey,
+      configuredSortKey: keys.sortKey,
       keySchema: schema,
       canRead: true,
       hasItems: !!(result.Items && result.Items.length > 0),
@@ -200,6 +233,7 @@ router.get('/diagnostic/dynamodb', async (req: Request, res: Response) => {
 // GET /api/sessions/diagnostic/sample-item
 router.get('/diagnostic/sample-item', async (_req: Request, res: Response) => {
   try {
+    const keys = await resolveKeySchema();
     const result = await getClient().send(new ScanCommand({
       TableName: TABLE,
       Limit: 1,
@@ -225,10 +259,10 @@ router.get('/diagnostic/sample-item', async (_req: Request, res: Response) => {
       table: TABLE,
       hasItems: true,
       sample: {
-        configuredPartitionKey: PARTITION_KEY,
-        configuredSortKey: SORT_KEY,
-        partitionValue: item[PARTITION_KEY],
-        sortValue: item[SORT_KEY],
+        configuredPartitionKey: keys.partitionKey,
+        configuredSortKey: keys.sortKey,
+        partitionValue: item[keys.partitionKey],
+        sortValue: item[keys.sortKey],
         session_id: item.session_id,
         agent_id: item.agent_id,
         updated_at: item.updated_at,
@@ -260,13 +294,14 @@ router.post('/bulk', async (req: Request, res: Response) => {
   }
 
   try {
+    const keys = await resolveKeySchema();
     let inserted = 0;
     const batches = chunk<SessionItem>(validItems, 25);
 
     for (const batch of batches) {
       const mapped = batch.map((item) => ({
-        [PARTITION_KEY]: item.session_id,
-        [SORT_KEY]: item.agent_id,
+        [keys.partitionKey]: item.session_id,
+        [keys.sortKey]: getSortKeyValue(keys.sortKey, item.session_id, item.agent_id),
         session_id: item.session_id,
         agent_id: item.agent_id,
         messages: item.messages,
@@ -305,11 +340,29 @@ router.get('/:sessionId/:agentId', async (req: Request, res: Response) => {
   const { sessionId, agentId } = req.params;
   debugLog('GET', { sessionId, agentId });
   try {
-    const result = await getClient().send(new GetCommand({
-      TableName: TABLE,
-      Key: buildSessionKey(sessionId, agentId),
-    }));
-    const messages = result.Item ? JSON.parse(result.Item.messages || '[]') : [];
+    const keys = await resolveKeySchema();
+    let item: Record<string, unknown> | undefined;
+
+    if (keys.sortKey === 'agent_id') {
+      const result = await getClient().send(new GetCommand({
+        TableName: TABLE,
+        Key: buildSessionKey(sessionId, agentId, keys.partitionKey, keys.sortKey),
+      }));
+      item = result.Item as Record<string, unknown> | undefined;
+    } else {
+      const result = await getClient().send(new QueryCommand({
+        TableName: TABLE,
+        KeyConditionExpression: '#pk = :sid',
+        ExpressionAttributeNames: { '#pk': keys.partitionKey, '#aid': 'agent_id' },
+        ExpressionAttributeValues: { ':sid': sessionId, ':aid': agentId },
+        FilterExpression: '#aid = :aid',
+        ScanIndexForward: false,
+        Limit: 25,
+      }));
+      item = result.Items?.[0] as Record<string, unknown> | undefined;
+    }
+
+    const messages = item ? JSON.parse((item.messages as string) || '[]') : [];
     res.json({ messages });
   } catch (err: any) {
     console.warn('[sessions] GET failed, returning empty history:', err.message);
@@ -322,12 +375,26 @@ router.post('/:sessionId/:agentId', async (req: Request, res: Response) => {
   const { sessionId, agentId } = req.params;
   const messages = Array.isArray(req.body.messages) ? req.body.messages : [];
   debugLog('POST', { sessionId, agentId, messageCount: messages.length });
+  let writeKeyMeta: { partitionKey: string; partitionValue: string; sortKey: string; sortValue: string } | null = null;
   try {
+    const keys = await resolveKeySchema();
+    const item = buildSessionItem(sessionId, agentId, messages, keys.partitionKey, keys.sortKey);
+    writeKeyMeta = {
+      partitionKey: keys.partitionKey,
+      partitionValue: String(item[keys.partitionKey] ?? ''),
+      sortKey: keys.sortKey,
+      sortValue: String(item[keys.sortKey] ?? ''),
+    };
     await getClient().send(new PutCommand({
       TableName: TABLE,
-      Item: buildSessionItem(sessionId, agentId, messages),
+      Item: item,
     }));
-    res.json({ ok: true, persisted: true });
+    res.json({
+      ok: true,
+      persisted: true,
+      table: TABLE,
+      writeKey: writeKeyMeta,
+    });
   } catch (err: any) {
     const errMsg = err.message || String(err);
     console.warn('[sessions] POST failed:', {
@@ -337,8 +404,9 @@ router.post('/:sessionId/:agentId', async (req: Request, res: Response) => {
       region: process.env.AWS_REGION || 'us-east-1',
       hasAccessKey: !!process.env.AWS_ACCESS_KEY_ID,
       hasSecretKey: !!process.env.AWS_SECRET_ACCESS_KEY,
+      writeKey: writeKeyMeta,
     });
-    res.json({ ok: true, persisted: false, error: errMsg });
+    res.json({ ok: true, persisted: false, error: errMsg, table: TABLE, writeKey: writeKeyMeta });
   }
 });
 
@@ -347,10 +415,33 @@ router.delete('/:sessionId/:agentId', async (req: Request, res: Response) => {
   const { sessionId, agentId } = req.params;
   debugLog('DELETE', { sessionId, agentId });
   try {
-    await getClient().send(new DeleteCommand({
-      TableName: TABLE,
-      Key: buildSessionKey(sessionId, agentId),
-    }));
+    const keys = await resolveKeySchema();
+    if (keys.sortKey === 'agent_id') {
+      await getClient().send(new DeleteCommand({
+        TableName: TABLE,
+        Key: buildSessionKey(sessionId, agentId, keys.partitionKey, keys.sortKey),
+      }));
+    } else {
+      const latest = await getClient().send(new QueryCommand({
+        TableName: TABLE,
+        KeyConditionExpression: '#pk = :sid',
+        ExpressionAttributeNames: { '#pk': keys.partitionKey, '#aid': 'agent_id' },
+        ExpressionAttributeValues: { ':sid': sessionId, ':aid': agentId },
+        FilterExpression: '#aid = :aid',
+        ScanIndexForward: false,
+        Limit: 25,
+      }));
+      const item = latest.Items?.[0] as Record<string, unknown> | undefined;
+      if (item) {
+        const sortValue = String(item[keys.sortKey] ?? '');
+        if (sortValue) {
+          await getClient().send(new DeleteCommand({
+            TableName: TABLE,
+            Key: buildSessionKey(sessionId, sortValue, keys.partitionKey, keys.sortKey),
+          }));
+        }
+      }
+    }
     res.json({ ok: true, persisted: true });
   } catch (err: any) {
     console.warn('[sessions] DELETE failed, skipping remote delete:', err.message);
