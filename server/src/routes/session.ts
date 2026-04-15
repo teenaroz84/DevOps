@@ -18,7 +18,7 @@
  */
 import { Router, Request, Response } from 'express';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DeleteCommand, DynamoDBDocumentClient, GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
+import { BatchWriteCommand, DeleteCommand, DynamoDBDocumentClient, GetCommand, PutCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 
 const router = Router();
 
@@ -40,6 +40,214 @@ function debugLog(event: string, details?: Record<string, unknown>): void {
   if (!DEBUG_SESSIONS) return;
   details ? console.log(`[sessions] ${event}`, details) : console.log(`[sessions] ${event}`);
 }
+
+type SessionRecordInput = {
+  session_id?: string;
+  sessionId?: string;
+  agent_id?: string;
+  agentId?: string;
+  messages?: unknown[] | string;
+  updated_at?: string;
+  updatedAt?: string;
+  ttl?: number;
+};
+
+type SessionItem = {
+  session_id: string;
+  agent_id: string;
+  messages: string;
+  updated_at: string;
+  ttl: number;
+};
+
+function toSessionItem(record: SessionRecordInput): SessionItem | null {
+  const session_id = record.session_id ?? record.sessionId;
+  const agent_id = record.agent_id ?? record.agentId;
+  if (!session_id || !agent_id) return null;
+
+  const rawMessages = Array.isArray(record.messages)
+    ? record.messages
+    : (() => {
+        if (typeof record.messages !== 'string') return [];
+        try {
+          const parsed = JSON.parse(record.messages);
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {
+          return [];
+        }
+      })();
+
+  return {
+    session_id,
+    agent_id,
+    messages: JSON.stringify(rawMessages),
+    updated_at: record.updated_at ?? record.updatedAt ?? new Date().toISOString(),
+    ttl: Number.isFinite(record.ttl) ? Number(record.ttl) : Math.floor(Date.now() / 1000) + TTL_SECONDS,
+  };
+}
+
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) {
+    out.push(arr.slice(i, i + size));
+  }
+  return out;
+}
+
+// ─── Diagnostic endpoints (MUST come first, before parametrized routes) ──────
+
+// GET /api/sessions/diagnostic/health
+router.get('/diagnostic/health', async (req: Request, res: Response) => {
+  const table = process.env.SESSIONS_TABLE || 'ChatSessions';
+  const region = process.env.AWS_REGION || 'us-east-1';
+  const hasAccessKey = !!process.env.AWS_ACCESS_KEY_ID;
+  const hasSecretKey = !!process.env.AWS_SECRET_ACCESS_KEY;
+  
+  res.json({
+    status: 'Server OK',
+    config: {
+      table,
+      region,
+      hasAccessKey,
+      hasSecretKey,
+      isDev: process.env.NODE_ENV !== 'production',
+    },
+    credentials: {
+      method: hasAccessKey && hasSecretKey ? 'Environment Variables' : 'Instance Role / Default Chain',
+      configured: hasAccessKey && hasSecretKey,
+    }
+  });
+});
+
+// GET /api/sessions/diagnostic/dynamodb
+router.get('/diagnostic/dynamodb', async (req: Request, res: Response) => {
+  const table = process.env.SESSIONS_TABLE || 'ChatSessions';
+  const region = process.env.AWS_REGION || 'us-east-1';
+  
+  try {
+    const result = await getClient().send(new GetCommand({
+      TableName: table,
+      Key: { 
+        session_id: '__test__', 
+        agent_id: '__test__' 
+      },
+    }));
+    
+    res.json({
+      status: 'DynamoDB Connected',
+      table,
+      region,
+      canRead: true,
+      itemExists: !!result.Item
+    });
+  } catch (err: any) {
+    res.json({
+      status: 'DynamoDB Connection Failed',
+      table,
+      region,
+      error: err.message || String(err),
+      code: err.code || 'UNKNOWN',
+      hint: 
+        err.code === 'ResourceNotFoundException' 
+          ? `Table "${table}" does not exist in region ${region}`
+          : err.code === 'UnrecognizedClientException'
+          ? 'AWS credentials not configured (missing AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY or instance role)'
+          : err.code === 'ValidationException'
+          ? 'Invalid table name or request'
+          : 'Check AWS credentials, table name, and region'
+    });
+  }
+});
+
+// GET /api/sessions/diagnostic/sample-item
+router.get('/diagnostic/sample-item', async (_req: Request, res: Response) => {
+  try {
+    const result = await getClient().send(new ScanCommand({
+      TableName: TABLE,
+      Limit: 1,
+    }));
+
+    if (!result.Items || result.Items.length === 0) {
+      res.json({ ok: true, table: TABLE, hasItems: false, sample: null });
+      return;
+    }
+
+    const item = result.Items[0] as Record<string, unknown>;
+    const messagesStr = typeof item.messages === 'string' ? item.messages : '';
+    let messageCount = 0;
+    try {
+      const parsed = JSON.parse(messagesStr || '[]');
+      messageCount = Array.isArray(parsed) ? parsed.length : 0;
+    } catch {
+      messageCount = 0;
+    }
+
+    res.json({
+      ok: true,
+      table: TABLE,
+      hasItems: true,
+      sample: {
+        session_id: item.session_id,
+        agent_id: item.agent_id,
+        updated_at: item.updated_at,
+        ttl: item.ttl,
+        messageCount,
+      },
+    });
+  } catch (err: any) {
+    res.json({
+      ok: false,
+      table: TABLE,
+      error: err.message || String(err),
+      code: err.code || 'UNKNOWN',
+    });
+  }
+});
+
+// POST /api/sessions/bulk
+// Body: { records: Array<{session_id, agent_id, messages, updated_at?, ttl?}> }
+router.post('/bulk', async (req: Request, res: Response) => {
+  const rawRecords: SessionRecordInput[] = Array.isArray(req.body?.records) ? req.body.records : [];
+  const validItems: SessionItem[] = rawRecords
+    .map((record: SessionRecordInput) => toSessionItem(record))
+    .filter((item: SessionItem | null): item is SessionItem => item !== null);
+
+  if (rawRecords.length === 0) {
+    res.status(400).json({ ok: false, error: 'records[] is required' });
+    return;
+  }
+
+  try {
+    let inserted = 0;
+    const batches = chunk<SessionItem>(validItems, 25);
+
+    for (const batch of batches) {
+      await getClient().send(new BatchWriteCommand({
+        RequestItems: {
+          [TABLE]: batch.map((item) => ({ PutRequest: { Item: item } })),
+        },
+      }));
+      inserted += batch.length;
+    }
+
+    res.json({
+      ok: true,
+      table: TABLE,
+      requested: rawRecords.length,
+      inserted,
+      skipped: rawRecords.length - validItems.length,
+    });
+  } catch (err: any) {
+    res.status(500).json({
+      ok: false,
+      table: TABLE,
+      error: err.message || String(err),
+      code: err.code || 'UNKNOWN',
+    });
+  }
+});
+
+// ─── Session persistence routes ──────────────────────────────────────────────
 
 // GET /api/sessions/:sessionId/:agentId
 router.get('/:sessionId/:agentId', async (req: Request, res: Response) => {
@@ -105,69 +313,5 @@ router.delete('/:sessionId/:agentId', async (req: Request, res: Response) => {
   }
 });
 
-// ─── Diagnostic endpoints ───────────────────────────────────────────────────
-
-// GET /api/sessions/diagnostic/health
-router.get('/diagnostic/health', async (req: Request, res: Response) => {
-  const table = process.env.SESSIONS_TABLE || 'ChatSessions';
-  const region = process.env.AWS_REGION || 'us-east-1';
-  const hasAccessKey = !!process.env.AWS_ACCESS_KEY_ID;
-  const hasSecretKey = !!process.env.AWS_SECRET_ACCESS_KEY;
-  
-  res.json({
-    status: 'Server OK',
-    config: {
-      table,
-      region,
-      hasAccessKey,
-      hasSecretKey,
-      isDev: process.env.NODE_ENV !== 'production',
-    },
-    credentials: {
-      method: hasAccessKey && hasSecretKey ? 'Environment Variables' : 'Instance Role / Default Chain',
-      configured: hasAccessKey && hasSecretKey,
-    }
-  });
-});
-
-// GET /api/sessions/diagnostic/dynamodb
-router.get('/diagnostic/dynamodb', async (req: Request, res: Response) => {
-  const table = process.env.SESSIONS_TABLE || 'ChatSessions';
-  const region = process.env.AWS_REGION || 'us-east-1';
-  
-  try {
-    const result = await getClient().send(new GetCommand({
-      TableName: table,
-      Key: { 
-        session_id: '__test__', 
-        agent_id: '__test__' 
-      },
-    }));
-    
-    res.json({
-      status: 'DynamoDB Connected',
-      table,
-      region,
-      canRead: true,
-      itemExists: !!result.Item
-    });
-  } catch (err: any) {
-    res.json({
-      status: 'DynamoDB Connection Failed',
-      table,
-      region,
-      error: err.message || String(err),
-      code: err.code || 'UNKNOWN',
-      hint: 
-        err.code === 'ResourceNotFoundException' 
-          ? `Table "${table}" does not exist in region ${region}`
-          : err.code === 'UnrecognizedClientException'
-          ? 'AWS credentials not configured (missing AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY or instance role)'
-          : err.code === 'ValidationException'
-          ? 'Invalid table name or request'
-          : 'Check AWS credentials, table name, and region'
-    });
-  }
-});
-
 export default router;
+
