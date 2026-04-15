@@ -83,7 +83,7 @@ router.get('/missed-incidents', async (req: Request, res: Response) => {
                sn.sninc_priority,
                sn.sninc_applkp_pltf_nm,
                CASE 
-                 WHEN EXTRACT(EPOCH FROM (NOW() - sn.sninc_created_on::timestamp)) / 3600 > 
+                 WHEN EXTRACT(EPOCH FROM (NOW() - sn.sninc_opened_at::timestamp)) / 3600 > 
                       SUBSTRING(sg.resolution_sla, 1, POSITION(' ' IN sg.resolution_sla) - 1)::int * 
                       CASE WHEN sg.resolution_sla ILIKE '%day%' THEN 24
                            WHEN sg.resolution_sla ILIKE '%hr%' THEN 1
@@ -189,7 +189,7 @@ router.get('/incident-detail', async (req: Request, res: Response) => {
     const days = parseDays(req.query);
     const priority = req.query.priority as string | undefined;
     const platform = req.query.platform as string | undefined;
-    const priorities = priority ? [priority] : ['P1', 'P2', 'P3', 'P4'];
+    const priorities = priority ? [priority] : ['P1', 'P2', 'P3', 'P4', 'P5'];
     const params: any[] = [priorities];
     let platformClause = '';
     if (platform) {
@@ -198,10 +198,10 @@ router.get('/incident-detail', async (req: Request, res: Response) => {
     }
     const result = await pool.query(`
       SELECT sninc_inc_num, priority_field, sninc_capability, sninc_short_desc, sninc_assignment_grp, response_sla, resolution_sla,
-             sninc_created_on, sninc_last_updt_dttm,
-             EXTRACT(EPOCH FROM (NOW() - sninc_created_on::timestamp)) / 3600 AS elapsed_hours,
+             sninc_opened_at, sninc_last_updt_dttm,
+             EXTRACT(EPOCH FROM (NOW() - sninc_opened_at::timestamp)) / 3600 AS elapsed_hours,
              CASE 
-               WHEN EXTRACT(EPOCH FROM (NOW() - sninc_created_on::timestamp)) / 3600 > 
+               WHEN EXTRACT(EPOCH FROM (NOW() - sninc_opened_at::timestamp)) / 3600 > 
                     SUBSTRING(resolution_sla, 1, POSITION(' ' IN resolution_sla) - 1)::int * 
                     CASE WHEN resolution_sla ILIKE '%day%' THEN 24
                          WHEN resolution_sla ILIKE '%hr%' THEN 1
@@ -218,7 +218,7 @@ router.get('/incident-detail', async (req: Request, res: Response) => {
                sn.sninc_assignment_grp AS sninc_assignment_grp,
                sg.response_sla         AS response_sla,
                sg.resolution_sla       AS resolution_sla,
-               sn.sninc_created_on     AS sninc_created_on,
+               sn.sninc_opened_at      AS sninc_opened_at,
                sn.sninc_last_updt_dttm AS sninc_last_updt_dttm,
                sn.sninc_applkp_pltf_nm
         FROM   edoops.service_now_inc sn

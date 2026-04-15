@@ -129,6 +129,8 @@ const PRIORITY_CONFIG: Record<string, { color: string; bg: string }> = {
   P1: { color: '#c62828', bg: '#fce4ec' },
   P2: { color: '#e65100', bg: '#fff3e0' },
   P3: { color: '#2e7d32', bg: '#e8f5e9' },
+  P4: { color: '#1565c0', bg: '#e3f2fd' },
+  P5: { color: '#757575', bg: '#f5f5f5' },
 }
 const STATUS_CONFIG: Record<string, { color: string; bg: string }> = {
   open:        { color: '#f57c00', bg: '#fff8e1' },
@@ -748,7 +750,7 @@ export const IncidentListWidget: React.FC<{ platform?: string | null; days?: num
         <Chip label={row.priority_field} size="small"
           sx={{ height: 20, fontSize: '10px', fontWeight: 700,
             color: INCIDENT_COLORS[row.priority_field] || '#555',
-            backgroundColor: ({ P1: '#fce4ec', P2: '#fff3e0', P3: '#e8f5e9', P4: '#e3f2fd' } as Record<string,string>)[row.priority_field] || '#eee' }} />
+            backgroundColor: ({ P1: '#fce4ec', P2: '#fff3e0', P3: '#e8f5e9', P4: '#e3f2fd', P5: '#f5f5f5' } as Record<string,string>)[row.priority_field] || '#eee' }} />
       ),
     },
     { key: 'sninc_capability',     header: 'Capability',        width: 140, render: row => <Typography sx={{ fontSize: '11px', color: '#555' }}>{row.sninc_capability || '—'}</Typography> },
@@ -775,12 +777,12 @@ export const IncidentListWidget: React.FC<{ platform?: string | null; days?: num
               InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 14, color: '#aaa' }} /></InputAdornment> }}
               sx={{ minWidth: 200, '& .MuiOutlinedInput-root': { fontSize: '11px', borderRadius: 2, height: 28 } }}
             />
-            {['All', 'P1', 'P2', 'P3', 'P4'].map(p => (
+            {['All', 'P1', 'P2', 'P3', 'P4', 'P5'].map(p => (
               <Chip key={p} label={p} size="small" onClick={() => handlePriorityChange(p)}
                 sx={{
                   fontSize: '10px', height: 22, cursor: 'pointer',
                   fontWeight: priorityFilter === p ? 700 : 400,
-                  backgroundColor: priorityFilter === p ? (({ P1: '#fce4ec', P2: '#fff3e0', P3: '#e8f5e9', P4: '#e3f2fd' } as Record<string,string>)[p] ?? '#e3f2fd') : '#f5f5f5',
+                  backgroundColor: priorityFilter === p ? (({ P1: '#fce4ec', P2: '#fff3e0', P3: '#e8f5e9', P4: '#e3f2fd', P5: '#f5f5f5' } as Record<string,string>)[p] ?? '#f5f5f5') : '#f5f5f5',
                   color: priorityFilter === p ? (INCIDENT_COLORS[p] ?? '#1565c0') : '#aaa',
                   border: priorityFilter === p ? `1px solid ${INCIDENT_COLORS[p] ?? '#1565c0'}40` : '1px solid transparent',
                   '& .MuiChip-label': { px: 1 },
@@ -950,7 +952,7 @@ export const EmergencyChangesWidget: React.FC<{ platform?: string | null }> = ({
                   label: r.priority_field || 'Unknown',
                   value: r.incident_count || 0,
                   color: PRIORITY_CONFIG[r.priority_field]?.color || '#757575',
-                  bg: r.priority_field === 'P1' ? '#fce4ec' : r.priority_field === 'P2' ? '#fff3e0' : '#e8f5e9',
+                  bg: ({ P1: '#fce4ec', P2: '#fff3e0', P3: '#e8f5e9', P4: '#e3f2fd', P5: '#f5f5f5' } as Record<string,string>)[r.priority_field] || '#f5f5f5',
                 })),
                 { label: 'Total', value: total, color: '#7b1fa2', bg: '#f3e5f5' },
               ]}

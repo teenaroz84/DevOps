@@ -288,7 +288,8 @@ const PRIORITY_COLORS: Record<string, { bg: string; color: string; border: strin
   P1: { bg: '#fce4ec', color: '#c62828', border: '#ef9a9a' },
   P2: { bg: '#fff3e0', color: '#e65100', border: '#ffcc80' },
   P3: { bg: '#e8f5e9', color: '#2e7d32', border: '#a5d6a7' },
-  P4: { bg: '#f3e5f5', color: '#6a1b9a', border: '#ce93d8' },
+  P4: { bg: '#e3f2fd', color: '#1565c0', border: '#90caf9' },
+  P5: { bg: '#f5f5f5', color: '#757575', border: '#bdbdbd' },
 }
 
 const SnIncidentDetail: React.FC<{ data: { priority: string; count: number; source?: string; platform?: string; days?: number } }> = ({ data }) => {

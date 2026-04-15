@@ -6,7 +6,7 @@ All queries run against **PostgreSQL** via `getPgPool()` in `server/src/routes/t
 
 | Table | Schema | Description |
 |---|---|---|
-| `talend_logs` | `edoops` | One row per log entry — task execution details, log level, message, timestamps |
+| `talend_logs_dashboard` | `edoops` | One row per Talend task execution log entry — pre-aggregated log counts, task metadata, timestamps |
 
 **Key columns:**
 
@@ -18,87 +18,119 @@ All queries run against **PostgreSQL** via `getPgPool()` in `server/src/routes/t
 | `workspace_name` | Talend workspace the task belongs to |
 | `environment_name` | Target environment |
 | `remote_engine_name` | Remote engine used for execution |
-| `artifact_name` / `artifact_version` | Deployed artifact details |
+| `artifact_name` | Deployed artifact name |
+| `artifact_version` | Deployed artifact version |
 | `run_type` | Trigger type (manual, scheduled, etc.) |
 | `count_of_attempts` | Retry count |
-| `execution_timestamp` | When the execution completed |
+| `start_timestamp` | When the execution started |
 | `trigger_timestamp` | When the execution was triggered |
-| `level_text` | Log level: `FATAL`, `ERROR`, `WARN`, `INFO`, `DEBUG`, `TRACE` |
-| `message_text` | Log message body |
-| `class_text` | Java class that emitted the log |
-| `thread` | Thread name |
+| `fatal_count` | Pre-aggregated count of FATAL log lines for this execution |
+| `error_count` | Pre-aggregated count of ERROR log lines |
+| `warn_count` | Pre-aggregated count of WARN log lines |
+| `err_message_desc` | Error message description |
+
+> Note: Log level data is stored as pre-aggregated count columns (`fatal_count`, `error_count`, `warn_count`) — not as individual per-row log entries with a `level_text` field.
+
+---
+
+## Query Helper
+
+### `daysClause(?days=N)`
+All endpoints accept `?days=N` (default `7`, clamped `1`–`15`). Returns a SQL fragment that filters on `start_timestamp`:
+
+```sql
+AND start_timestamp >= NOW() - INTERVAL '<N> days'
+```
 
 ---
 
 ## 1. Summary / Overview
 
-### GET `/api/talend/summary`
+### GET `/api/talend/summary?days=<n>`
 KPI widgets: status breakdown donut, top workspaces, top remote engines.  
 Runs 3 queries in parallel via `Promise.all`.
 
 **Execution status breakdown:**
 ```sql
 SELECT execution_status, COUNT(*)::int AS cnt
-FROM edoops.talend_logs
+FROM edoops.talend_logs_dashboard
 WHERE execution_status IS NOT NULL
+  AND start_timestamp >= NOW() - INTERVAL '<N> days'
 GROUP BY execution_status
 ORDER BY cnt DESC
-LIMIT 20
 ```
 
-**Top 10 workspaces by activity:**
+**Top workspaces by activity:**
 ```sql
 SELECT workspace_name, COUNT(*)::int AS cnt
-FROM edoops.talend_logs
+FROM edoops.talend_logs_dashboard
 WHERE workspace_name IS NOT NULL
+  AND start_timestamp >= NOW() - INTERVAL '<N> days'
 GROUP BY workspace_name
 ORDER BY cnt DESC
-LIMIT 10
 ```
 
-**Top 10 remote engines by activity:**
+**Top remote engines by activity:**
 ```sql
 SELECT remote_engine_name, COUNT(*)::int AS cnt
-FROM edoops.talend_logs
+FROM edoops.talend_logs_dashboard
 WHERE remote_engine_name IS NOT NULL
+  AND start_timestamp >= NOW() - INTERVAL '<N> days'
 GROUP BY remote_engine_name
 ORDER BY cnt DESC
-LIMIT 10
 ```
+
+**Response:**
+```json
+{
+  "statusBreakdown": [{ "status", "count", "color" }],
+  "workspaces": [{ "name", "count" }],
+  "engines": [{ "name", "count" }]
+}
+```
+
+**Status color mapping:**
+
+| Status | Color |
+|---|---|
+| `EXECUTION_SUCCESS` / `SUCCESS` | `#2e7d32` |
+| `EXECUTION_FAILED` / `FAILED` | `#d32f2f` |
+| `EXECUTION_RUNNING` / `RUNNING` | `#f57c00` |
+| (other) | `#78909c` |
 
 ---
 
 ## 2. Log Level Distribution
 
-### GET `/api/talend/level-counts`
-Bar/donut chart — log entry counts grouped by severity level.
+### GET `/api/talend/level-counts?days=<n>`
+Bar/donut chart — FATAL / ERROR / WARN totals derived from pre-aggregated count columns.
 
 ```sql
-SELECT level_text, COUNT(*)::int AS cnt
-FROM edoops.talend_logs
-WHERE level_text IS NOT NULL
-GROUP BY level_text
-ORDER BY cnt DESC
-LIMIT 20
+SELECT
+  SUM(COALESCE(fatal_count, 0))::int AS fatal,
+  SUM(COALESCE(error_count, 0))::int AS error,
+  SUM(COALESCE(warn_count,  0))::int AS warn
+FROM edoops.talend_logs_dashboard
+WHERE 1=1
+  AND start_timestamp >= NOW() - INTERVAL '<N> days'
 ```
 
-**Color mapping:**
+**Response:** `[{ level, count, color }]`
 
 | Level | Color |
 |---|---|
 | FATAL | `#c62828` |
 | ERROR | `#e53935` |
 | WARN | `#f57c00` |
-| INFO | `#1565c0` |
-| DEBUG | `#78909c` |
-| TRACE | `#9e9e9e` |
+
+> INFO and DEBUG are **not** tracked — the table only stores `fatal_count`, `error_count`, and `warn_count`.
 
 ---
 
 ## 3. Recent Task Executions Table
 
-### GET `/api/talend/recent-tasks`
-Latest 50 unique task executions — de-duplicated by `task_execution_id`, ordered by most recent `execution_timestamp`.
+### GET `/api/talend/recent-tasks?days=<n>`
+Unique task executions — de-duplicated by `task_execution_id`, ordered by most recent `start_timestamp`.
 
 ```sql
 SELECT DISTINCT ON (task_execution_id)
@@ -112,50 +144,60 @@ SELECT DISTINCT ON (task_execution_id)
   artifact_version,
   run_type,
   count_of_attempts,
-  execution_timestamp,
+  start_timestamp,
   trigger_timestamp
-FROM edoops.talend_logs
+FROM edoops.talend_logs_dashboard
 WHERE task_execution_id IS NOT NULL
-ORDER BY task_execution_id, execution_timestamp DESC NULLS LAST
-LIMIT 50
+  AND start_timestamp >= NOW() - INTERVAL '<N> days'
+ORDER BY task_execution_id, start_timestamp DESC NULLS LAST
 ```
 
-> `DISTINCT ON` PostgreSQL extension ensures one row per `task_execution_id`, selecting the latest log entry for that execution.
+> `DISTINCT ON` keeps only the latest row per `task_execution_id`. No row cap — all matching executions within the date window are returned.
 
 ---
 
 ## 4. Recent Errors Table
 
-### GET `/api/talend/recent-errors`
-Latest 50 `FATAL` or `ERROR` log entries with truncated message text.
+### GET `/api/talend/recent-errors?days=<n>`
+Executions that had fatal / error / warn log counts > 0, ordered by most recent start.
 
 ```sql
 SELECT
-  execution_timestamp,
+  start_timestamp,
   task_name,
-  level_text,
   workspace_name,
   remote_engine_name,
   artifact_name,
-  LEFT(message_text, 300) AS message_text,
-  class_text,
-  thread
-FROM edoops.talend_logs
-WHERE level_text IN ('FATAL', 'ERROR')
-  AND message_text IS NOT NULL
-ORDER BY execution_timestamp DESC NULLS LAST
-LIMIT 50
+  err_message_desc,
+  COALESCE(fatal_count, 0)::int AS fatal_count,
+  COALESCE(error_count, 0)::int AS error_count,
+  COALESCE(warn_count,  0)::int AS warn_count,
+  CASE
+    WHEN COALESCE(fatal_count, 0) > 0 THEN 'FATAL'
+    WHEN COALESCE(error_count, 0) > 0 THEN 'ERROR'
+    WHEN COALESCE(warn_count,  0) > 0 THEN 'WARN'
+    ELSE 'UNKNOWN'
+  END AS derived_level
+FROM edoops.talend_logs_dashboard
+WHERE (
+  COALESCE(fatal_count, 0) > 0 OR
+  COALESCE(error_count, 0) > 0 OR
+  COALESCE(warn_count,  0) > 0
+)
+  AND start_timestamp >= NOW() - INTERVAL '<N> days'
+ORDER BY start_timestamp DESC NULLS LAST
 ```
 
-> `message_text` is truncated to 300 characters via `LEFT()` to keep payloads manageable.
+> `derived_level` is a server-computed CASE expression — not a stored column. No message text truncation (no `message_text` / `class_text` / `thread` columns in this table).
 
 ---
 
 ## Implementation Notes
 
 - **Connection**: `getPgPool()` from `server/src/db/postgres.ts`
+- **Table**: `edoops.talend_logs_dashboard` (not `edoops.talend_logs`)
 - **Error handling**: `safeQuery()` helper swallows query errors and returns a fallback `[]`
-- **De-duplication**: `recent-tasks` uses PostgreSQL `DISTINCT ON` to return one row per execution
-- **Message truncation**: Error messages capped at 300 characters in the query itself
-- **Row limits**: All queries cap at 20–50 rows to keep network payloads small
-- **Status color mapping**: Resolved server-side; `EXECUTION_SUCCESS` → `#2e7d32`, `EXECUTION_FAILED` → `#d32f2f`, `EXECUTION_RUNNING` → `#f57c00`
+- **Days filter**: Applied via `daysClause()` on `start_timestamp`; default 7 days, max 15
+- **De-duplication**: `recent-tasks` uses `DISTINCT ON (task_execution_id)` to return one row per execution
+- **Log counts**: Level data is pre-aggregated per row (`fatal_count`, `error_count`, `warn_count`) — no per-row log-line table
+- **Status color mapping**: Resolved server-side in the summary response
