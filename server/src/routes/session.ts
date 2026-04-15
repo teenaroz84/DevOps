@@ -63,7 +63,7 @@ async function resolveKeySchema(): Promise<{ partitionKey: string; sortKey: stri
 
 function getSortKeyValue(sortKey: string, sessionId: string, agentId: string): string {
   if (sortKey === 'agent_id') return agentId;
-  if (sortKey === 'session_id_timestamp') return `${sessionId}_${Date.now()}`;
+  if (sortKey === 'session_id_timestamp') return `${agentId}#${Date.now()}`;
   return agentId;
 }
 
@@ -149,6 +149,49 @@ function chunk<T>(arr: T[], size: number): T[][] {
     out.push(arr.slice(i, i + size));
   }
   return out;
+}
+
+async function findLatestAgentItem(
+  sessionId: string,
+  agentId: string,
+  partitionKey: string,
+  sortKey: string,
+): Promise<Record<string, unknown> | undefined> {
+  // Fast path for new format: session_id_timestamp = "<agentId>#<epoch>"
+  if (sortKey === 'session_id_timestamp') {
+    const prefixed = await getClient().send(new QueryCommand({
+      TableName: TABLE,
+      KeyConditionExpression: '#pk = :sid AND begins_with(#sk, :prefix)',
+      ExpressionAttributeNames: { '#pk': partitionKey, '#sk': sortKey },
+      ExpressionAttributeValues: { ':sid': sessionId, ':prefix': `${agentId}#` },
+      ScanIndexForward: false,
+      Limit: 1,
+    }));
+    if (prefixed.Items && prefixed.Items.length > 0) {
+      return prefixed.Items[0] as Record<string, unknown>;
+    }
+  }
+
+  // Fallback for older rows where sort key isn't agent-prefixed.
+  let cursor: Record<string, unknown> | undefined;
+  for (let page = 0; page < 20; page += 1) {
+    const result = await getClient().send(new QueryCommand({
+      TableName: TABLE,
+      KeyConditionExpression: '#pk = :sid',
+      ExpressionAttributeNames: { '#pk': partitionKey },
+      ExpressionAttributeValues: { ':sid': sessionId },
+      ScanIndexForward: false,
+      Limit: 100,
+      ExclusiveStartKey: cursor,
+    }));
+
+    const hit = (result.Items || []).find((i) => String((i as Record<string, unknown>).agent_id ?? '') === agentId);
+    if (hit) return hit as Record<string, unknown>;
+    if (!result.LastEvaluatedKey) break;
+    cursor = result.LastEvaluatedKey as Record<string, unknown>;
+  }
+
+  return undefined;
 }
 
 // ─── Diagnostic endpoints (MUST come first, before parametrized routes) ──────
@@ -350,16 +393,7 @@ router.get('/:sessionId/:agentId', async (req: Request, res: Response) => {
       }));
       item = result.Item as Record<string, unknown> | undefined;
     } else {
-      const result = await getClient().send(new QueryCommand({
-        TableName: TABLE,
-        KeyConditionExpression: '#pk = :sid',
-        ExpressionAttributeNames: { '#pk': keys.partitionKey, '#aid': 'agent_id' },
-        ExpressionAttributeValues: { ':sid': sessionId, ':aid': agentId },
-        FilterExpression: '#aid = :aid',
-        ScanIndexForward: false,
-        Limit: 25,
-      }));
-      item = result.Items?.[0] as Record<string, unknown> | undefined;
+      item = await findLatestAgentItem(sessionId, agentId, keys.partitionKey, keys.sortKey);
     }
 
     const messages = item ? JSON.parse((item.messages as string) || '[]') : [];
@@ -422,16 +456,7 @@ router.delete('/:sessionId/:agentId', async (req: Request, res: Response) => {
         Key: buildSessionKey(sessionId, agentId, keys.partitionKey, keys.sortKey),
       }));
     } else {
-      const latest = await getClient().send(new QueryCommand({
-        TableName: TABLE,
-        KeyConditionExpression: '#pk = :sid',
-        ExpressionAttributeNames: { '#pk': keys.partitionKey, '#aid': 'agent_id' },
-        ExpressionAttributeValues: { ':sid': sessionId, ':aid': agentId },
-        FilterExpression: '#aid = :aid',
-        ScanIndexForward: false,
-        Limit: 25,
-      }));
-      const item = latest.Items?.[0] as Record<string, unknown> | undefined;
+      const item = await findLatestAgentItem(sessionId, agentId, keys.partitionKey, keys.sortKey);
       if (item) {
         const sortValue = String(item[keys.sortKey] ?? '');
         if (sortValue) {
