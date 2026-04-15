@@ -150,11 +150,15 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuChange
         )}
         {FULLSCREEN_AGENT_MENUS.filter((item) => !item.mockOnly || useMock).map((item) => {
           const agent = AGENTS[item.agentId]
-          return renderMenuButton(
-            item.menuId,
-            item.label,
-            <SmartToyIcon sx={{ fontSize: '20px', flexShrink: 0 }} />,
-            agent.color,
+          return (
+            <React.Fragment key={item.menuId}>
+              {renderMenuButton(
+                item.menuId,
+                item.label,
+                <SmartToyIcon sx={{ fontSize: '20px', flexShrink: 0 }} />,
+                agent.color,
+              )}
+            </React.Fragment>
           )
         })}
 

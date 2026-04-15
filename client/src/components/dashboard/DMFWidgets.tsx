@@ -540,7 +540,7 @@ const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void
               {/* ── 1. Combined Filters ────────────────────────────────────── */}
               <Box sx={{ backgroundColor: '#fff', border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
                 <Box sx={{ p: 1 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75, flexWrap: 'wrap' }}>
                     <FilterListIcon sx={{ fontSize: 15, color: '#1565c0' }} />
                     <Typography sx={{ fontWeight: 700, fontSize: '12px', color: '#37474f' }}>Filters</Typography>
                     <Typography sx={{ fontSize: '11px', color: '#aaa', ml: 0.5 }}>
@@ -550,31 +550,6 @@ const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void
                           ? `${lineageMeta?.sourceCodes.length ?? 0} sources · ${(lineageCounts?.total ?? 0).toLocaleString()} total jobs`
                           : `${(lineageCounts?.total ?? 0).toLocaleString()} jobs · page ${lineageJobsPage + 1} of ${Math.ceil(lineageJobsTotal / lineageJobsPageSize) || 1}`}
                     </Typography>
-                    <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1 }}>
-                      {(hasDraft || isFiltered || hasSubFilters) && (
-                        <Button
-                          size="small"
-                          onClick={handleClearAll}
-                          sx={{ fontSize: '11px', color: '#d32f2f', textTransform: 'none', height: 26, minWidth: 'auto', px: 1 }}
-                        >
-                          Clear All
-                        </Button>
-                      )}
-                      <Button
-                        size="small"
-                        variant="contained"
-                        disabled={!isDirty}
-                        onClick={handleApplyFilters}
-                        sx={{
-                          fontSize: '11px', fontWeight: 700, height: 26, px: 1.5,
-                          textTransform: 'none',
-                          backgroundColor: isDirty ? '#1565c0' : undefined,
-                          '&:hover': { backgroundColor: '#0d47a1' },
-                        }}
-                      >
-                        Apply Filters
-                      </Button>
-                    </Box>
                   </Box>
                   <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'flex-start' }}>
                     {/* Source — searchable, clearable single-select */}
@@ -665,6 +640,31 @@ const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void
                       }
                       ListboxProps={{ sx: { fontSize: '12px' } }}
                     />
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, alignSelf: 'center' }}>
+                      {(hasDraft || isFiltered || hasSubFilters) && (
+                        <Button
+                          size="small"
+                          onClick={handleClearAll}
+                          sx={{ fontSize: '12px', color: '#d32f2f', textTransform: 'none', height: 34, px: 2.5 }}
+                        >
+                          Clear Filters
+                        </Button>
+                      )}
+                      <Button
+                        size="small"
+                        variant="contained"
+                        disabled={!isDirty}
+                        onClick={handleApplyFilters}
+                        sx={{
+                          fontSize: '13px', fontWeight: 700, height: 34, px: 3,
+                          textTransform: 'none',
+                          backgroundColor: isDirty ? '#1565c0' : undefined,
+                          '&:hover': { backgroundColor: '#0d47a1' },
+                        }}
+                      >
+                        Apply Filters
+                      </Button>
+                    </Box>
                   </Box>
                 </Box>
 
@@ -871,35 +871,10 @@ const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void
             {/* Analytics Filter Bar */}
             <Box sx={{ backgroundColor: '#fff', border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
               <Box sx={{ p: 1 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75, flexWrap: 'wrap' }}>
                   <FilterListIcon sx={{ fontSize: 15, color: '#1976d2' }} />
                   <Typography sx={{ fontWeight: 700, fontSize: '12px', color: '#37474f' }}>Filters</Typography>
                   <Typography sx={{ fontSize: '11px', color: '#aaa', ml: 0.5 }}>Select filters then hit Apply</Typography>
-                  <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1 }}>
-                    {(draftAnlSrcType !== null || draftAnlTgtTypes.length > 0 || draftAnlStepNames.length > 0 || draftAnlRunStatuses.length > 0 || anlSrcType !== null || anlTgtTypes.length > 0 || anlStepNames.length > 0 || anlRunStatuses.length > 0) && (
-                      <Button
-                        size="small"
-                        onClick={handleClearAnalytics}
-                        sx={{ fontSize: '11px', color: '#d32f2f', textTransform: 'none', height: 26, minWidth: 'auto', px: 1 }}
-                      >
-                        Clear All
-                      </Button>
-                    )}
-                    <Button
-                      size="small"
-                      variant="contained"
-                      disabled={!anlIsDirty}
-                      onClick={handleApplyAnalytics}
-                      sx={{
-                        fontSize: '11px', fontWeight: 700, height: 26, px: 1.5,
-                        textTransform: 'none',
-                        backgroundColor: anlIsDirty ? '#1976d2' : undefined,
-                        '&:hover': { backgroundColor: '#1565c0' },
-                      }}
-                    >
-                      Apply Filters
-                    </Button>
-                  </Box>
                 </Box>
                 <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'flex-start' }}>
                   {/* Source Type — single-select searchable */}
@@ -984,6 +959,31 @@ const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void
                     }
                     ListboxProps={{ sx: { fontSize: '12px' } }}
                   />
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, alignSelf: 'center' }}>
+                    {(draftAnlSrcType !== null || draftAnlTgtTypes.length > 0 || draftAnlStepNames.length > 0 || draftAnlRunStatuses.length > 0 || anlSrcType !== null || anlTgtTypes.length > 0 || anlStepNames.length > 0 || anlRunStatuses.length > 0) && (
+                      <Button
+                        size="small"
+                        onClick={handleClearAnalytics}
+                        sx={{ fontSize: '12px', color: '#d32f2f', textTransform: 'none', height: 34, px: 2.5 }}
+                      >
+                        Clear Filters
+                      </Button>
+                    )}
+                    <Button
+                      size="small"
+                      variant="contained"
+                      disabled={!anlIsDirty}
+                      onClick={handleApplyAnalytics}
+                      sx={{
+                        fontSize: '13px', fontWeight: 700, height: 34, px: 3,
+                        textTransform: 'none',
+                        backgroundColor: anlIsDirty ? '#1976d2' : undefined,
+                        '&:hover': { backgroundColor: '#1565c0' },
+                      }}
+                    >
+                      Apply Filters
+                    </Button>
+                  </Box>
                 </Box>
               </Box>
               {anlLoading && (
