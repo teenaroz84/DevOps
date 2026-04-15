@@ -6,10 +6,10 @@ import { Navigation } from './components/layout/Navigation'
 import { Dashboard } from './components/dashboard/Dashboard'
 import { ChatPanel } from './components/chat/ChatPanel'
 import { UserPreferences, WidgetPreferences } from './components/settings/UserPreferences'
-import { ExecutiveDashboard } from './components/dashboard/ExecutiveDashboard'
+import { ExecutiveDashboard, type SourceKey } from './components/dashboard/ExecutiveDashboard'
 import ExecutiveDashboardEnhanced from './components/dashboard/ExecutiveDashboardEnhanced'
 import { MockDataProvider } from './context/MockDataContext'
-import { AGENTS } from './config/agentConfig'
+import { AGENTS, FULLSCREEN_AGENT_MENUS, type FullscreenAgentMenuId } from './config/agentConfig'
 
 // Default preferences
 const DEFAULT_PREFERENCES: WidgetPreferences = {
@@ -62,9 +62,10 @@ const theme = createTheme({
 })
 
 function App() {
-  const [activeMenu, setActiveMenu] = useState<'dashboard' | 'chat' | 'preferences' | 'executive' | 'quicksight-demo'>('executive')
+  const [activeMenu, setActiveMenu] = useState<'dashboard' | 'preferences' | 'executive' | 'quicksight-demo' | FullscreenAgentMenuId>('executive')
   // null = closed; 'knowledge' | 'esp' | 'dmf' | etc = open panel for that agent
   const [openAgentId, setOpenAgentId] = useState<string | null>(null)
+  const [executiveSource, setExecutiveSource] = useState<SourceKey>('overview')
   const [preferences, setPreferences] = useState<WidgetPreferences>(DEFAULT_PREFERENCES)
   const [widgetOrder, setWidgetOrder] = useState<string[]>(DEFAULT_WIDGET_ORDER)
 
@@ -105,17 +106,35 @@ function App() {
     localStorage.setItem(`dashboardWidgetOrder:${SESSION_ID}`, JSON.stringify(widgetOrder))
   }, [widgetOrder])
 
+  const fullscreenAgentMenu = FULLSCREEN_AGENT_MENUS.find((item) => item.menuId === activeMenu)
+  const fullscreenAgentSourceMap: Partial<Record<FullscreenAgentMenuId, SourceKey>> = {
+    chat: 'overview',
+    'esp-chat': 'pipeline',
+    'dmf-chat': 'dmf',
+    'servicenow-chat': 'servicenow',
+    'talend-chat': 'logs',
+    'snowflake-chat': 'snowflake',
+  }
+
+  const handleCloseFullscreenAgent = useCallback(() => {
+    const targetSource = fullscreenAgentMenu ? fullscreenAgentSourceMap[fullscreenAgentMenu.menuId] : undefined
+    if (targetSource) {
+      setExecutiveSource(targetSource)
+    }
+    setActiveMenu('executive')
+  }, [fullscreenAgentMenu])
+
   return (
     <MockDataProvider>
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      {activeMenu === 'chat' ? (
-        // Full-screen knowledge-assistant layout (nav shortcut)
+      {fullscreenAgentMenu ? (
+        // Full-screen agent layout (nav shortcut)
         <ChatPanel
           isOpen={true}
           fullScreen={true}
-          agentConfig={AGENTS.knowledge}
-          onClose={() => setActiveMenu('executive')}
+          agentConfig={AGENTS[fullscreenAgentMenu.agentId]}
+          onClose={handleCloseFullscreenAgent}
         />
       ) : activeMenu === 'preferences' ? (
         // Preferences layout
@@ -145,6 +164,8 @@ function App() {
               <ExecutiveDashboard
                 onChatClick={handleChatClick}
                 onOpenAgent={handleOpenAgent}
+                source={executiveSource}
+                onSourceChange={setExecutiveSource}
               />
             )}
             {activeMenu === 'quicksight-demo' && (

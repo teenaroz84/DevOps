@@ -33,7 +33,7 @@ import { SESSION_ID } from '../../services/session'
 import { AGENTS } from '../../config/agentConfig'
 
 // ─── Source definitions ────────────────────────────────────
-type SourceKey = 'overview' | 'dmf' | 'servicenow' | 'logs' | 'pipeline' | 'snowflake'
+export type SourceKey = 'overview' | 'dmf' | 'servicenow' | 'logs' | 'pipeline' | 'snowflake'
 
 const SOURCES: {
   key: SourceKey
@@ -862,11 +862,15 @@ interface ExecutiveDashboardProps {
   onChatClick: () => void
   /** Opens a dashboard-specific agent panel by agent ID */
   onOpenAgent?: (agentId: string) => void
+  source?: SourceKey
+  onSourceChange?: (source: SourceKey) => void
 }
 
-export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onChatClick, onOpenAgent }) => {
+export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onChatClick, onOpenAgent, source: controlledSource, onSourceChange }) => {
   const { useMock } = useMockData()
-  const [source, setSource] = useState<SourceKey>('overview')
+  const [internalSource, setInternalSource] = useState<SourceKey>('overview')
+  const source = controlledSource ?? internalSource
+  const setSource = onSourceChange ?? setInternalSource
   const [lastUpdatedMap, setLastUpdatedMap] = useState<Partial<Record<SourceKey, Date>>>({ overview: new Date() })
   const visibleSources = SOURCES.filter(s => !s.mockOnly || useMock)
   const active = visibleSources.find(s => s.key === source) ?? visibleSources[0]!

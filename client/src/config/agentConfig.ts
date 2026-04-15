@@ -32,12 +32,20 @@ export interface AgentConfig {
   quickActions: Array<{ label: string; query: string }>
 }
 
+export type FullscreenAgentMenuId =
+  | 'chat'
+  | 'esp-chat'
+  | 'dmf-chat'
+  | 'servicenow-chat'
+  | 'talend-chat'
+  | 'snowflake-chat'
+
 // ─── Per-agent definitions ────────────────────────────────
 
 export const AGENTS: Record<string, AgentConfig> = {
   knowledge: {
     id: 'knowledge',
-    name: 'DataOps Knowledge Assistant',
+    name: 'TDD DataOps Knowledge Assistant',
     subtitle: 'Cross-platform · Documentation & Standards',
     color: '#1976d2',
     endpoint: '/api/v1/chat',
@@ -54,7 +62,7 @@ export const AGENTS: Record<string, AgentConfig> = {
 
   esp: {
     id: 'esp',
-    name: 'ESP Scheduling Agent',
+    name: 'TDD ESP Scheduling Agent',
     subtitle: 'Enterprise Scheduler Platform · Job Intelligence',
     color: '#2e7d32',
     endpoint: '/api/v1/agents/esp/chat',
@@ -71,7 +79,7 @@ export const AGENTS: Record<string, AgentConfig> = {
 
   dmf: {
     id: 'dmf',
-    name: 'DMF Pipeline Agent',
+    name: 'TDD DMF Pipeline Agent',
     subtitle: 'Data Management Framework · Pipeline Intelligence',
     color: '#1565c0',
     endpoint: '/api/v1/agents/dmf/chat',
@@ -88,7 +96,7 @@ export const AGENTS: Record<string, AgentConfig> = {
 
   servicenow: {
     id: 'servicenow',
-    name: 'ServiceNow Incident Agent',
+    name: 'TDD ServiceNow Incident Agent',
     subtitle: 'ITSM · Incidents & Problem Management',
     color: '#5c6bc0',
     endpoint: '/api/v1/agents/servicenow/chat',
@@ -105,7 +113,7 @@ export const AGENTS: Record<string, AgentConfig> = {
 
   talend: {
     id: 'talend',
-    name: 'Talend Integration Agent',
+    name: 'TDD Talend Integration Agent',
     subtitle: 'Data Integration · Job Monitoring',
     color: '#e65100',
     endpoint: '/api/v1/agents/talend/chat',
@@ -122,7 +130,7 @@ export const AGENTS: Record<string, AgentConfig> = {
 
   snowflake: {
     id: 'snowflake',
-    name: 'Snowflake Analytics Agent',
+    name: 'TDD Snowflake Analytics Agent',
     subtitle: 'Cloud Data Platform · Cost & Query Intelligence',
     color: '#0277bd',
     endpoint: '/api/v1/agents/snowflake/chat',
@@ -150,3 +158,17 @@ export const SOURCE_AGENT_MAP: Record<string, string> = {
   snowflake:  'snowflake',
   overview:   'knowledge',
 }
+
+export const FULLSCREEN_AGENT_MENUS: Array<{
+  menuId: FullscreenAgentMenuId
+  agentId: keyof typeof AGENTS
+  label: string
+  mockOnly?: boolean
+}> = [
+  { menuId: 'chat',            agentId: 'knowledge',  label: 'TDD Knowledge Assist' },
+  { menuId: 'esp-chat',        agentId: 'esp',        label: 'TDD ESP Agent' },
+  { menuId: 'dmf-chat',        agentId: 'dmf',        label: 'TDD DMF Agent' },
+  { menuId: 'servicenow-chat', agentId: 'servicenow', label: 'TDD ServiceNow Agent' },
+  { menuId: 'talend-chat',     agentId: 'talend',     label: 'TDD Talend Agent' },
+  { menuId: 'snowflake-chat',  agentId: 'snowflake',  label: 'TDD Snowflake Agent', mockOnly: true },
+]

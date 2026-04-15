@@ -8,6 +8,20 @@ import { getPgPool } from '../db/postgres';
 
 const router = Router();
 
+// ServiceNow incident tables are not fully normalized across environments.
+// Use to_jsonb(...) so missing candidate fields simply yield NULL instead of
+// breaking the query, then exclude common terminal states.
+const OPEN_INCIDENT_FILTER = `
+  COALESCE(LOWER(to_jsonb(sn) ->> 'sninc_active'), '') NOT IN ('false', 'f', '0', 'no', 'n')
+  AND COALESCE(
+    LOWER(to_jsonb(sn) ->> 'sninc_status'),
+    LOWER(to_jsonb(sn) ->> 'sninc_state'),
+    LOWER(to_jsonb(sn) ->> 'sninc_inc_state'),
+    LOWER(to_jsonb(sn) ->> 'sninc_close_state'),
+    ''
+  ) NOT IN ('closed', 'resolved', 'cancelled', 'canceled', 'complete', 'completed')
+`;
+
 // GET /api/servicenow/incidents?platform=<value>
 // Open P1/P2 incident count grouped by priority; optionally filtered by platform
 router.get('/incidents', async (req: Request, res: Response) => {
@@ -24,6 +38,7 @@ router.get('/incidents', async (req: Request, res: Response) => {
                sn.sninc_priority,
                sn.sninc_applkp_pltf_nm
         FROM   edoops.service_now_inc sn
+         WHERE  ${OPEN_INCIDENT_FILTER}
         ORDER BY sn.sninc_inc_num, sn.sninc_last_updt_dttm DESC
       ) sn
       JOIN   edoops.sla_glossary sg
@@ -56,6 +71,7 @@ router.get('/missed-incidents', async (req: Request, res: Response) => {
                sn.sninc_priority,
                sn.sninc_applkp_pltf_nm
         FROM   edoops.service_now_inc sn
+         WHERE  ${OPEN_INCIDENT_FILTER}
         ORDER BY sn.sninc_inc_num, sn.sninc_last_updt_dttm DESC
       ) sn
       JOIN   edoops.sla_glossary sg
@@ -93,6 +109,7 @@ router.get('/incident-list', async (req: Request, res: Response) => {
         FROM   edoops.service_now_inc sn
         JOIN   edoops.sla_glossary    sg
           ON   sn.sninc_priority = sg.snow_priority
+        WHERE  ${OPEN_INCIDENT_FILTER}
         ORDER BY sn.sninc_inc_num, sn.sninc_last_updt_dttm DESC
       ) latest
       WHERE  1=1
@@ -158,6 +175,7 @@ router.get('/incident-detail', async (req: Request, res: Response) => {
         FROM   edoops.service_now_inc sn
         JOIN   edoops.sla_glossary    sg
           ON   sn.sninc_priority = sg.snow_priority
+        WHERE  ${OPEN_INCIDENT_FILTER}
         ORDER BY sn.sninc_inc_num, sn.sninc_last_updt_dttm DESC
       ) latest
       WHERE  priority_field = ANY($1)
@@ -186,6 +204,7 @@ router.get('/by-capability', async (req: Request, res: Response) => {
                sn.sninc_capability,
                sn.sninc_applkp_pltf_nm
         FROM   edoops.service_now_inc sn
+         WHERE  ${OPEN_INCIDENT_FILTER}
         ORDER BY sn.sninc_inc_num, sn.sninc_last_updt_dttm DESC
       ) latest
       WHERE  sninc_capability IS NOT NULL
@@ -217,6 +236,7 @@ router.get('/by-assignment-group', async (req: Request, res: Response) => {
                sn.sninc_assignment_grp,
                sn.sninc_applkp_pltf_nm
         FROM   edoops.service_now_inc sn
+         WHERE  ${OPEN_INCIDENT_FILTER}
         ORDER BY sn.sninc_inc_num, sn.sninc_last_updt_dttm DESC
       ) latest
       WHERE  sninc_assignment_grp IS NOT NULL
@@ -247,6 +267,7 @@ router.get('/platforms', async (_req: Request, res: Response) => {
         LEFT JOIN edoops.sla_glossary sg
           ON sn.sninc_priority = sg.snow_priority
         WHERE  sn.sninc_applkp_pltf_nm IS NOT NULL
+          AND ${OPEN_INCIDENT_FILTER}
         ORDER BY sn.sninc_inc_num, sn.sninc_last_updt_dttm DESC
       ) latest
       GROUP BY platform

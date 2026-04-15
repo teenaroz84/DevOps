@@ -43,7 +43,7 @@ const pltKeysSubquery = `(SELECT keys FROM edoops.esp_plt_mapping WHERE plt_name
 
 // GET /api/esp/platform-summary
 // Streams NDJSON — one JSON line per platform.
-// Uses a single query that scans esp_job_cmnd_plt ONCE across all platforms,
+// Uses a single query that scans esp_job_cmnd ONCE across all platforms,
 // replacing the old N-separate-queries approach (one full scan per platform).
 // For EDL (25k jobs) the old approach caused 1.5min waits because each platform
 // query ran its own scan; now all aggregates are computed in one pass.
@@ -52,7 +52,7 @@ router.get('/platform-summary', async (_req: Request, res: Response) => {
     const pool = getPgPool();
     const t0 = Date.now();
 
-    // per_job: join esp_plt_mapping → esp_job_cmnd_plt, dedup jobs per platform
+    // per_job: join esp_plt_mapping → esp_job_cmnd, dedup jobs per platform
     //   (GROUP BY plt_name, jobname so a job appearing in multiple applibs
     //    is counted only once per platform, with its latest last_run_date)
     // counts: aggregate totals per platform
@@ -64,7 +64,7 @@ router.get('/platform-summary', async (_req: Request, res: Response) => {
           c.jobname,
           MAX(c.last_run_date) AS last_run_date
         FROM edoops.esp_plt_mapping m
-        JOIN edoops.esp_job_cmnd_plt c ON c.plt_name = m.keys
+        JOIN edoops.esp_job_cmnd c ON c.plt_name = m.keys
         GROUP BY m.plt_name, c.jobname
       ),
       counts AS (
@@ -143,12 +143,12 @@ router.get('/platform-applications/:platformId', async (req: Request, res: Respo
 
     const [totalResult, rowsResult] = await Promise.all([
       pool.query(
-        `SELECT COUNT(DISTINCT appl_name) AS cnt FROM edoops.esp_job_cmnd_plt
+        `SELECT COUNT(DISTINCT appl_name) AS cnt FROM edoops.esp_job_cmnd
          WHERE plt_name IN ${pltKeysSubquery} ${searchClause}`,
         params
       ),
       pool.query(
-        `SELECT DISTINCT appl_name FROM edoops.esp_job_cmnd_plt
+        `SELECT DISTINCT appl_name FROM edoops.esp_job_cmnd
          WHERE plt_name IN ${pltKeysSubquery} ${searchClause}
          ORDER BY appl_name
          LIMIT ${limit} OFFSET ${offset}`,
@@ -182,7 +182,7 @@ router.get('/platform-detail/:platformId', async (req: Request, res: Response) =
 
     const t0 = Date.now();
 
-    // Single query: scan esp_job_cmnd_plt once via MATERIALIZED CTE, derive all
+    // Single query: scan esp_job_cmnd once via MATERIALIZED CTE, derive all
     // aggregates from it. A second CTE (appl_names) extracts the 410 distinct
     // appl_name values so the successor/predecessor lookups use a small IN-list
     // instead of a JOIN against the full 25k-row base — the JOIN was causing a
@@ -191,7 +191,7 @@ router.get('/platform-detail/:platformId', async (req: Request, res: Response) =
     const result = await pool.query(`
       WITH base AS MATERIALIZED (
         SELECT jobname, appl_name, agent, jobtype, user_job, last_run_date
-        FROM edoops.esp_job_cmnd_plt
+        FROM edoops.esp_job_cmnd
         WHERE plt_name IN ${pltKeysSubquery}
       ),
       appl_names AS MATERIALIZED (
@@ -224,13 +224,13 @@ router.get('/platform-detail/:platformId', async (req: Request, res: Response) =
 
         (SELECT COALESCE(json_agg(s), '[]'::json)
          FROM (SELECT DISTINCT d.jobname, d.release AS successor_job
-               FROM edoops.esp_job_dpndnt_plt d
+               FROM edoops.esp_job_dpndnt d
                WHERE d.appl_name IN (SELECT appl_name FROM appl_names)
                ORDER BY d.jobname LIMIT 200) s) AS successors,
 
         (SELECT COALESCE(json_agg(p), '[]'::json)
          FROM (SELECT DISTINCT d.jobname, d.release AS predecessor_job
-               FROM edoops.esp_job_dpndnt_plt d
+               FROM edoops.esp_job_dpndnt d
                WHERE d.appl_name IN (SELECT appl_name FROM appl_names)
                ORDER BY d.jobname LIMIT 200) p) AS predecessors
     `, [pltName]);
@@ -281,21 +281,21 @@ router.get('/platform-job-list/:platformId', async (req: Request, res: Response)
 
     const [totalResult, jobsResult] = await Promise.all([
       pool.query(
-        `SELECT COUNT(DISTINCT jobname) AS cnt FROM edoops.esp_job_cmnd_plt WHERE plt_name IN ${pltKeysSubquery}`,
+        `SELECT COUNT(DISTINCT jobname) AS cnt FROM edoops.esp_job_cmnd WHERE plt_name IN ${pltKeysSubquery}`,
         [pltName]
       ),
       pool.query(`
         WITH filtered_jobs AS (
           SELECT DISTINCT ON (c.jobname)
             c.jobname, c.appl_name, c.jobtype AS job_type, c.last_run_date
-          FROM edoops.esp_job_cmnd_plt c
+          FROM edoops.esp_job_cmnd c
           WHERE c.plt_name IN ${pltKeysSubquery}
           ORDER BY c.jobname, c.last_run_date DESC NULLS LAST
         ),
         latest_status AS (
           SELECT DISTINCT ON (s.job_longname)
             s.job_longname, s.ccfail
-          FROM edoops.esp_job_stats_recent_plt s
+          FROM edoops.esp_job_stats_recent s
           JOIN filtered_jobs f ON f.jobname = s.job_longname AND f.appl_name = s.appl_name
           ORDER BY s.job_longname,
                    s.end_date DESC NULLS LAST, s.end_time DESC NULLS LAST,
@@ -348,8 +348,8 @@ router.get('/platform-run-trend/:platformId', async (req: Request, res: Response
     const result = await pool.query(`
       WITH base AS (
         SELECT s.end_date, s.end_time::time AS et, s.jobname, s.ccfail
-        FROM edoops.esp_job_stats_recent_plt s
-        JOIN edoops.esp_job_cmnd_plt c ON c.appl_name = s.appl_name AND c.jobname = s.job_longname
+        FROM edoops.esp_job_stats_recent s
+        JOIN edoops.esp_job_cmnd c ON c.appl_name = s.appl_name AND c.jobname = s.job_longname
         WHERE c.plt_name IN ${pltKeysSubquery}
           AND s.end_date >= CURRENT_DATE - INTERVAL '${days} days'
       )
@@ -384,7 +384,7 @@ router.get('/platform-metadata/:platformId', async (req: Request, res: Response)
     const result = await pool.query(`
       SELECT jobname, command, argument, agent, jobtype AS job_type,
              esp_command AS comp_code, runs, user_job, appl_name
-      FROM edoops.esp_job_cmnd_plt
+      FROM edoops.esp_job_cmnd
       WHERE plt_name IN ${pltKeysSubquery}
       ORDER BY jobname
     `, [plt.platform_name]);
@@ -412,8 +412,8 @@ router.get('/platform-job-run-table/:platformId', async (req: Request, res: Resp
       SELECT ec.appl_name, es.job_longname, ec.command, ec.argument, ec.runs,
              es.start_date, es.start_time, es.end_date, es.end_time,
              es.exec_qtime, es.ccfail, es.comp_code
-      FROM edoops.esp_job_cmnd_plt ec
-      JOIN edoops.esp_job_stats_recent_plt es
+      FROM edoops.esp_job_cmnd ec
+      JOIN edoops.esp_job_stats_recent es
         ON ec.appl_name = es.appl_name AND ec.jobname = es.job_longname
       WHERE ec.plt_name IN ${pltKeysSubquery}
         AND es.end_date >= CURRENT_DATE - INTERVAL '${days} days'
@@ -449,7 +449,7 @@ router.get('/applications', async (_req: Request, res: Response) => {
         c.appl_name,
         pi.platform_id,
         pi.plt_name AS platform_name
-      FROM edoops.esp_job_cmnd_plt c
+      FROM edoops.esp_job_cmnd c
       LEFT JOIN plt_ids pi ON c.plt_name IN (SELECT keys FROM edoops.esp_plt_mapping WHERE plt_name = pi.plt_name)
       ORDER BY c.appl_name
     `);
@@ -472,7 +472,7 @@ router.get('/job-list', async (_req: Request, res: Response) => {
     const pool = getPgPool();
     const result = await pool.query(`
       SELECT appl_name, last_run_date
-      FROM edoops.esp_job_cmnd_plt
+      FROM edoops.esp_job_cmnd
       ORDER BY jobname
     `);
     res.json({
@@ -493,7 +493,7 @@ router.get('/special-jobs', async (_req: Request, res: Response) => {
     const pool = getPgPool();
     const result = await pool.query(`
       SELECT appl_name, COUNT(DISTINCT jobname) AS spl_jobs
-      FROM edoops.esp_job_cmnd_plt
+      FROM edoops.esp_job_cmnd
       WHERE jobname LIKE '%JSDDELAY%' OR jobname LIKE '%RETRIG%'
       GROUP BY appl_name
     `);
@@ -516,7 +516,7 @@ router.get('/job-counts', async (_req: Request, res: Response) => {
     const result = await pool.query(`
       SELECT appl_name,
              COUNT(DISTINCT jobname) AS total_jobs
-      FROM   edoops.esp_job_cmnd_plt
+      FROM   edoops.esp_job_cmnd
       GROUP BY appl_name
       ORDER BY total_jobs DESC
     `);
@@ -539,7 +539,7 @@ router.get('/idle-jobs', async (_req: Request, res: Response) => {
     // Example: jobs not run in last 2 days (adjust as needed)
     const result = await pool.query(`
       SELECT appl_name, COUNT(DISTINCT jobname) AS idle_jobs
-      FROM edoops.esp_job_cmnd_plt
+      FROM edoops.esp_job_cmnd
       WHERE last_run_date::timestamp < NOW() - INTERVAL '2 days'
       GROUP BY appl_name
     `);
@@ -561,7 +561,7 @@ router.get('/agents', async (_req: Request, res: Response) => {
     const pool = getPgPool();
     const result = await pool.query(`
       SELECT agent, COUNT(DISTINCT jobname) AS count
-      FROM edoops.esp_job_cmnd_plt
+      FROM edoops.esp_job_cmnd
       GROUP BY agent
       ORDER BY count DESC
     `);
@@ -583,7 +583,7 @@ router.get('/job-types', async (_req: Request, res: Response) => {
     const pool = getPgPool();
     const result = await pool.query(`
       SELECT jobtype AS job_type, COUNT(DISTINCT jobname) AS count
-      FROM edoops.esp_job_cmnd_plt
+      FROM edoops.esp_job_cmnd
       GROUP BY jobtype
       ORDER BY count DESC
     `);
@@ -605,7 +605,7 @@ router.get('/user-jobs', async (_req: Request, res: Response) => {
     const pool = getPgPool();
     const result = await pool.query(`
       SELECT COALESCE(user_job, 'Null') AS user_job, COUNT(DISTINCT jobname) AS count
-      FROM edoops.esp_job_cmnd_plt
+      FROM edoops.esp_job_cmnd
       GROUP BY user_job
       ORDER BY count DESC
     `);
@@ -622,7 +622,7 @@ router.get('/user-jobs', async (_req: Request, res: Response) => {
 });
 
 // GET /api/esp/metadata/:appl_name
-// Full metadata from edoops.esp_job_cmnd_plt: jobname, command, argument, agent, jobtype, comp_code, runs, user_job
+// Full metadata from edoops.esp_job_cmnd: jobname, command, argument, agent, jobtype, comp_code, runs, user_job
 router.get('/metadata/:appl_name', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
@@ -636,7 +636,7 @@ router.get('/metadata/:appl_name', async (req: Request, res: Response) => {
               esp_command AS comp_code,
               runs,
               user_job
-      FROM edoops.esp_job_cmnd_plt
+      FROM edoops.esp_job_cmnd
        WHERE appl_name = $1
        ORDER BY jobname`,
 
@@ -659,7 +659,7 @@ router.get('/metadata/:appl_name', async (req: Request, res: Response) => {
 });
 
 // GET /api/esp/job-run-table/:appl_name?days=N
-// Joins edoops.esp_job_cmnd_plt + edoops.esp_job_stats_recent_plt for detailed run records
+// Joins edoops.esp_job_cmnd + edoops.esp_job_stats_recent for detailed run records
 router.get('/job-run-table/:appl_name', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
@@ -679,8 +679,8 @@ router.get('/job-run-table/:appl_name', async (req: Request, res: Response) => {
               es.exec_qtime,
               es.ccfail,
               es.comp_code
-      FROM edoops.esp_job_cmnd_plt ec
-      JOIN edoops.esp_job_stats_recent_plt es
+      FROM edoops.esp_job_cmnd ec
+      JOIN edoops.esp_job_stats_recent es
          ON ec.appl_name = es.appl_name
         AND ec.jobname   = es.job_longname
        WHERE ec.appl_name = $1
@@ -708,7 +708,7 @@ router.get('/job-run-table/:appl_name', async (req: Request, res: Response) => {
 });
 
 // GET /api/esp/job-run-trend/:appl_name?days=N
-// Uses edoops.esp_job_stats_recent_plt (end_time, end_date, jobname, ccfail)
+// Uses edoops.esp_job_stats_recent (end_time, end_date, jobname, ccfail)
 router.get('/job-run-trend/:appl_name', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
@@ -723,7 +723,7 @@ router.get('/job-run-trend/:appl_name', async (req: Request, res: Response) => {
            end_time::time AS et,
            jobname,
            ccfail
-         FROM edoops.esp_job_stats_recent_plt
+         FROM edoops.esp_job_stats_recent
          WHERE appl_name = $1
            AND end_date >= CURRENT_DATE - INTERVAL '${days} days'
        )
@@ -766,7 +766,7 @@ router.get('/run-trend-by-job/:jobname', async (req: Request, res: Response) => 
            end_time::time AS et,
            job_longname,
            ccfail
-         FROM edoops.esp_job_stats_recent_plt
+         FROM edoops.esp_job_stats_recent
          WHERE job_longname = $1
            AND end_date >= CURRENT_DATE - INTERVAL '${days} days'
        )
@@ -820,8 +820,8 @@ router.get('/run-trend-by-dimension', async (req: Request, res: Response) => {
            es.end_time::time AS et,
            es.job_longname,
            es.ccfail
-         FROM edoops.esp_job_stats_recent_plt es
-         JOIN edoops.esp_job_cmnd_plt ec ON ec.appl_name = es.appl_name AND ec.jobname = es.job_longname
+         FROM edoops.esp_job_stats_recent es
+         JOIN edoops.esp_job_cmnd ec ON ec.appl_name = es.appl_name AND ec.jobname = es.job_longname
          WHERE ${whereClause}
            AND es.end_date >= CURRENT_DATE - INTERVAL '$1 days'
        )
@@ -855,7 +855,7 @@ router.get('/job-run-trend', async (_req: Request, res: Response) => {
     // Example: jobs run per hour for last 2 days
     const result = await pool.query(`
       SELECT DATE_TRUNC('hour', last_run_date) AS hour, COUNT(*) AS count
-      FROM edoops.esp_job_cmnd_plt
+      FROM edoops.esp_job_cmnd
       WHERE last_run_date >= NOW() - INTERVAL '2 days'
       GROUP BY hour
       ORDER BY hour
@@ -893,31 +893,31 @@ router.get('/summary/:appl_name', async (req: Request, res: Response) => {
       jobList, trend, successors, predecessors, metadata,
     ] = await Promise.all([
       safe(() => pool.query(
-        `SELECT COUNT(DISTINCT jobname) AS cnt FROM edoops.esp_job_cmnd_plt WHERE appl_name = $1`,
+        `SELECT COUNT(DISTINCT jobname) AS cnt FROM edoops.esp_job_cmnd WHERE appl_name = $1`,
         [appl_name]).then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
 
       safe(() => pool.query(
-        `SELECT COUNT(DISTINCT jobname) AS cnt FROM edoops.esp_job_cmnd_plt WHERE appl_name = $1 AND last_run_date IS NOT NULL AND last_run_date::timestamp < NOW() - INTERVAL '2 days'`,
+        `SELECT COUNT(DISTINCT jobname) AS cnt FROM edoops.esp_job_cmnd WHERE appl_name = $1 AND last_run_date IS NOT NULL AND last_run_date::timestamp < NOW() - INTERVAL '2 days'`,
         [appl_name]).then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
 
       safe(() => pool.query(
-        `SELECT COUNT(DISTINCT jobname) AS cnt FROM edoops.esp_job_cmnd_plt WHERE appl_name = $1 AND (jobname LIKE '%JSDELAY%' OR jobname LIKE '%RETRIG%')`,
+        `SELECT COUNT(DISTINCT jobname) AS cnt FROM edoops.esp_job_cmnd WHERE appl_name = $1 AND (jobname LIKE '%JSDELAY%' OR jobname LIKE '%RETRIG%')`,
         [appl_name]).then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
 
       safe(() => pool.query(
-        `SELECT COALESCE(agent, 'Null') AS name, COUNT(*) AS count FROM edoops.esp_job_cmnd_plt WHERE appl_name = $1 GROUP BY agent ORDER BY count DESC`,
+        `SELECT COALESCE(agent, 'Null') AS name, COUNT(*) AS count FROM edoops.esp_job_cmnd WHERE appl_name = $1 GROUP BY agent ORDER BY count DESC`,
         [appl_name]).then(r => r.rows.map((x: any) => ({ name: x.name, count: parseInt(x.count) }))), []),
 
       safe(() => pool.query(
-        `SELECT COALESCE(jobtype, 'Null') AS name, COUNT(*) AS count FROM edoops.esp_job_cmnd_plt WHERE appl_name = $1 GROUP BY jobtype ORDER BY count DESC`,
+        `SELECT COALESCE(jobtype, 'Null') AS name, COUNT(*) AS count FROM edoops.esp_job_cmnd WHERE appl_name = $1 GROUP BY jobtype ORDER BY count DESC`,
         [appl_name]).then(r => r.rows.map((x: any) => ({ name: x.name, count: parseInt(x.count) }))), []),
 
       safe(() => pool.query(
-        `SELECT COALESCE(CAST(cmpl_cd AS TEXT), 'Null') AS name, COUNT(*) AS count FROM edoops.esp_job_cmnd_plt WHERE appl_name = $1 GROUP BY cmpl_cd ORDER BY count DESC`,
+        `SELECT COALESCE(CAST(cmpl_cd AS TEXT), 'Null') AS name, COUNT(*) AS count FROM edoops.esp_job_cmnd WHERE appl_name = $1 GROUP BY cmpl_cd ORDER BY count DESC`,
         [appl_name]).then(r => r.rows.map((x: any) => ({ name: x.name, count: parseInt(x.count) }))), []),
 
       safe(() => pool.query(
-        `SELECT COALESCE(user_job, 'Null') AS name, COUNT(*) AS count FROM edoops.esp_job_cmnd_plt WHERE appl_name = $1 GROUP BY user_job ORDER BY count DESC`,
+        `SELECT COALESCE(user_job, 'Null') AS name, COUNT(*) AS count FROM edoops.esp_job_cmnd WHERE appl_name = $1 GROUP BY user_job ORDER BY count DESC`,
         [appl_name]).then(r => r.rows.map((x: any) => ({ name: x.name, count: parseInt(x.count) }))), []),
 
       safe(() => pool.query(
@@ -933,13 +933,13 @@ router.get('/summary/:appl_name', async (req: Request, res: Response) => {
             END AS run_status
          FROM (
            SELECT DISTINCT ON (jobname) jobname, jobtype, last_run_date, appl_name
-           FROM edoops.esp_job_cmnd_plt
+           FROM edoops.esp_job_cmnd
            WHERE appl_name = $1
            ORDER BY jobname, last_run_date DESC NULLS LAST
          ) c
          LEFT JOIN LATERAL (
            SELECT s.ccfail
-           FROM edoops.esp_job_stats_recent_plt s
+           FROM edoops.esp_job_stats_recent s
            WHERE s.appl_name = c.appl_name
              AND s.job_longname = c.jobname
            ORDER BY s.end_date DESC NULLS LAST, s.end_time DESC NULLS LAST, s.start_date DESC NULLS LAST, s.start_time DESC NULLS LAST
@@ -950,20 +950,20 @@ router.get('/summary/:appl_name', async (req: Request, res: Response) => {
 
       safe(() => pool.query(
         `SELECT DATE(last_run_date::timestamp) AS day, EXTRACT(HOUR FROM last_run_date::timestamp)::int AS hour, COUNT(*)::int AS count
-         FROM edoops.esp_job_cmnd_plt WHERE appl_name = $1 AND last_run_date >= NOW() - INTERVAL '${days} days'
+         FROM edoops.esp_job_cmnd WHERE appl_name = $1 AND last_run_date >= NOW() - INTERVAL '${days} days'
          GROUP BY DATE(last_run_date::timestamp), EXTRACT(HOUR FROM last_run_date::timestamp) ORDER BY DATE(last_run_date::timestamp), EXTRACT(HOUR FROM last_run_date::timestamp)`,
         [appl_name]).then(r => r.rows.map((x: any) => ({ day: String(x.day), hour: parseInt(x.hour), count: parseInt(x.count) }))), []),
 
       safe(() => pool.query(
-        `SELECT jobname, release AS successor_job FROM edoops.esp_job_dpndnt_plt WHERE appl_name = $1 ORDER BY jobname`,
+        `SELECT jobname, release AS successor_job FROM edoops.esp_job_dpndnt WHERE appl_name = $1 ORDER BY jobname`,
         [appl_name]).then(r => r.rows.map((x: any) => ({ jobname: x.jobname, successor_job: x.successor_job }))), []),
 
       safe(() => pool.query(
-        `SELECT jobname, release AS predecessor_job FROM edoops.esp_job_dpndnt_plt WHERE release = $1 ORDER BY jobname`,
+        `SELECT jobname, release AS predecessor_job FROM edoops.esp_job_dpndnt WHERE release = $1 ORDER BY jobname`,
         [appl_name]).then(r => r.rows.map((x: any) => ({ jobname: x.jobname, predecessor_job: x.predecessor_job }))), []),
 
       safe(() => pool.query(
-        `SELECT jobname, command, argument FROM edoops.esp_job_cmnd_plt WHERE appl_name = $1 ORDER BY jobname`,
+        `SELECT jobname, command, argument FROM edoops.esp_job_cmnd WHERE appl_name = $1 ORDER BY jobname`,
         [appl_name]).then(r => r.rows.map((x: any) => ({ jobname: x.jobname, command: x.command ?? null, argument: x.argument ?? null }))), []),
     ]);
 
@@ -1031,7 +1031,7 @@ router.get('/summary-actual', async (_req: Request, res: Response) => {
     const pool = getPgPool();
     // Get all appl_ids
     const appsResult = await pool.query(`
-      SELECT DISTINCT appl_name FROM edoops.esp_job_cmnd_plt ORDER BY appl_name
+      SELECT DISTINCT appl_name FROM edoops.esp_job_cmnd ORDER BY appl_name
     `);
     const applNames = appsResult.rows.map((row: any) => row.appl_name);
 
@@ -1040,32 +1040,32 @@ router.get('/summary-actual', async (_req: Request, res: Response) => {
     for (const appl_name of applNames) {
       // Job count
       const jobCountResult = await pool.query(`
-        SELECT COUNT(DISTINCT jobname) AS job_count FROM edoops.esp_job_cmnd_plt WHERE appl_name = $1
+        SELECT COUNT(DISTINCT jobname) AS job_count FROM edoops.esp_job_cmnd WHERE appl_name = $1
       `, [appl_name]);
       const job_count = parseInt(jobCountResult.rows[0]?.job_count || '0', 10);
 
       // Idle job count (not run in last 2 days)
       const idleJobResult = await pool.query(`
-        SELECT COUNT(DISTINCT jobname) AS idle_job_count FROM edoops.esp_job_cmnd_plt WHERE appl_name = $1 AND last_run_date::timestamp < NOW() - INTERVAL '2 days'
+        SELECT COUNT(DISTINCT jobname) AS idle_job_count FROM edoops.esp_job_cmnd WHERE appl_name = $1 AND last_run_date::timestamp < NOW() - INTERVAL '2 days'
       `, [appl_name]);
       const idle_job_count = parseInt(idleJobResult.rows[0]?.idle_job_count || '0', 10);
 
       // Special job count
       const splJobResult = await pool.query(`
-        SELECT COUNT(DISTINCT jobname) AS spl_job_count FROM edoops.esp_job_cmnd_plt WHERE appl_name = $1 AND (jobname LIKE '%JSDDELAY%' OR jobname LIKE '%RETRIG%')
+        SELECT COUNT(DISTINCT jobname) AS spl_job_count FROM edoops.esp_job_cmnd WHERE appl_name = $1 AND (jobname LIKE '%JSDDELAY%' OR jobname LIKE '%RETRIG%')
       `, [appl_name]);
       const spl_job_count = parseInt(splJobResult.rows[0]?.spl_job_count || '0', 10);
 
       // Account (first account found for this appl_name)
       const accountResult = await pool.query(`
-        SELECT account FROM edoops.esp_job_cmnd_plt WHERE appl_name = $1 LIMIT 1
+        SELECT account FROM edoops.esp_job_cmnd WHERE appl_name = $1 LIMIT 1
       `, [appl_name]);
       const account = accountResult.rows[0]?.account || null;
 
       // Job run trend (last 2 days, jobs per hour)
       const trendResult = await pool.query(`
         SELECT DATE_TRUNC('hour', last_run_date) AS hour, COUNT(*) AS count
-        FROM edoops.esp_job_cmnd_plt
+        FROM edoops.esp_job_cmnd
         WHERE appl_name = $1 AND last_run_date >= NOW() - INTERVAL '2 days'
         GROUP BY hour
         ORDER BY hour

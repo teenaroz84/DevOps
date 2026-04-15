@@ -106,11 +106,15 @@ const DEFAULT_WELCOME: Message = {
 }
 
 export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: ChatPanelProps) {
+  const PANEL_MARGIN = 24
   // Resolved config — fall back to global knowledge agent
   const agent: AgentConfig = agentConfig ?? AGENTS.knowledge
   const [input, setInput] = useState('')
   const [expanded, setExpanded] = useState(false)
   const [showQuickActions, setShowQuickActions] = useState(true)
+  const [panelPosition, setPanelPosition] = useState({ x: PANEL_MARGIN, y: PANEL_MARGIN })
+  const [dragging, setDragging] = useState(false)
+  const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null)
 
   const WELCOME_MESSAGE: Message = React.useMemo(() => ({
     role: 'agent',
@@ -184,6 +188,75 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
   const [inputHistory, setInputHistory] = useState<string[]>([])
   const [historyIdx, setHistoryIdx] = useState(-1)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  const isMobileViewport = !fullScreen && typeof window !== 'undefined' && window.innerWidth <= 600
+  const panelWidth = isMobileViewport ? (typeof window !== 'undefined' ? window.innerWidth : 440) : (expanded ? 760 : 440)
+  const panelHeight = isMobileViewport
+    ? (typeof window !== 'undefined' ? window.innerHeight : 0)
+    : (typeof window !== 'undefined' ? Math.min(window.innerHeight - PANEL_MARGIN * 2, 820) : 780)
+
+  const clampPanelPosition = useCallback((x: number, y: number) => {
+    if (typeof window === 'undefined' || isMobileViewport) return { x: 0, y: 0 }
+    const maxX = Math.max(PANEL_MARGIN, window.innerWidth - panelWidth - PANEL_MARGIN)
+    const maxY = Math.max(PANEL_MARGIN, window.innerHeight - panelHeight - PANEL_MARGIN)
+    return {
+      x: Math.min(Math.max(PANEL_MARGIN, x), maxX),
+      y: Math.min(Math.max(PANEL_MARGIN, y), maxY),
+    }
+  }, [isMobileViewport, panelHeight, panelWidth])
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || fullScreen) return
+    if (isMobileViewport) {
+      setPanelPosition({ x: 0, y: 0 })
+      return
+    }
+    setPanelPosition(prev => {
+      const defaultX = window.innerWidth - panelWidth - PANEL_MARGIN
+      const defaultY = Math.max(PANEL_MARGIN, Math.round((window.innerHeight - panelHeight) / 2))
+      if (prev.x === PANEL_MARGIN && prev.y === PANEL_MARGIN) {
+        return clampPanelPosition(defaultX, defaultY)
+      }
+      return clampPanelPosition(prev.x, prev.y)
+    })
+  }, [clampPanelPosition, fullScreen, isMobileViewport, panelHeight, panelWidth])
+
+  useEffect(() => {
+    if (fullScreen || isMobileViewport || !dragging) return
+
+    const handleMouseMove = (event: MouseEvent) => {
+      const drag = dragRef.current
+      if (!drag) return
+      const nextX = drag.originX + (event.clientX - drag.startX)
+      const nextY = drag.originY + (event.clientY - drag.startY)
+      setPanelPosition(clampPanelPosition(nextX, nextY))
+    }
+
+    const handleMouseUp = () => {
+      dragRef.current = null
+      setDragging(false)
+    }
+
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [clampPanelPosition, dragging, fullScreen, isMobileViewport])
+
+  const handleDragStart = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (fullScreen || isMobileViewport) return
+    const target = event.target as HTMLElement
+    if (target.closest('button') || target.closest('input') || target.closest('textarea')) return
+    dragRef.current = {
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: panelPosition.x,
+      originY: panelPosition.y,
+    }
+    setDragging(true)
+  }
 
   // Persist to localStorage + DynamoDB whenever messages change
   useEffect(() => {
@@ -568,16 +641,19 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
     <Paper
       sx={{
         position: 'fixed',
-        right: 0,
-        top: 0,
-        height: '100vh',
-        width: expanded ? 760 : 440,
+        left: isMobileViewport ? 0 : panelPosition.x,
+        top: isMobileViewport ? 0 : panelPosition.y,
+        height: isMobileViewport ? '100vh' : panelHeight,
+        width: isMobileViewport ? '100%' : panelWidth,
         transition: 'width 0.22s cubic-bezier(0.4,0,0.2,1)',
         display: 'flex',
         flexDirection: 'column',
-        boxShadow: '-2px 0 12px rgba(0,0,0,0.18)',
+        boxShadow: isMobileViewport ? '-2px 0 12px rgba(0,0,0,0.18)' : '0 12px 32px rgba(0,0,0,0.22)',
         backgroundColor: '#fff',
         zIndex: 3000,
+        borderRadius: isMobileViewport ? 0 : 3,
+        overflow: 'hidden',
+        userSelect: dragging ? 'none' : 'auto',
         '@media (max-width: 600px)': {
           width: '100%',
         },
@@ -585,6 +661,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
     >
       {/* Header */}
       <Box
+        onMouseDown={handleDragStart}
         sx={{
           backgroundColor: agent.color,
           color: '#fff',
@@ -592,6 +669,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
+          cursor: isMobileViewport ? 'default' : (dragging ? 'grabbing' : 'grab'),
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>

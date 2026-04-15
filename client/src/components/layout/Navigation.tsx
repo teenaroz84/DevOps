@@ -3,7 +3,6 @@ import {
   Box,
   Drawer,
   Typography,
-  Chip,
   Divider,
   IconButton,
   Tooltip,
@@ -17,16 +16,68 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import DataObjectIcon from '@mui/icons-material/DataObject'
 import { useMockData } from '../../context/MockDataContext'
+import { AGENTS, FULLSCREEN_AGENT_MENUS, type FullscreenAgentMenuId } from '../../config/agentConfig'
 
 interface NavigationProps {
-  activeMenu: 'dashboard' | 'chat' | 'preferences' | 'executive' | 'quicksight-demo'
-  onMenuChange: (menu: 'dashboard' | 'chat' | 'preferences' | 'executive' | 'quicksight-demo') => void
+  activeMenu: 'dashboard' | 'preferences' | 'executive' | 'quicksight-demo' | FullscreenAgentMenuId
+  onMenuChange: (menu: 'dashboard' | 'preferences' | 'executive' | 'quicksight-demo' | FullscreenAgentMenuId) => void
 }
 
 export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuChange }) => {
   const [isExpanded, setIsExpanded] = useState(true)
   const drawerWidth = isExpanded ? 260 : 80
   const { useMock, toggleMock } = useMockData()
+
+  const renderMenuButton = (
+    menu: 'dashboard' | 'preferences' | 'executive' | 'quicksight-demo' | FullscreenAgentMenuId,
+    label: string,
+    icon: React.ReactNode,
+    activeColor = '#1976d2',
+    hidden = false,
+  ) => (
+    <Tooltip title={!isExpanded ? label : ''} placement="right">
+      <Box
+        component="button"
+        onClick={() => onMenuChange(menu)}
+        sx={{
+          width: isExpanded ? 'calc(100% - 24px)' : 'calc(100% - 24px)',
+          display: hidden ? 'none' : 'flex',
+          alignItems: 'center',
+          justifyContent: isExpanded ? 'flex-start' : 'center',
+          gap: isExpanded ? 2 : 0,
+          padding: '12px 16px',
+          margin: '8px 12px',
+          borderRadius: 1,
+          border: 'none',
+          backgroundColor: activeMenu === menu ? '#e3f2fd' : 'transparent',
+          color: activeMenu === menu ? activeColor : '#666',
+          cursor: 'pointer',
+          transition: 'all 0.3s ease',
+          '&:hover': {
+            backgroundColor: '#f5f5f5',
+            color: activeColor,
+          },
+        }}
+      >
+        {icon}
+        {isExpanded && (
+          <Typography
+            sx={{
+              fontSize: '14px',
+              fontWeight: activeMenu === menu ? 600 : 500,
+              color: 'inherit',
+              textAlign: 'left',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            {label}
+          </Typography>
+        )}
+      </Box>
+    </Tooltip>
+  )
 
   return (
     <Drawer
@@ -88,222 +139,28 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuChange
 
       {/* Menu Items */}
       <Box sx={{ flex: 1, px: 1, py: 2 }}>
-        {/* Executive Dashboard - First Item */}
-        <Tooltip title={!isExpanded ? 'Executive Dashboard' : ''} placement="right">
-          <Box
-            component="button"
-            onClick={() => onMenuChange('executive')}
-            sx={{
-              width: isExpanded ? 'calc(100% - 24px)' : 'calc(100% - 24px)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: isExpanded ? 'flex-start' : 'center',
-              gap: isExpanded ? 2 : 0,
-              padding: '12px 16px',
-              margin: '8px 12px',
-              borderRadius: 1,
-              border: 'none',
-              backgroundColor: activeMenu === 'executive' ? '#e3f2fd' : 'transparent',
-              color: activeMenu === 'executive' ? '#1976d2' : '#666',
-              cursor: 'pointer',
-              transition: 'all 0.3s ease',
-              '&:hover': {
-                backgroundColor: '#f5f5f5',
-                color: '#1976d2',
-              },
-            }}
-          >
-          <AnalyticsIcon sx={{ fontSize: '20px', flexShrink: 0 }} />
-          {isExpanded && (
-            <Typography
-              sx={{
-                fontSize: '14px',
-                fontWeight: activeMenu === 'executive' ? 600 : 500,
-                color: 'inherit',
-                textAlign: 'left',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-            >
-              Executive Dashboard
-            </Typography>
-          )}
-          </Box>
-        </Tooltip>
+        {renderMenuButton('executive', 'Executive Dashboard', <AnalyticsIcon sx={{ fontSize: '20px', flexShrink: 0 }} />)}
 
-        {/* Dashboard - hidden */}
-        <Tooltip title={!isExpanded ? 'Sample Dashboard' : ''} placement="right">
-          <Box
-            component="button"
-            onClick={() => onMenuChange('dashboard')}
-            sx={{
-            display: 'none',
-            alignItems: 'center',
-            justifyContent: isExpanded ? 'flex-start' : 'center',
-            gap: isExpanded ? 2 : 0,
-            padding: '12px 16px',
-            margin: '8px 12px',
-            borderRadius: 1,
-            border: 'none',
-            backgroundColor: activeMenu === 'dashboard' ? '#e3f2fd' : 'transparent',
-            color: activeMenu === 'dashboard' ? '#1976d2' : '#666',
-            cursor: 'pointer',
-            transition: 'all 0.3s ease',
-            '&:hover': {
-              backgroundColor: '#f5f5f5',
-              color: '#1976d2',
-            },
-          }}
-        >
-          <DashboardIcon sx={{ fontSize: '20px', flexShrink: 0 }} />
-          {isExpanded && (
-            <Typography
-              sx={{
-                fontSize: '14px',
-                fontWeight: activeMenu === 'dashboard' ? 600 : 500,
-                color: 'inherit',
-                textAlign: 'left',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-            >
-              Sample Dashboard
-            </Typography>
-          )}
-          </Box>
-        </Tooltip>
+        {renderMenuButton('dashboard', 'Sample Dashboard', <DashboardIcon sx={{ fontSize: '20px', flexShrink: 0 }} />, '#1976d2', true)}
 
-        {/* DataOps Assistant */}
-        <Tooltip title={!isExpanded ? 'Assistant' : ''} placement="right">
-          <Box
-            component="button"
-            onClick={() => onMenuChange('chat')}
-            sx={{
-            width: isExpanded ? 'calc(100% - 24px)' : 'calc(100% - 24px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: isExpanded ? 'flex-start' : 'center',
-            gap: isExpanded ? 2 : 0,
-            padding: '12px 16px',
-            margin: '8px 12px',
-            borderRadius: 1,
-            border: 'none',
-            backgroundColor: activeMenu === 'chat' ? '#e3f2fd' : 'transparent',
-            color: activeMenu === 'chat' ? '#1976d2' : '#666',
-            cursor: 'pointer',
-            transition: 'all 0.3s ease',
-            '&:hover': {
-              backgroundColor: '#f5f5f5',
-              color: '#1976d2',
-            },
-          }}
-        >
-          <SmartToyIcon sx={{ fontSize: '20px', flexShrink: 0 }} />
-          {isExpanded && (
-            <Typography
-              sx={{
-                fontSize: '14px',
-                fontWeight: activeMenu === 'chat' ? 600 : 500,
-                color: 'inherit',
-                textAlign: 'left',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-            >
-              Knowledge Assist
-            </Typography>
-          )}
-          </Box>
-        </Tooltip>
+        {isExpanded && (
+          <Typography sx={{ px: 3, pt: 1.5, pb: 0.5, fontSize: '10px', fontWeight: 700, color: '#90a4ae', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+            Agents
+          </Typography>
+        )}
+        {FULLSCREEN_AGENT_MENUS.filter((item) => !item.mockOnly || useMock).map((item) => {
+          const agent = AGENTS[item.agentId]
+          return renderMenuButton(
+            item.menuId,
+            item.label,
+            <SmartToyIcon sx={{ fontSize: '20px', flexShrink: 0 }} />,
+            agent.color,
+          )
+        })}
 
-        {/* QuickSight Demo - hidden */}
-        <Tooltip title={!isExpanded ? 'QuickSight' : ''} placement="right">
-          <Box
-            component="button"
-            onClick={() => onMenuChange('quicksight-demo')}
-            sx={{
-            display: 'none',
-            alignItems: 'center',
-            justifyContent: isExpanded ? 'flex-start' : 'center',
-            gap: isExpanded ? 2 : 0,
-            padding: '12px 16px',
-            margin: '8px 12px',
-            borderRadius: 1,
-            border: 'none',
-            backgroundColor: activeMenu === 'quicksight-demo' ? '#e3f2fd' : 'transparent',
-            color: activeMenu === 'quicksight-demo' ? '#1976d2' : '#666',
-            cursor: 'pointer',
-            transition: 'all 0.3s ease',
-            '&:hover': {
-              backgroundColor: '#f5f5f5',
-              color: '#1976d2',
-            },
-          }}
-        >
-          <AnalyticsIcon sx={{ fontSize: '20px', flexShrink: 0 }} />
-          {isExpanded && (
-            <Typography
-              sx={{
-                fontSize: '14px',
-                fontWeight: activeMenu === 'quicksight-demo' ? 600 : 500,
-                color: 'inherit',
-                textAlign: 'left',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-            >
-              QuickSight
-            </Typography>
-          )}
-          </Box>
-        </Tooltip>
+        {renderMenuButton('quicksight-demo', 'QuickSight', <AnalyticsIcon sx={{ fontSize: '20px', flexShrink: 0 }} />, '#1976d2', true)}
 
-        {/* User Preferences - hidden */}
-        <Tooltip title={!isExpanded ? 'Preferences' : ''} placement="right">
-          <Box
-            component="button"
-            onClick={() => onMenuChange('preferences')}
-            sx={{
-            display: 'none',
-            alignItems: 'center',
-            justifyContent: isExpanded ? 'flex-start' : 'center',
-            gap: isExpanded ? 2 : 0,
-            padding: '12px 16px',
-            margin: '8px 12px',
-            borderRadius: 1,
-            border: 'none',
-            backgroundColor: activeMenu === 'preferences' ? '#e3f2fd' : 'transparent',
-            color: activeMenu === 'preferences' ? '#1976d2' : '#666',
-            cursor: 'pointer',
-            transition: 'all 0.3s ease',
-            '&:hover': {
-              backgroundColor: '#f5f5f5',
-              color: '#1976d2',
-            },
-          }}
-        >
-          <TuneIcon sx={{ fontSize: '20px', flexShrink: 0 }} />
-          {isExpanded && (
-            <Typography
-              sx={{
-                fontSize: '14px',
-                fontWeight: activeMenu === 'preferences' ? 600 : 500,
-                color: 'inherit',
-                textAlign: 'left',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-            >
-              Preferences
-            </Typography>
-          )}
-          </Box>
-        </Tooltip>
+        {renderMenuButton('preferences', 'Preferences', <TuneIcon sx={{ fontSize: '20px', flexShrink: 0 }} />, '#1976d2', true)}
       </Box>
 
       {/* Mock Data Toggle */}
