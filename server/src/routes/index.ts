@@ -1,6 +1,15 @@
-export { default as espRoutes } from './esp';
-export { default as servicenowDbRoutes } from './servicenowDb';
-export { default as dmfDbRoutes } from './dmfDb';
-export { default as postgresDbRoutes } from './postgresDb';
-export { default as talendDbRoutes } from './talendDb';
-export { default as sessionRoutes } from './session';
+import espRoutes from './esp';
+import servicenowDbRoutes from './servicenowDb';
+import dmfDbRoutes from './dmfDb';
+import postgresDbRoutes from './postgresDb';
+import talendDbRoutes from './talendDb';
+import sessionRoutes from './session';
+
+export {
+	espRoutes,
+	servicenowDbRoutes,
+	dmfDbRoutes,
+	postgresDbRoutes,
+	talendDbRoutes,
+	sessionRoutes,
+};
