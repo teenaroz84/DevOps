@@ -127,15 +127,15 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
   // ── Session state ────────────────────────────────────────────────────────
   // Start with localStorage for instant paint, then hydrate from DynamoDB.
   const [messages, setMessages] = useState<Message[]>(() => {
-    try {
-      const saved = localStorage.getItem(`chat_history_${agent.id}`)
-      if (saved) {
-        const parsed = JSON.parse(saved) as Message[]
-        return [WELCOME_MESSAGE, ...parsed.slice(1)]
-      }
-    } catch {
-      // corrupted data — fall through
-    }
+    // try {
+    //   const saved = localStorage.getItem(`chat_history_${agent.id}`)
+    //   if (saved) {
+    //     const parsed = JSON.parse(saved) as Message[]
+    //     return [WELCOME_MESSAGE, ...parsed.slice(1)]
+    //   }
+    // } catch {
+    //   // corrupted data — fall through
+    // }
     return [WELCOME_MESSAGE]
   })
   const [sessionLoading, setSessionLoading] = useState(false)
@@ -152,7 +152,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
         })) as Message[]
         setMessages([welcome, ...typed.slice(1)])
         // Sync to localStorage so next mount is instant
-        localStorage.setItem(`chat_history_${agentId}`, JSON.stringify([welcome, ...typed.slice(1)]))
+        // localStorage.setItem(`chat_history_${agentId}`, JSON.stringify([welcome, ...typed.slice(1)]))
       } else {
         // Nothing in DynamoDB yet — keep whatever was in localStorage
         setMessages(prev => prev.length > 0 ? prev : [welcome])
@@ -167,17 +167,18 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
   // When the agent changes, reload the correct history and welcome message
   useEffect(() => {
     // Immediately paint localStorage version
-    try {
-      const saved = localStorage.getItem(`chat_history_${agent.id}`)
-      if (saved) {
-        const parsed = JSON.parse(saved) as Message[]
-        setMessages([WELCOME_MESSAGE, ...parsed.slice(1)])
-      } else {
-        setMessages([WELCOME_MESSAGE])
-      }
-    } catch {
-      setMessages([WELCOME_MESSAGE])
-    }
+    // try {
+    //   const saved = localStorage.getItem(`chat_history_${agent.id}`)
+    //   if (saved) {
+    //     const parsed = JSON.parse(saved) as Message[]
+    //     setMessages([WELCOME_MESSAGE, ...parsed.slice(1)])
+    //   } else {
+    //     setMessages([WELCOME_MESSAGE])
+    //   }
+    // } catch {
+    //   setMessages([WELCOME_MESSAGE])
+    // }
+    setMessages([WELCOME_MESSAGE])
     // Then hydrate from DynamoDB in the background
     loadAgentSession(agent.id, WELCOME_MESSAGE)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -260,11 +261,11 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
 
   // Persist to localStorage + DynamoDB whenever messages change
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(messages))
-    } catch {
-      // storage quota exceeded — ignore
-    }
+    // try {
+    //   localStorage.setItem(STORAGE_KEY, JSON.stringify(messages))
+    // } catch {
+    //   // storage quota exceeded — ignore
+    // }
     // Skip DynamoDB sync while the initial load is still in flight
     if (!sessionLoading) {
       chatService.saveSession(agent.id, messages)
@@ -357,7 +358,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
   }
 
   const resetToMainMenu = () => {
-    localStorage.removeItem(STORAGE_KEY)
+    // localStorage.removeItem(STORAGE_KEY)
     chatService.clearSession(agent.id)
     setMessages([WELCOME_MESSAGE])
     setInput('')
