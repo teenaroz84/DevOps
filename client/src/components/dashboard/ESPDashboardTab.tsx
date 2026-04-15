@@ -243,7 +243,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
     if (!selectedPlatform || jobListLoading || !jobListHasMore) return
     const currentCount = data?.job_list?.length ?? 0
     setJobListLoading(true)
-    espService.getPlatformJobList(selectedPlatform, 2000, currentCount)
+    espService.getPlatformJobList(selectedPlatform, 2000, currentCount, selected || '')
       .then((jobRes: any) => {
         if (!jobRes) return
         const newJobs = Array.isArray(jobRes.jobs) ? jobRes.jobs : []
@@ -254,7 +254,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       })
       .catch(() => {})
       .finally(() => setJobListLoading(false))
-  }, [selectedPlatform, jobListLoading, jobListHasMore, data?.job_list?.length])
+  }, [selectedPlatform, selected, jobListLoading, jobListHasMore, data?.job_list?.length])
 
   // Application list is no longer eagerly loaded — applibs are fetched per-platform
   // via getPlatformApplications when a platform is selected, avoiding a heavy
@@ -263,15 +263,24 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   // Load detail whenever an applib is selected
   React.useEffect(() => {
     if (!selected) return
+    let cancelled = false
     setLoading(true)
+    setJobListLoading(true)
+    setJobListLimited(null)
+    setJobListHasMore(false)
     setData(null)
     if (useMock) {
       setData(getMockAppData(selected))
       setLoading(false)
+      setJobListLoading(false)
       return
     }
-    espService.getAppSummary(selected, days)
-      .then((res: any) => {
+    Promise.all([
+      espService.getAppSummary(selected, days),
+      selectedPlatform ? espService.getPlatformJobList(selectedPlatform, 2000, 0, selected) : Promise.resolve(null),
+    ])
+      .then(([res, jobRes]: any) => {
+        if (cancelled) return
         if (!res || res.error) { setData(null); return }
         setData({
           ...res,
@@ -279,16 +288,29 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
           job_types:        Array.isArray(res.job_types)        ? res.job_types        : [],
           completion_codes: Array.isArray(res.completion_codes) ? res.completion_codes : [],
           user_jobs:        Array.isArray(res.user_jobs)        ? res.user_jobs        : [],
-          job_list:         Array.isArray(res.job_list)         ? res.job_list         : [],
+          job_list:         Array.isArray(jobRes?.jobs)         ? jobRes.jobs          : Array.isArray(res.job_list) ? res.job_list : [],
           job_run_trend:    Array.isArray(res.job_run_trend)    ? res.job_run_trend    : [],
           successor_jobs:   Array.isArray(res.successor_jobs)   ? res.successor_jobs   : [],
           predecessor_jobs: Array.isArray(res.predecessor_jobs) ? res.predecessor_jobs : [],
           metadata:         Array.isArray(res.metadata)         ? res.metadata         : [],
         })
+        if (jobRes?.limited) setJobListLimited({ showing: jobRes.offset + (Array.isArray(jobRes.jobs) ? jobRes.jobs.length : 0), total: jobRes.total })
+        setJobListHasMore(!!jobRes?.hasMore)
       })
-      .catch(() => setData(null))
-      .finally(() => setLoading(false))
-  }, [selected, useMock, days])
+      .catch(() => {
+        if (!cancelled) setData(null)
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false)
+          setJobListLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [selected, selectedPlatform, useMock, days])
 
   // Load metadata detail + job run table whenever selection or mock mode changes
   React.useEffect(() => {

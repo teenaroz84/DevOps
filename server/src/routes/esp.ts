@@ -261,7 +261,7 @@ router.get('/platform-detail/:platformId', async (req: Request, res: Response) =
   }
 });
 
-// GET /api/esp/platform-job-list/:platformId?limit=N
+// GET /api/esp/platform-job-list/:platformId?limit=N&offset=N&applName=<name>
 // Paginated job list for a platform — kept separate from platform-detail so the
 // aggregate widgets render immediately while this heavier query runs in the background.
 // Default limit = 2000; max = 5000. Returns { jobs, total, limited }.
@@ -275,21 +275,36 @@ router.get('/platform-job-list/:platformId', async (req: Request, res: Response)
     const limit = Math.min(Math.max(isNaN(rawLimit) ? PLATFORM_JOB_LIST_DEFAULT : rawLimit, 1), PLATFORM_JOB_LIST_MAX);
     const rawOffset = parseInt(String(req.query.offset ?? '0'), 10);
     const offset = isNaN(rawOffset) || rawOffset < 0 ? 0 : rawOffset;
+    const applName = typeof req.query.applName === 'string' ? req.query.applName.trim() : '';
     const plt = await getPlatformRow(platformId);
     if (!plt) return res.status(404).json({ error: 'Unknown platform' });
     const pltName = plt.platform_name;
 
+    const params: any[] = [pltName];
+    let applClause = '';
+    let limitParam = '$2';
+    let offsetParam = '$3';
+
+    if (applName) {
+      params.push(applName);
+      applClause = ' AND appl_name = $2';
+      limitParam = '$3';
+      offsetParam = '$4';
+    }
+
+    params.push(limit, offset);
+
     const [totalResult, jobsResult] = await Promise.all([
       pool.query(
-        `SELECT COUNT(DISTINCT jobname) AS cnt FROM edoops.esp_job_cmnd_plt WHERE plt_name IN ${pltKeysSubquery}`,
-        [pltName]
+        `SELECT COUNT(DISTINCT jobname) AS cnt FROM edoops.esp_job_cmnd_plt WHERE plt_name IN ${pltKeysSubquery}${applClause}`,
+        params.slice(0, applName ? 2 : 1)
       ),
       pool.query(`
         WITH filtered_jobs AS (
           SELECT DISTINCT ON (c.jobname)
             c.jobname, c.appl_name, c.jobtype AS job_type, c.last_run_date
           FROM edoops.esp_job_cmnd_plt c
-          WHERE c.plt_name IN ${pltKeysSubquery}
+          WHERE c.plt_name IN ${pltKeysSubquery}${applClause.replace('appl_name', 'c.appl_name')}
           ORDER BY c.jobname, c.last_run_date DESC NULLS LAST
         ),
         latest_status AS (
@@ -312,8 +327,8 @@ router.get('/platform-job-list/:platformId', async (req: Request, res: Response)
         FROM filtered_jobs f
         LEFT JOIN latest_status ls ON ls.job_longname = f.jobname AND ls.appl_name = f.appl_name
         ORDER BY f.last_run_date DESC NULLS LAST, f.jobname
-        LIMIT $2 OFFSET $3
-      `, [pltName, limit, offset]),
+        LIMIT ${limitParam} OFFSET ${offsetParam}
+      `, params),
     ]);
 
     const total = parseInt(totalResult.rows[0]?.cnt || '0', 10);

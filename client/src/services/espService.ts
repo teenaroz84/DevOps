@@ -53,9 +53,12 @@ export const espService = {
   getPlatformDetail: (platform: string) =>
     apiClient.get(`/api/esp/platform-detail/${encodeURIComponent(platform)}`),
 
-  /** Returns paginated job list for a platform group (separate from detail aggregates) */
-  getPlatformJobList: (platform: string, limit = 2000, offset = 0) =>
-    apiClient.get(`/api/esp/platform-job-list/${encodeURIComponent(platform)}?limit=${limit}&offset=${offset}`),
+  /** Returns paginated job list for a platform group, optionally narrowed to one applib */
+  getPlatformJobList: (platform: string, limit = 2000, offset = 0, applName = '') => {
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+    if (applName) params.set('applName', applName)
+    return apiClient.get(`/api/esp/platform-job-list/${encodeURIComponent(platform)}?${params}`)
+  },
 
   /** Returns job run trend for a platform group */
   getPlatformRunTrend: (platform: string, days = 2) =>
