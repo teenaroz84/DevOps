@@ -17,7 +17,7 @@
  * Falls back gracefully to an empty history when DynamoDB is unreachable.
  */
 import { Router, Request, Response } from 'express';
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DescribeTableCommand, DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { BatchWriteCommand, DeleteCommand, DynamoDBDocumentClient, GetCommand, PutCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 
 const router = Router();
@@ -125,20 +125,28 @@ router.get('/diagnostic/dynamodb', async (req: Request, res: Response) => {
   const region = process.env.AWS_REGION || 'us-east-1';
   
   try {
-    const result = await getClient().send(new GetCommand({
+    const base = new DynamoDBClient({ region });
+    const tableInfo = await base.send(new DescribeTableCommand({ TableName: table }));
+    const schema = (tableInfo.Table?.KeySchema || []).map((k) => ({
+      attributeName: k.AttributeName,
+      keyType: k.KeyType,
+    }));
+
+    const result = await getClient().send(new ScanCommand({
       TableName: table,
-      Key: { 
-        session_id: '__test__', 
-        agent_id: '__test__' 
-      },
+      Limit: 1,
     }));
     
     res.json({
       status: 'DynamoDB Connected',
       table,
       region,
+      keySchema: schema,
       canRead: true,
-      itemExists: !!result.Item
+      hasItems: !!(result.Items && result.Items.length > 0),
+      sampleKeys: result.Items && result.Items.length > 0
+        ? Object.keys(result.Items[0]).filter((k) => /id|session|agent|pk|sk/i.test(k))
+        : [],
     });
   } catch (err: any) {
     res.json({
