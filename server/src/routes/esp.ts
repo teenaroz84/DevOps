@@ -293,24 +293,24 @@ router.get('/platform-job-list/:platformId', async (req: Request, res: Response)
           ORDER BY c.jobname, c.last_run_date DESC NULLS LAST
         ),
         latest_status AS (
-          SELECT DISTINCT ON (s.job_longname)
-            s.job_longname, s.ccfail
+          SELECT DISTINCT ON (s.job_longname, s.appl_name)
+            s.job_longname, s.appl_name, s.ccfail
           FROM edoops.esp_job_stats_recent s
           JOIN filtered_jobs f ON f.jobname = s.job_longname AND f.appl_name = s.appl_name
-          ORDER BY s.job_longname,
+          ORDER BY s.job_longname, s.appl_name,
                    s.end_date DESC NULLS LAST, s.end_time DESC NULLS LAST,
                    s.start_date DESC NULLS LAST, s.start_time DESC NULLS LAST
         )
         SELECT
           f.jobname, f.appl_name, f.job_type, f.last_run_date,
           CASE
-            WHEN ls.ccfail = 'YES' THEN 'FAILED'
-            WHEN ls.ccfail = 'NO'  THEN 'SUCCESS'
+            WHEN UPPER(TRIM(ls.ccfail)) = 'YES' THEN 'FAILED'
+            WHEN UPPER(TRIM(ls.ccfail)) = 'NO'  THEN 'SUCCESS'
             WHEN f.last_run_date IS NULL THEN 'NEVER RUN'
             ELSE 'UNKNOWN'
           END AS run_status
         FROM filtered_jobs f
-        LEFT JOIN latest_status ls ON ls.job_longname = f.jobname
+        LEFT JOIN latest_status ls ON ls.job_longname = f.jobname AND ls.appl_name = f.appl_name
         ORDER BY f.last_run_date DESC NULLS LAST, f.jobname
         LIMIT $2 OFFSET $3
       `, [pltName, limit, offset]),
