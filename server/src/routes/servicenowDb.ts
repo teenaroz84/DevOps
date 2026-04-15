@@ -63,7 +63,7 @@ router.get('/incidents', async (req: Request, res: Response) => {
 });
 
 // GET /api/servicenow/missed-incidents?platform=<value>
-// Open P3/P4 incident count with SLA metadata; optionally filtered by platform
+// Open incident count with SLA metadata + breach status; optionally filtered by platform
 router.get('/missed-incidents', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
@@ -74,14 +74,26 @@ router.get('/missed-incidents', async (req: Request, res: Response) => {
     const result = await pool.query(`
       SELECT sg.short_priority AS priority_field,
             COUNT(*)::int     AS incident_count,
+            COUNT(CASE WHEN sla_breached THEN 1 END)::int AS breached_count,
             MAX(sg.response_sla)   AS response_sla,
             MAX(sg.resolution_sla) AS resolution_sla,
             MAX(sg.details_url)    AS details_url
       FROM (
         SELECT DISTINCT ON (sn.sninc_inc_num)
                sn.sninc_priority,
-               sn.sninc_applkp_pltf_nm
+               sn.sninc_applkp_pltf_nm,
+               CASE 
+                 WHEN EXTRACT(EPOCH FROM (NOW() - sn.sninc_created_on::timestamp)) / 3600 > 
+                      SUBSTRING(sg.resolution_sla, 1, POSITION(' ' IN sg.resolution_sla) - 1)::int * 
+                      CASE WHEN sg.resolution_sla ILIKE '%day%' THEN 24
+                           WHEN sg.resolution_sla ILIKE '%hr%' THEN 1
+                           ELSE 1 END
+                 THEN true
+                 ELSE false
+               END AS sla_breached
         FROM   edoops.service_now_inc sn
+        JOIN   edoops.sla_glossary sg
+          ON   sn.sninc_priority = sg.snow_priority
          WHERE  ${OPEN_INCIDENT_FILTER}
            AND sn.sninc_last_updt_dttm::timestamp >= NOW() - INTERVAL '${days} days'
         ORDER BY sn.sninc_inc_num, sn.sninc_last_updt_dttm DESC
@@ -185,7 +197,18 @@ router.get('/incident-detail', async (req: Request, res: Response) => {
       platformClause = `AND latest.sninc_applkp_pltf_nm = $${params.length}`;
     }
     const result = await pool.query(`
-      SELECT sninc_inc_num, priority_field, sninc_capability, sninc_short_desc, sninc_assignment_grp, response_sla, resolution_sla
+      SELECT sninc_inc_num, priority_field, sninc_capability, sninc_short_desc, sninc_assignment_grp, response_sla, resolution_sla,
+             sninc_created_on, sninc_last_updt_dttm,
+             EXTRACT(EPOCH FROM (NOW() - sninc_created_on::timestamp)) / 3600 AS elapsed_hours,
+             CASE 
+               WHEN EXTRACT(EPOCH FROM (NOW() - sninc_created_on::timestamp)) / 3600 > 
+                    SUBSTRING(resolution_sla, 1, POSITION(' ' IN resolution_sla) - 1)::int * 
+                    CASE WHEN resolution_sla ILIKE '%day%' THEN 24
+                         WHEN resolution_sla ILIKE '%hr%' THEN 1
+                         ELSE 1 END
+               THEN true
+               ELSE false
+             END AS sla_breached
       FROM (
         SELECT DISTINCT ON (sn.sninc_inc_num)
                sn.sninc_inc_num        AS sninc_inc_num,
@@ -195,6 +218,8 @@ router.get('/incident-detail', async (req: Request, res: Response) => {
                sn.sninc_assignment_grp AS sninc_assignment_grp,
                sg.response_sla         AS response_sla,
                sg.resolution_sla       AS resolution_sla,
+               sn.sninc_created_on     AS sninc_created_on,
+               sn.sninc_last_updt_dttm AS sninc_last_updt_dttm,
                sn.sninc_applkp_pltf_nm
         FROM   edoops.service_now_inc sn
         JOIN   edoops.sla_glossary    sg
@@ -288,21 +313,14 @@ router.get('/platforms', async (req: Request, res: Response) => {
     const pool = getPgPool();
     const days = parseDays(req.query);
     const result = await pool.query(`
-      SELECT platform, BOOL_OR(priority_field IN ('P1','P2')) AS has_critical
-      FROM (
-        SELECT DISTINCT ON (sn.sninc_inc_num)
-               sn.sninc_applkp_pltf_nm AS platform,
-               sg.short_priority       AS priority_field
-        FROM   edoops.service_now_inc sn
-        LEFT JOIN edoops.sla_glossary sg
-          ON sn.sninc_priority = sg.snow_priority
-        WHERE  sn.sninc_applkp_pltf_nm IS NOT NULL
-          AND ${OPEN_INCIDENT_FILTER}
-          AND sn.sninc_last_updt_dttm::timestamp >= NOW() - INTERVAL '${days} days'
-        ORDER BY sn.sninc_inc_num, sn.sninc_last_updt_dttm DESC
-      ) latest
-      GROUP BY platform
-      ORDER BY platform
+      SELECT DISTINCT sn.sninc_applkp_pltf_nm AS platform,
+             BOOL_OR(sg.short_priority IN ('P1','P2')) AS has_critical
+      FROM   edoops.service_now_inc sn
+      LEFT JOIN edoops.sla_glossary sg
+        ON sn.sninc_priority = sg.snow_priority
+      WHERE  sn.sninc_applkp_pltf_nm IS NOT NULL
+      GROUP BY sn.sninc_applkp_pltf_nm
+      ORDER BY sn.sninc_applkp_pltf_nm
     `);
     res.json(result.rows.map((r: any) => ({
       platform:    r.platform,

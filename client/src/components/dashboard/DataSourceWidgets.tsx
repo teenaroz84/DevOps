@@ -668,7 +668,12 @@ export const MissedIncidentsWidget: React.FC<{ platform?: string | null; days?: 
                   >
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.4 }}>
                       <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#333' }}>{r.priority_field}</Typography>
-                      <Typography sx={{ fontSize: '12px', color: '#666' }}>{r.incident_count} incidents</Typography>
+                      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                        {(r.breached_count || 0) > 0 && (
+                          <Chip label={`⚠ ${r.breached_count} Breach`} size="small" sx={{ fontSize: '9px', height: 18, bgcolor: '#ffebee', color: '#c62828', fontWeight: 700 }} />
+                        )}
+                        <Typography sx={{ fontSize: '12px', color: '#666' }}>{r.incident_count}</Typography>
+                      </Box>
                     </Box>
                     <Typography sx={{ fontSize: '10px', color: '#78909c', mb: 0.4 }}>
                       Response SLA: {r.response_sla || '—'} | Resolution SLA: {r.resolution_sla || '—'}
@@ -1063,7 +1068,7 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
 
       {/* ── Header bar ── */}
       <Paper elevation={0} sx={{ borderRadius: 2, border: '1px solid #e8ecf1', bgcolor: '#f8f9fb', overflow: 'hidden', position: 'sticky', top: 0, zIndex: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.07)' }}>
-        <Box sx={{ px: 2, py: 1.25, display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+        <Box sx={{ px: 2, py: 1.25, display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'nowrap', overflowX: 'auto' }}>
           <SupportAgentIcon sx={{ fontSize: 16, color: '#c62828' }} />
           <Typography sx={{ fontWeight: 700, fontSize: '11px', color: '#555', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
             ServiceNow 
@@ -1079,7 +1084,7 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
               isOptionEqualToValue={(opt, val) => opt.platform === val.platform}
               loading={platformsLoading}
               size="small"
-              sx={{ minWidth: 220, '& .MuiInputBase-root': { fontSize: '11px' }, '& .MuiInputLabel-root': { fontSize: '11px' } }}
+              sx={{ width: 180, flexShrink: 0, '& .MuiInputBase-root': { fontSize: '11px' }, '& .MuiInputLabel-root': { fontSize: '11px' } }}
               renderOption={({ key, ...props }, option) => (
                 <li key={key} {...props}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, width: '100%' }}>
@@ -1113,8 +1118,8 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
               )}
               ListboxProps={{ sx: { fontSize: '12px' } }}
             />
-          <Box sx={{ width: 220, display: 'flex', alignItems: 'center', gap: 1, ml: 0.5 }}>
-            <Typography sx={{ fontSize: '11px', color: '#666', minWidth: 58 }}>Last {days}d</Typography>
+          <Box sx={{ width: 160, display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
+            <Typography sx={{ fontSize: '10px', color: '#666', minWidth: 48 }}>Last {days}d</Typography>
             <Slider
               size="small"
               value={days}
@@ -1130,10 +1135,10 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
                 '& .MuiSlider-valueLabel': { fontSize: '10px' },
               }}
             />
-            <Typography sx={{ fontSize: '10px', color: '#bbb', whiteSpace: 'nowrap' }}>15d</Typography>
+            <Typography sx={{ fontSize: '9px', color: '#bbb', whiteSpace: 'nowrap' }}>15d</Typography>
           </Box>
-          <Typography sx={{ fontSize: '11px', color: '#aaa', ml: 'auto' }}>
-            Source: PostgreSQL · edoops.service_now_inc
+          <Typography sx={{ fontSize: '10px', color: '#aaa', ml: 'auto', flexShrink: 0, whiteSpace: 'nowrap' }}>
+            PostgreSQL
           </Typography>
           {onOpenAgent && (
             <Button
@@ -1144,14 +1149,16 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
               sx={{
                 backgroundColor: '#5c6bc0',
                 textTransform: 'none',
-                fontSize: '11px',
+                fontSize: '10px',
                 fontWeight: 700,
                 height: 28,
-                px: 1.5,
+                px: 1.2,
+                flexShrink: 0,
+                whiteSpace: 'nowrap',
                 '&:hover': { backgroundColor: '#3949ab', filter: 'brightness(0.9)' },
               }}
             >
-              Ask ServiceNow Agent
+              Ask Agent
             </Button>
           )}
         </Box>
