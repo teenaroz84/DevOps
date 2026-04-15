@@ -65,8 +65,8 @@ export const AGENTS: Record<string, AgentConfig> = {
     name: 'TDD ESP Scheduling Agent',
     subtitle: 'Enterprise Scheduler Platform · Job Intelligence',
     color: '#2e7d32',
-    endpoint: '/api/v1/agents/esp/chat',
-    streamEndpoint: '/api/v1/agents/esp/chat/stream',
+    endpoint: '/api/esp/chat',
+    streamEndpoint: '/api/esp/chat/stream',
     placeholder: 'Ask about ESP jobs, schedules, failures…',
     welcomeMessage: `Hi - Welcome! I am your ESP Scheduling Agent.`,
     quickActions: [
@@ -82,8 +82,8 @@ export const AGENTS: Record<string, AgentConfig> = {
     name: 'TDD DMF Pipeline Agent',
     subtitle: 'Data Management Framework · Pipeline Intelligence',
     color: '#1565c0',
-    endpoint: '/api/v1/agents/dmf/chat',
-    streamEndpoint: '/api/v1/agents/dmf/chat/stream',
+    endpoint: '/api/dmf/chat',
+    streamEndpoint: '/api/dmf/chat/stream',
     placeholder: 'Ask about DMF pipelines, run status, failures…',
     welcomeMessage: `Hi - Welcome! I am your DMF Pipeline Agent.`,
     quickActions: [
@@ -99,8 +99,8 @@ export const AGENTS: Record<string, AgentConfig> = {
     name: 'TDD ServiceNow Incident Agent',
     subtitle: 'ITSM · Incidents & Problem Management',
     color: '#5c6bc0',
-    endpoint: '/api/v1/agents/servicenow/chat',
-    streamEndpoint: '/api/v1/agents/servicenow/chat/stream',
+    endpoint: '/api/snow/chat',
+    streamEndpoint: '/api/snow/chat/stream',
     placeholder: 'Ask about incidents, tickets, problems…',
     welcomeMessage: `Hi - Welcome! I am your Incident Resolution Agent`,
     quickActions: [
@@ -116,8 +116,8 @@ export const AGENTS: Record<string, AgentConfig> = {
     name: 'TDD Talend Integration Agent',
     subtitle: 'Data Integration · Job Monitoring',
     color: '#e65100',
-    endpoint: '/api/v1/agents/talend/chat',
-    streamEndpoint: '/api/v1/agents/talend/chat/stream',
+    endpoint: '/api/talend/chat',
+    streamEndpoint: '/api/talend/chat/stream',
     placeholder: 'Ask about Talend jobs, errors, pipelines…',
     welcomeMessage: `Hi - Welcome! I am your Talend Integration Agent.`,
     quickActions: [
@@ -133,8 +133,8 @@ export const AGENTS: Record<string, AgentConfig> = {
     name: 'TDD Snowflake Analytics Agent',
     subtitle: 'Cloud Data Platform · Cost & Query Intelligence',
     color: '#0277bd',
-    endpoint: '/api/v1/agents/snowflake/chat',
-    streamEndpoint: '/api/v1/agents/snowflake/chat/stream',
+    endpoint: '/api/snow/chat',
+    streamEndpoint: '/api/snow/chat/stream',
     placeholder: 'Ask about Snowflake costs, queries, usage…',
     welcomeMessage: `Hi - Welcome! I am your Snowflake Analytics Agent.`,
     quickActions: [
@@ -165,10 +165,10 @@ export const FULLSCREEN_AGENT_MENUS: Array<{
   label: string
   mockOnly?: boolean
 }> = [
-  { menuId: 'chat',            agentId: 'knowledge',  label: 'TDD Knowledge Assist' },
-  { menuId: 'esp-chat',        agentId: 'esp',        label: 'TDD ESP Agent' },
-  { menuId: 'dmf-chat',        agentId: 'dmf',        label: 'TDD DMF Agent' },
-  { menuId: 'servicenow-chat', agentId: 'servicenow', label: 'TDD ServiceNow Agent' },
-  { menuId: 'talend-chat',     agentId: 'talend',     label: 'TDD Talend Agent' },
-  { menuId: 'snowflake-chat',  agentId: 'snowflake',  label: 'TDD Snowflake Agent', mockOnly: true },
+  { menuId: 'chat',            agentId: 'knowledge',  label: 'TDT Knowledge Assist' },
+  { menuId: 'esp-chat',        agentId: 'esp',        label: 'TDT ESP Agent' },
+  { menuId: 'dmf-chat',        agentId: 'dmf',        label: 'TDT DMF Agent' },
+  { menuId: 'servicenow-chat', agentId: 'servicenow', label: 'TDT ServiceNow Agent' },
+  { menuId: 'talend-chat',     agentId: 'talend',     label: 'TDT Talend Agent' },
+  { menuId: 'snowflake-chat',  agentId: 'snowflake',  label: 'TDT Snowflake Agent', mockOnly: true },
 ]

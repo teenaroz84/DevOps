@@ -15,6 +15,7 @@ import {
   Chip,
   CircularProgress,
   Tooltip,
+  useMediaQuery,
 } from '@mui/material'
 import SendIcon from '@mui/icons-material/Send'
 import CloseIcon from '@mui/icons-material/Close'
@@ -27,6 +28,9 @@ import OpenInFullIcon from '@mui/icons-material/OpenInFull'
 import CloseFullscreenIcon from '@mui/icons-material/CloseFullscreen'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
+import AddIcon from '@mui/icons-material/Add'
+import HistoryIcon from '@mui/icons-material/History'
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import { chatService } from '../../services'
 import { AGENTS } from '../../config/agentConfig'
 import type { AgentConfig } from '../../config/agentConfig'
@@ -91,6 +95,51 @@ interface Message {
   }>
 }
 
+interface ChatSessionSummary {
+  sessionId: string
+  title: string
+  preview: string
+  updatedAt: number
+}
+
+function createSessionId(): string {
+  try {
+    return crypto.randomUUID()
+  } catch {
+    return `session-${Date.now()}-${Math.round(Math.random() * 1_000_000)}`
+  }
+}
+
+function buildSessionSummary(sessionId: string, messages: Message[]): ChatSessionSummary {
+  const meaningfulMessages = messages.filter(m => m.content.trim().length > 0)
+  const firstUser = meaningfulMessages.find(m => m.role === 'user')
+  const lastMessage = meaningfulMessages[meaningfulMessages.length - 1]
+
+  const title = firstUser?.content?.trim()
+    ? firstUser.content.trim().slice(0, 48)
+    : 'New Chat'
+  const preview = lastMessage?.content?.trim()
+    ? lastMessage.content.trim().slice(0, 90)
+    : 'No messages yet'
+
+  return {
+    sessionId,
+    title,
+    preview,
+    updatedAt: Date.now(),
+  }
+}
+
+function formatSessionTime(timestamp: number): string {
+  const now = Date.now()
+  const diff = now - timestamp
+  const hour = 60 * 60 * 1000
+  const day = 24 * hour
+  if (diff < hour) return 'Just now'
+  if (diff < day) return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  return new Date(timestamp).toLocaleDateString()
+}
+
 interface ChatPanelProps {
   isOpen: boolean
   onClose: () => void
@@ -122,7 +171,9 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
     type: 'info',
   }), [agentConfig])
 
-  const STORAGE_KEY = `chat_history_${agent.id}`
+  const SESSION_LIST_KEY = `chat_sessions_${agent.id}`
+  const [chatSessions, setChatSessions] = useState<ChatSessionSummary[]>([])
+  const [activeSessionId, setActiveSessionId] = useState('')
 
   // ── Session state ────────────────────────────────────────────────────────
   // Start with localStorage for instant paint, then hydrate from DynamoDB.
@@ -140,56 +191,72 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
   })
   const [sessionLoading, setSessionLoading] = useState(false)
 
-  // Load DynamoDB session for the current agent
-  const loadAgentSession = useCallback(async (agentId: string, welcome: Message) => {
+  // Load DynamoDB session for the current agent + selected chat session
+  const loadAgentSession = useCallback(async (agentId: string, welcome: Message, sessionId: string) => {
     setSessionLoading(true)
     try {
-      const remote = await chatService.loadSession(agentId)
+      const remote = await chatService.loadSession(agentId, sessionId)
       if (remote.length > 0) {
         const typed = remote.map(m => ({
           ...m,
           type: m.type as Message['type'],
         })) as Message[]
         setMessages([welcome, ...typed.slice(1)])
-        // Sync to localStorage so next mount is instant
-        // localStorage.setItem(`chat_history_${agentId}`, JSON.stringify([welcome, ...typed.slice(1)]))
       } else {
-        // Nothing in DynamoDB yet — keep whatever was in localStorage
-        setMessages(prev => prev.length > 0 ? prev : [welcome])
+        setMessages([welcome])
       }
     } catch {
-      // DynamoDB unreachable — keep localStorage version
+      setMessages([welcome])
     } finally {
       setSessionLoading(false)
     }
   }, [])
 
-  // When the agent changes, reload the correct history and welcome message
+  // When the agent changes, load its local session list and pick the latest.
   useEffect(() => {
-    // Immediately paint localStorage version
-    // try {
-    //   const saved = localStorage.getItem(`chat_history_${agent.id}`)
-    //   if (saved) {
-    //     const parsed = JSON.parse(saved) as Message[]
-    //     setMessages([WELCOME_MESSAGE, ...parsed.slice(1)])
-    //   } else {
-    //     setMessages([WELCOME_MESSAGE])
-    //   }
-    // } catch {
-    //   setMessages([WELCOME_MESSAGE])
-    // }
+    try {
+      const saved = localStorage.getItem(SESSION_LIST_KEY)
+      const parsed = saved ? (JSON.parse(saved) as ChatSessionSummary[]) : []
+      if (parsed.length > 0) {
+        const ordered = [...parsed].sort((a, b) => b.updatedAt - a.updatedAt)
+        setChatSessions(ordered)
+        setActiveSessionId(ordered[0].sessionId)
+      } else {
+        const starter = buildSessionSummary(createSessionId(), [WELCOME_MESSAGE])
+        setChatSessions([starter])
+        setActiveSessionId(starter.sessionId)
+      }
+    } catch {
+      const starter = buildSessionSummary(createSessionId(), [WELCOME_MESSAGE])
+      setChatSessions([starter])
+      setActiveSessionId(starter.sessionId)
+    }
     setMessages([WELCOME_MESSAGE])
-    // Then hydrate from DynamoDB in the background
-    loadAgentSession(agent.id, WELCOME_MESSAGE)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [agent.id])
+  }, [SESSION_LIST_KEY, WELCOME_MESSAGE])
+
+  useEffect(() => {
+    try {
+      if (chatSessions.length > 0) {
+        localStorage.setItem(SESSION_LIST_KEY, JSON.stringify(chatSessions))
+      }
+    } catch {
+      // Ignore storage errors.
+    }
+  }, [chatSessions, SESSION_LIST_KEY])
+
+  useEffect(() => {
+    if (!activeSessionId) return
+    loadAgentSession(agent.id, WELCOME_MESSAGE, activeSessionId)
+  }, [activeSessionId, agent.id, WELCOME_MESSAGE, loadAgentSession])
 
   const [loading, setLoading] = useState(false)
+  const [loadingSessionId, setLoadingSessionId] = useState<string | null>(null)
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null)
   const [inputHistory, setInputHistory] = useState<string[]>([])
   const [historyIdx, setHistoryIdx] = useState(-1)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
+  const isCompactFullScreen = useMediaQuery('(max-width:980px)')
   const isMobileViewport = !fullScreen && typeof window !== 'undefined' && window.innerWidth <= 600
   const panelWidth = isMobileViewport ? (typeof window !== 'undefined' ? window.innerWidth : 440) : (expanded ? 760 : 440)
   const panelHeight = isMobileViewport
@@ -261,26 +328,30 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
 
   // Persist to localStorage + DynamoDB whenever messages change
   useEffect(() => {
-    // try {
-    //   localStorage.setItem(STORAGE_KEY, JSON.stringify(messages))
-    // } catch {
-    //   // storage quota exceeded — ignore
-    // }
-    // Skip DynamoDB sync while the initial load is still in flight
-    if (!sessionLoading) {
-      chatService.saveSession(agent.id, messages)
+    if (!sessionLoading && activeSessionId) {
+      chatService.saveSession(agent.id, messages, activeSessionId)
+
+      const summary = buildSessionSummary(activeSessionId, messages)
+      setChatSessions(prev => {
+        const others = prev.filter(item => item.sessionId !== activeSessionId)
+        return [summary, ...others]
+      })
     }
-  }, [messages, STORAGE_KEY, agent.id, sessionLoading])
+  }, [messages, agent.id, sessionLoading, activeSessionId])
 
   const HEALTH_CHECK_QUERY = '__health_check__'
 
   const quickActions = agent.quickActions
+  const isSessionLoading = loading && loadingSessionId === activeSessionId
+  const hasConversationStarted = messages.some((msg) => msg.role === 'user') || messages.length > 1
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
   const sendMessage = async (messageText?: string) => {
+    if (!activeSessionId) return
+    const requestSessionId = activeSessionId
     const textToSend = messageText || input
     if (!textToSend.trim()) return
 
@@ -293,6 +364,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
     setMessages(prev => [...prev, userMessage])
     setInput('')
     setLoading(true)
+    setLoadingSessionId(requestSessionId)
 
     try {
       if (isHealthCheck) {
@@ -311,7 +383,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
           timestamp: Date.now(),
         }])
       } else {
-        const data = await chatService.sendMessage(textToSend, agent.endpoint)
+        const data = await chatService.sendMessage(textToSend, agent.endpoint, requestSessionId)
         // sessionStore.setChat({ lastAgentId: agent.id })
         const agentResponse: Message = {
           role: 'agent',
@@ -335,6 +407,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
       setMessages(prev => [...prev, errorMessage])
     } finally {
       setLoading(false)
+      setLoadingSessionId(null)
     }
   }
 
@@ -358,11 +431,56 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
   }
 
   const resetToMainMenu = () => {
-    // localStorage.removeItem(STORAGE_KEY)
-    chatService.clearSession(agent.id)
+    if (!activeSessionId) return
+    chatService.clearSession(agent.id, activeSessionId)
     setMessages([WELCOME_MESSAGE])
     setInput('')
+    setChatSessions(prev => [buildSessionSummary(activeSessionId, [WELCOME_MESSAGE]), ...prev.filter(item => item.sessionId !== activeSessionId)])
   }
+
+  const createNewChat = useCallback(() => {
+    const nextSessionId = createSessionId()
+    const nextSummary = buildSessionSummary(nextSessionId, [WELCOME_MESSAGE])
+    setChatSessions(prev => [nextSummary, ...prev])
+    setActiveSessionId(nextSessionId)
+    setMessages([WELCOME_MESSAGE])
+    setInput('')
+    setLoading(false)
+    setLoadingSessionId(null)
+  }, [WELCOME_MESSAGE])
+
+  const switchToSession = useCallback((sessionId: string) => {
+    setActiveSessionId(sessionId)
+    setInput('')
+    setLoading(false)
+    setLoadingSessionId(null)
+  }, [])
+
+  const deleteChatSession = useCallback((sessionId: string) => {
+    const remaining = chatSessions.filter((session) => session.sessionId !== sessionId)
+    chatService.clearSession(agent.id, sessionId)
+
+    if (remaining.length === 0) {
+      const starter = buildSessionSummary(createSessionId(), [WELCOME_MESSAGE])
+      setChatSessions([starter])
+      setActiveSessionId(starter.sessionId)
+      setMessages([WELCOME_MESSAGE])
+      setInput('')
+      setLoading(false)
+      setLoadingSessionId(null)
+      return
+    }
+
+    setChatSessions(remaining)
+
+    if (activeSessionId === sessionId) {
+      setActiveSessionId(remaining[0].sessionId)
+      setMessages([WELCOME_MESSAGE])
+      setInput('')
+      setLoading(false)
+      setLoadingSessionId(null)
+    }
+  }, [agent.id, activeSessionId, chatSessions, WELCOME_MESSAGE])
 
   // Get the last message with data
   if (!isOpen && !fullScreen) return null
@@ -370,13 +488,97 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
   if (fullScreen) {
     // Full-screen chat layout — results panel hidden
     return (
-      <Box sx={{ display: 'flex', height: '100vh', backgroundColor: '#fff' }}>
-        {/* Chat — full width */}
+      <Box
+        sx={{
+          display: 'flex',
+          height: '100vh',
+          backgroundColor: '#f2f5f9',
+          flexDirection: isCompactFullScreen ? 'column' : 'row',
+        }}
+      >
+        {/* Session Sidebar */}
+        <Box
+          sx={{
+            width: isCompactFullScreen ? '100%' : 320,
+            borderRight: isCompactFullScreen ? 'none' : '1px solid #dde5ef',
+            borderBottom: isCompactFullScreen ? '1px solid #dde5ef' : 'none',
+            backgroundColor: '#f7fafc',
+            display: 'flex',
+            flexDirection: 'column',
+            maxHeight: isCompactFullScreen ? 260 : '100vh',
+          }}
+        >
+          <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <HistoryIcon sx={{ fontSize: 18, color: '#546e7a' }} />
+              <Typography sx={{ fontSize: '12px', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', color: '#607d8b' }}>
+                Chat Sessions
+              </Typography>
+            </Box>
+            <Button
+              size="small"
+              variant="contained"
+              startIcon={<AddIcon sx={{ fontSize: 14 }} />}
+              onClick={createNewChat}
+              sx={{ textTransform: 'none', fontWeight: 600, borderRadius: 2, backgroundColor: '#1565c0', '&:hover': { backgroundColor: '#0d47a1' } }}
+            >
+              New Chat
+            </Button>
+          </Box>
+          <Box sx={{ px: 1.5, pb: 1.5, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 1 }}>
+            {chatSessions.map(session => {
+              const active = session.sessionId === activeSessionId
+              return (
+                <Paper
+                  key={session.sessionId}
+                  onClick={() => switchToSession(session.sessionId)}
+                  sx={{
+                    p: 1.25,
+                    borderRadius: 2,
+                    boxShadow: 'none',
+                    border: active ? '1px solid #1e88e5' : '1px solid #dbe5f0',
+                    backgroundColor: active ? '#eaf4ff' : '#fff',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                    '&:hover': { borderColor: '#90caf9', transform: 'translateY(-1px)' },
+                  }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 0.5 }}>
+                    <Typography sx={{ fontSize: '13px', fontWeight: 700, color: '#1f2937', mb: 0.3 }}>
+                      {session.title}
+                    </Typography>
+                    <IconButton
+                      size="small"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        deleteChatSession(session.sessionId)
+                      }}
+                      sx={{ mt: -0.6, mr: -0.6, color: '#90a4ae', '&:hover': { color: '#c62828', backgroundColor: '#ffebee' } }}
+                      title="Delete chat session"
+                    >
+                      <DeleteOutlineIcon sx={{ fontSize: 16 }} />
+                    </IconButton>
+                  </Box>
+                  <Typography sx={{ fontSize: '11px', color: '#607d8b', lineHeight: 1.35, mb: 0.6 }}>
+                    {session.preview}
+                  </Typography>
+                  <Typography sx={{ fontSize: '10px', color: '#90a4ae' }}>
+                    {formatSessionTime(session.updatedAt)}
+                  </Typography>
+                </Paper>
+              )
+            })}
+          </Box>
+        </Box>
+
+        {/* Chat — main conversation pane */}
         <Box
           sx={{
             flex: 1,
             display: 'flex',
             flexDirection: 'column',
+            minWidth: 0,
+            backgroundColor: '#fff',
           }}
         >
           {/* Header */}
@@ -398,6 +600,9 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
                 </Typography>
                 <Typography sx={{ fontSize: '11px', opacity: 0.8, lineHeight: 1 }}>
                   {agent.subtitle}
+                </Typography>
+                <Typography sx={{ fontSize: '10px', opacity: 0.82, lineHeight: 1.1, mt: 0.5 }}>
+                  {chatSessions.find(s => s.sessionId === activeSessionId)?.title ?? 'New Chat'}
                 </Typography>
               </Box>
             </Box>
@@ -436,203 +641,274 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
             </Box>
           </Box>
 
-          {/* Messages Area */}
-          <Box
-            sx={{
-              flex: 1,
-              overflowY: 'auto',
-              p: 2.5,
-              backgroundColor: '#fafafa',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 2,
-            }}
-          >
-            {/* Session loading from DynamoDB */}
-            {sessionLoading && (
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, py: 1 }}>
-                <CircularProgress size={14} sx={{ color: '#90a4ae' }} />
-                <Typography sx={{ fontSize: '11px', color: '#90a4ae' }}>Restoring history…</Typography>
-              </Box>
-            )}
-            {messages.map((msg, idx) => (
-              <Box key={idx} sx={{ display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start', flexDirection: 'column', alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start', gap: 1 }}>
-                <Paper
-                  sx={{
-                    maxWidth: '85%',
-                    p: 1.5,
-                    backgroundColor:
-                      msg.role === 'user'
-                        ? '#1976d2'
-                        : msg.type === 'error'
-                          ? '#ffebee'
-                          : msg.type === 'success'
-                            ? '#e8f5e9'
-                            : '#f5f5f5',
-                    color: msg.role === 'user' ? '#fff' : msg.type === 'error' ? '#c62828' : '#333',
-                    boxShadow: 'none',
-                    border: msg.type === 'error' ? '1px solid #ef5350' : 'none',
-                  }}
-                >
-                  {msg.type === 'table' && msg.data ? (
-                    <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-                      <Typography variant="body2" sx={{ fontSize: '13px' }}>
-                        📊 {msg.content}
-                      </Typography>
-                      <IconButton
-                        size="small"
-                        onClick={() => exportDataAsCsv(msg.data)}
-                        title="Export as CSV"
-                        sx={{ ml: 1, color: '#1976d2', '&:hover': { backgroundColor: 'rgba(25,118,210,0.08)' } }}
-                      >
-                        <FileDownloadIcon sx={{ fontSize: 18 }} />
-                      </IconButton>
-                    </Box>
-                  ) : msg.role === 'agent' ? (
-                    <FormattedMessage
-                      text={msg.content}
-                      color={msg.type === 'error' ? '#c62828' : msg.type === 'success' ? '#2e7d32' : '#333'}
-                    />
-                  ) : (
-                    <Typography variant="body2" sx={{ fontSize: '13px', lineHeight: 1.4 }}>
-                      {msg.content}
-                    </Typography>
-                  )}
-                </Paper>
-                {msg.suggestedActions && msg.suggestedActions.length > 0 && (
-                  <Box sx={{ display: 'flex', gap: 0.8, flexWrap: 'wrap', mt: 1.2, width: '100%' }}>
-                    {msg.suggestedActions.map((action, aIdx) => (
-                      <Button
-                        key={aIdx}
-                        size="small"
-                        variant="contained"
-                        onClick={() => {
-                          if (action.action === 'restart_service') {
-                            sendMessage('Restart the DataOps service')
-                          } else if (action.action === 'terminate_service') {
-                            const termMsg: Message = {
-                              role: 'agent',
-                              content: 'Service terminated. You can restart it when you are ready.',
-                              type: 'success',
-                              suggestedActions: [
-                                { label: '▶️ Restart Service', action: 'restart_service' }
-                              ]
-                            }
-                            setMessages(prev => [...prev, termMsg])
-                          } else {
-                            sendMessage(action.action)
-                          }
-                        }}
-                        disabled={loading}
-                        sx={{
-                          fontSize: '12px',
-                          fontWeight: 500,
-                          textTransform: 'none',
-                          padding: '6px 12px',
-                          backgroundColor: 
-                            action.action === 'restart_service' ? '#4caf50' :
-                            action.action === 'terminate_service' ? '#ef5350' :
-                            msg.type === 'error' ? '#ef5350' : 
-                            msg.type === 'success' ? '#4caf50' : '#1976d2',
-                          color: '#fff',
-                          border: 'none',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          '&:hover': { 
-                            backgroundColor: 
-                              action.action === 'restart_service' ? '#388e3c' :
-                              action.action === 'terminate_service' ? '#d32f2f' :
-                              msg.type === 'error' ? '#d32f2f' : 
-                              msg.type === 'success' ? '#388e3c' : '#1565c0',
-                            boxShadow: '0 2px 8px rgba(0,0,0,0.2)'
-                          },
-                          '&:disabled': { opacity: 0.6, cursor: 'not-allowed' },
-                          transition: 'all 0.2s ease',
-                        }}
-                      >
-                        {action.label}
-                      </Button>
-                    ))}
+          {hasConversationStarted ? (
+            <>
+              {/* Messages Area */}
+              <Box
+                sx={{
+                  flex: 1,
+                  overflowY: 'auto',
+                  p: 2.5,
+                  backgroundColor: '#fafafa',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 2,
+                }}
+              >
+                {/* Session loading from DynamoDB */}
+                {sessionLoading && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, py: 1 }}>
+                    <CircularProgress size={14} sx={{ color: '#90a4ae' }} />
+                    <Typography sx={{ fontSize: '11px', color: '#90a4ae' }}>Restoring history...</Typography>
                   </Box>
                 )}
-              </Box>
-            ))}
+                {messages.map((msg, idx) => (
+                  <Box key={idx} sx={{ display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start', flexDirection: 'column', alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start', gap: 1 }}>
+                    <Paper
+                      sx={{
+                        maxWidth: '85%',
+                        p: 1.5,
+                        backgroundColor:
+                          msg.role === 'user'
+                            ? '#1976d2'
+                            : msg.type === 'error'
+                              ? '#ffebee'
+                              : msg.type === 'success'
+                                ? '#e8f5e9'
+                                : '#f5f5f5',
+                        color: msg.role === 'user' ? '#fff' : msg.type === 'error' ? '#c62828' : '#333',
+                        boxShadow: 'none',
+                        border: msg.type === 'error' ? '1px solid #ef5350' : 'none',
+                      }}
+                    >
+                      {msg.type === 'table' && msg.data ? (
+                        <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                          <Typography variant="body2" sx={{ fontSize: '13px' }}>
+                            📊 {msg.content}
+                          </Typography>
+                          <IconButton
+                            size="small"
+                            onClick={() => exportDataAsCsv(msg.data)}
+                            title="Export as CSV"
+                            sx={{ ml: 1, color: '#1976d2', '&:hover': { backgroundColor: 'rgba(25,118,210,0.08)' } }}
+                          >
+                            <FileDownloadIcon sx={{ fontSize: 18 }} />
+                          </IconButton>
+                        </Box>
+                      ) : msg.role === 'agent' ? (
+                        <FormattedMessage
+                          text={msg.content}
+                          color={msg.type === 'error' ? '#c62828' : msg.type === 'success' ? '#2e7d32' : '#333'}
+                        />
+                      ) : (
+                        <Typography variant="body2" sx={{ fontSize: '13px', lineHeight: 1.4 }}>
+                          {msg.content}
+                        </Typography>
+                      )}
+                    </Paper>
+                    {msg.suggestedActions && msg.suggestedActions.length > 0 && (
+                      <Box sx={{ display: 'flex', gap: 0.8, flexWrap: 'wrap', mt: 1.2, width: '100%' }}>
+                        {msg.suggestedActions.map((action, aIdx) => (
+                          <Button
+                            key={aIdx}
+                            size="small"
+                            variant="contained"
+                            onClick={() => {
+                              if (action.action === 'restart_service') {
+                                sendMessage('Restart the DataOps service')
+                              } else if (action.action === 'terminate_service') {
+                                const termMsg: Message = {
+                                  role: 'agent',
+                                  content: 'Service terminated. You can restart it when you are ready.',
+                                  type: 'success',
+                                  suggestedActions: [
+                                    { label: '▶️ Restart Service', action: 'restart_service' }
+                                  ]
+                                }
+                                setMessages(prev => [...prev, termMsg])
+                              } else {
+                                sendMessage(action.action)
+                              }
+                            }}
+                            disabled={isSessionLoading}
+                            sx={{
+                              fontSize: '12px',
+                              fontWeight: 500,
+                              textTransform: 'none',
+                              padding: '6px 12px',
+                              backgroundColor:
+                                action.action === 'restart_service' ? '#4caf50' :
+                                action.action === 'terminate_service' ? '#ef5350' :
+                                msg.type === 'error' ? '#ef5350' :
+                                msg.type === 'success' ? '#4caf50' : '#1976d2',
+                              color: '#fff',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              '&:hover': {
+                                backgroundColor:
+                                  action.action === 'restart_service' ? '#388e3c' :
+                                  action.action === 'terminate_service' ? '#d32f2f' :
+                                  msg.type === 'error' ? '#d32f2f' :
+                                  msg.type === 'success' ? '#388e3c' : '#1565c0',
+                                boxShadow: '0 2px 8px rgba(0,0,0,0.2)'
+                              },
+                              '&:disabled': { opacity: 0.6, cursor: 'not-allowed' },
+                              transition: 'all 0.2s ease',
+                            }}
+                          >
+                            {action.label}
+                          </Button>
+                        ))}
+                      </Box>
+                    )}
+                  </Box>
+                ))}
 
-            {loading && (
-              <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 0.75 }}>
-                <Box sx={{ width: 26, height: 26, borderRadius: '50%', backgroundColor: '#1976d2', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <SmartToyIcon sx={{ fontSize: 14, color: '#fff' }} />
+                {isSessionLoading && (
+                  <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 0.75 }}>
+                    <Box sx={{ width: 26, height: 26, borderRadius: '50%', backgroundColor: '#1976d2', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <SmartToyIcon sx={{ fontSize: 14, color: '#fff' }} />
+                    </Box>
+                    <Paper sx={{ p: 1.5, backgroundColor: '#f0f4f8', boxShadow: 'none', borderRadius: '16px 16px 16px 4px', border: '1px solid transparent' }}>
+                      <TypingDots />
+                    </Paper>
+                  </Box>
+                )}
+
+                <div ref={messagesEndRef} />
+              </Box>
+
+              {/* Quick Actions Strip */}
+              <Box sx={{ px: 2.5, py: 1.25, backgroundColor: '#fff', borderTop: '1px solid #f0f0f0', flexShrink: 0 }}>
+                <Typography sx={{ color: '#78909c', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', mb: 0.75 }}>
+                  Quick Actions
+                </Typography>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+                  {quickActions.map((action, idx) => (
+                    <Chip
+                      key={idx}
+                      label={action.label}
+                      size="small"
+                      onClick={() => sendMessage(action.query)}
+                      disabled={isSessionLoading}
+                      sx={{
+                        fontSize: '11px',
+                        height: 28,
+                        cursor: 'pointer',
+                        backgroundColor: '#e3f2fd',
+                        color: '#1565c0',
+                        border: '1px solid #bbdefb',
+                        fontWeight: 500,
+                        '&:hover': { backgroundColor: '#bbdefb' },
+                        '& .MuiChip-label': { px: 1.2 },
+                      }}
+                    />
+                  ))}
                 </Box>
-                <Paper sx={{ p: 1.5, backgroundColor: '#f0f4f8', boxShadow: 'none', borderRadius: '16px 16px 16px 4px', border: '1px solid transparent' }}>
-                  <TypingDots />
-                </Paper>
               </Box>
-            )}
 
-            <div ref={messagesEndRef} />
-          </Box>
+              {/* Divider */}
+              <Divider />
 
-          {/* Quick Actions Strip */}
-          <Box sx={{ px: 2.5, py: 1.25, backgroundColor: '#fff', borderTop: '1px solid #f0f0f0', flexShrink: 0 }}>
-            <Typography sx={{ color: '#78909c', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', mb: 0.75 }}>
-              Quick Actions
-            </Typography>
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
-              {quickActions.map((action, idx) => (
-                <Chip
-                  key={idx}
-                  label={action.label}
+              {/* Input Area */}
+              <Box sx={{ p: 2.5, backgroundColor: '#fff', display: 'flex', gap: 1 }}>
+                <TextField
+                  fullWidth
+                  multiline
+                  maxRows={3}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder={agent.placeholder}
+                  disabled={isSessionLoading}
                   size="small"
-                  onClick={() => sendMessage(action.query)}
-                  disabled={loading}
+                  variant="outlined"
                   sx={{
-                    fontSize: '11px',
-                    height: 28,
-                    cursor: 'pointer',
-                    backgroundColor: '#e3f2fd',
-                    color: '#1565c0',
-                    border: '1px solid #bbdefb',
-                    fontWeight: 500,
-                    '&:hover': { backgroundColor: '#bbdefb' },
-                    '& .MuiChip-label': { px: 1.2 },
+                    '& .MuiOutlinedInput-root': {
+                      fontSize: '13px',
+                      borderRadius: 1,
+                    },
                   }}
                 />
-              ))}
+                <Button
+                  variant="contained"
+                  onClick={() => sendMessage()}
+                  disabled={isSessionLoading || !input.trim()}
+                  sx={{ backgroundColor: agent.color, minWidth: '44px', height: '44px', p: 1 }}
+                >
+                  <SendIcon sx={{ fontSize: '18px' }} />
+                </Button>
+              </Box>
+            </>
+          ) : (
+            <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', px: 3, py: 4 }}>
+              <Box sx={{ width: '100%', maxWidth: 760, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2.5 }}>
+                <Typography sx={{ fontSize: isCompactFullScreen ? '30px' : '42px', fontWeight: 500, color: '#2f3a45', letterSpacing: '-0.8px', textAlign: 'center' }}>
+                  How can I help you today?
+                </Typography>
+                {sessionLoading && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, py: 0.5 }}>
+                    <CircularProgress size={14} sx={{ color: '#90a4ae' }} />
+                    <Typography sx={{ fontSize: '11px', color: '#90a4ae' }}>Restoring history...</Typography>
+                  </Box>
+                )}
+                <Paper sx={{ width: '100%', p: 1.2, borderRadius: 3, border: '1px solid #d9e3ee', boxShadow: '0 10px 32px rgba(20,36,58,0.06)' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 1 }}>
+                    <TextField
+                      fullWidth
+                      multiline
+                      maxRows={5}
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      placeholder={agent.placeholder}
+                      disabled={isSessionLoading}
+                      size="small"
+                      variant="outlined"
+                      sx={{
+                        '& .MuiOutlinedInput-root': {
+                          fontSize: '14px',
+                          borderRadius: 2,
+                          backgroundColor: '#fff',
+                        },
+                      }}
+                    />
+                    <Button
+                      variant="contained"
+                      onClick={() => sendMessage()}
+                      disabled={isSessionLoading || !input.trim()}
+                      sx={{ backgroundColor: agent.color, minWidth: '46px', height: '46px', p: 1, borderRadius: 2, '&:hover': { backgroundColor: agent.color, filter: 'brightness(0.92)' } }}
+                    >
+                      <SendIcon sx={{ fontSize: '18px' }} />
+                    </Button>
+                  </Box>
+                </Paper>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, justifyContent: 'center' }}>
+                  {quickActions.map((action, idx) => (
+                    <Chip
+                      key={idx}
+                      label={action.label}
+                      size="small"
+                      onClick={() => sendMessage(action.query)}
+                      disabled={loading}
+                      sx={{
+                        fontSize: '11px',
+                        height: 30,
+                        cursor: 'pointer',
+                        backgroundColor: '#edf4fb',
+                        color: '#0f4c81',
+                        border: '1px solid #c8dcf2',
+                        fontWeight: 600,
+                        '&:hover': { backgroundColor: '#dfeffc' },
+                        '& .MuiChip-label': { px: 1.4 },
+                      }}
+                    />
+                  ))}
+                </Box>
+              </Box>
             </Box>
-          </Box>
-
-          {/* Divider */}
-          <Divider />
-
-          {/* Input Area */}
-          <Box sx={{ p: 2.5, backgroundColor: '#fff', display: 'flex', gap: 1 }}>
-            <TextField
-              fullWidth
-              multiline
-              maxRows={3}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={agent.placeholder}
-              disabled={loading}
-              size="small"
-              variant="outlined"
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  fontSize: '13px',
-                  borderRadius: 1,
-                },
-              }}
-            />
-            <Button
-              variant="contained"
-              onClick={() => sendMessage()}
-              disabled={loading || !input.trim()}
-              sx={{ backgroundColor: agent.color, minWidth: '44px', height: '44px', p: 1 }}
-            >
-              <SendIcon sx={{ fontSize: '18px' }} />
-            </Button>
-          </Box>
+          )}
         </Box>
       </Box>
     )
@@ -728,7 +1004,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
         {sessionLoading && (
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, py: 1 }}>
             <CircularProgress size={14} sx={{ color: '#90a4ae' }} />
-            <Typography sx={{ fontSize: '11px', color: '#90a4ae' }}>Restoring history…</Typography>
+            <Typography sx={{ fontSize: '11px', color: '#90a4ae' }}>Restoring history...</Typography>
           </Box>
         )}
         {messages.map((msg, idx) => (
@@ -848,7 +1124,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
                           sendMessage(action.action)
                         }
                       }}
-                      disabled={loading}
+                      disabled={isSessionLoading}
                       sx={{
                         fontSize: '11px',
                         fontWeight: 500,
@@ -889,7 +1165,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
           </Box>
         ))}
 
-        {loading && (
+        {isSessionLoading && (
           <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 0.75 }}>
             <Box sx={{ width: 26, height: 26, borderRadius: '50%', backgroundColor: agent.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               <SmartToyIcon sx={{ fontSize: 14, color: '#fff' }} />
@@ -929,7 +1205,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
                 label={action.label}
                 size="small"
                 onClick={() => sendMessage(action.query)}
-                disabled={loading}
+                disabled={isSessionLoading}
                 sx={{
                   fontSize: '11px',
                   height: 26,
@@ -983,7 +1259,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
               <Button
                 variant="contained"
                 onClick={() => sendMessage()}
-                disabled={loading || !input.trim()}
+                disabled={isSessionLoading || !input.trim()}
                 sx={{
                   backgroundColor: agent.color,
                   minWidth: '40px',

@@ -103,8 +103,8 @@ export const chatService = {
    * Send a message to the given agent endpoint.
    * Defaults to the knowledge assistant when no endpoint is supplied.
    */
-  sendMessage: async (message: string, endpoint = '/api/v1/chat') => {
-    const raw = await chatRequest<ChatApiResponse>(endpoint, { session_id: SESSION_ID, message, conversation_history: [] })
+  sendMessage: async (message: string, endpoint = '/api/v1/chat', sessionId = SESSION_ID) => {
+    const raw = await chatRequest<ChatApiResponse>(endpoint, { session_id: sessionId, message, conversation_history: [] })
     return normaliseResponse(raw)
   },
 
@@ -112,9 +112,9 @@ export const chatService = {
    * Load chat history for a session + agent from DynamoDB.
    * Returns an empty array if the session does not exist or the request fails.
    */
-  loadSession: async (agentId: string): Promise<Array<{ role: 'user' | 'agent'; content: string; type?: string; data?: any; timestamp?: number; suggestedActions?: any }>> => {
+  loadSession: async (agentId: string, sessionId = SESSION_ID): Promise<Array<{ role: 'user' | 'agent'; content: string; type?: string; data?: any; timestamp?: number; suggestedActions?: any }>> => {
     try {
-      const url = `${config.apiBaseUrl}/api/sessions/${encodeURIComponent(SESSION_ID)}/${encodeURIComponent(agentId)}`
+      const url = `${config.apiBaseUrl}/api/sessions/${encodeURIComponent(sessionId)}/${encodeURIComponent(agentId)}`
       const res = await fetch(url)
       if (!res.ok) return []
       const json = await res.json()
@@ -128,8 +128,8 @@ export const chatService = {
    * Persist the current message list for a session + agent to DynamoDB.
    * Fire-and-forget — failures are silently swallowed so they never block the UI.
    */
-  saveSession: (agentId: string, messages: unknown[]): void => {
-    const url = `${config.apiBaseUrl}/api/sessions/${encodeURIComponent(SESSION_ID)}/${encodeURIComponent(agentId)}`
+  saveSession: (agentId: string, messages: unknown[], sessionId = SESSION_ID): void => {
+    const url = `${config.apiBaseUrl}/api/sessions/${encodeURIComponent(sessionId)}/${encodeURIComponent(agentId)}`
     fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -144,8 +144,8 @@ export const chatService = {
   /**
    * Delete the stored history for a session + agent from DynamoDB.
    */
-  clearSession: (agentId: string): void => {
-    const url = `${config.apiBaseUrl}/api/sessions/${encodeURIComponent(SESSION_ID)}/${encodeURIComponent(agentId)}`
+  clearSession: (agentId: string, sessionId = SESSION_ID): void => {
+    const url = `${config.apiBaseUrl}/api/sessions/${encodeURIComponent(sessionId)}/${encodeURIComponent(agentId)}`
     fetch(url, { method: 'DELETE' }).catch(() => { /* silent */ })
   },
 
@@ -158,8 +158,9 @@ export const chatService = {
     onChunk: (chunk: string) => void,
     signal?: AbortSignal,
     streamEndpoint = '/api/v1/chat/stream',
+    sessionId = SESSION_ID,
   ): Promise<void> => {
-    return streamRequest(streamEndpoint, { session_id: SESSION_ID, message }, onChunk, signal)
+    return streamRequest(streamEndpoint, { session_id: sessionId, message }, onChunk, signal)
   },
 
   /** Check health of the chat agent service. */

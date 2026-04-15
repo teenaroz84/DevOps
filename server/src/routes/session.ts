@@ -194,6 +194,71 @@ async function findLatestAgentItem(
   return undefined;
 }
 
+async function deleteAgentItems(
+  sessionId: string,
+  agentId: string,
+  partitionKey: string,
+  sortKey: string,
+): Promise<number> {
+  if (sortKey === 'agent_id') {
+    await getClient().send(new DeleteCommand({
+      TableName: TABLE,
+      Key: buildSessionKey(sessionId, agentId, partitionKey, sortKey),
+    }));
+    return 1;
+  }
+
+  let deleted = 0;
+  let cursor: Record<string, unknown> | undefined;
+
+  for (let page = 0; page < 20; page += 1) {
+    const result = await getClient().send(new QueryCommand({
+      TableName: TABLE,
+      KeyConditionExpression:
+        sortKey === 'session_id_timestamp'
+          ? '#pk = :sid AND begins_with(#sk, :prefix)'
+          : '#pk = :sid',
+      ExpressionAttributeNames:
+        sortKey === 'session_id_timestamp'
+          ? { '#pk': partitionKey, '#sk': sortKey }
+          : { '#pk': partitionKey },
+      ExpressionAttributeValues:
+        sortKey === 'session_id_timestamp'
+          ? { ':sid': sessionId, ':prefix': `${agentId}#` }
+          : { ':sid': sessionId },
+      ExclusiveStartKey: cursor,
+      Limit: 100,
+    }));
+
+    const items = (result.Items || []) as Array<Record<string, unknown>>;
+    const matches = sortKey === 'session_id_timestamp'
+      ? items
+      : items.filter((item) => String(item.agent_id ?? '') === agentId);
+
+    const keys = matches
+      .map((item) => {
+        const sortValue = String(item[sortKey] ?? '');
+        if (!sortValue) return null;
+        return buildSessionKey(sessionId, sortValue, partitionKey, sortKey);
+      })
+      .filter((key): key is Record<string, string> => key !== null);
+
+    for (const batch of chunk(keys, 25)) {
+      await getClient().send(new BatchWriteCommand({
+        RequestItems: {
+          [TABLE]: batch.map((key) => ({ DeleteRequest: { Key: key } })),
+        },
+      }));
+      deleted += batch.length;
+    }
+
+    if (!result.LastEvaluatedKey) break;
+    cursor = result.LastEvaluatedKey as Record<string, unknown>;
+  }
+
+  return deleted;
+}
+
 // ─── Diagnostic endpoints (MUST come first, before parametrized routes) ──────
 
 // GET /api/sessions/diagnostic/health
@@ -450,24 +515,8 @@ router.delete('/:sessionId/:agentId', async (req: Request, res: Response) => {
   debugLog('DELETE', { sessionId, agentId });
   try {
     const keys = await resolveKeySchema();
-    if (keys.sortKey === 'agent_id') {
-      await getClient().send(new DeleteCommand({
-        TableName: TABLE,
-        Key: buildSessionKey(sessionId, agentId, keys.partitionKey, keys.sortKey),
-      }));
-    } else {
-      const item = await findLatestAgentItem(sessionId, agentId, keys.partitionKey, keys.sortKey);
-      if (item) {
-        const sortValue = String(item[keys.sortKey] ?? '');
-        if (sortValue) {
-          await getClient().send(new DeleteCommand({
-            TableName: TABLE,
-            Key: buildSessionKey(sessionId, sortValue, keys.partitionKey, keys.sortKey),
-          }));
-        }
-      }
-    }
-    res.json({ ok: true, persisted: true });
+    const deletedCount = await deleteAgentItems(sessionId, agentId, keys.partitionKey, keys.sortKey);
+    res.json({ ok: true, persisted: true, deletedCount });
   } catch (err: any) {
     console.warn('[sessions] DELETE failed, skipping remote delete:', err.message);
     res.json({ ok: true, persisted: false });
