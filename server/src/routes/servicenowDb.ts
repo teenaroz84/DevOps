@@ -7,26 +7,26 @@ import { Router, Request, Response } from 'express';
 import { getPgPool } from '../db/postgres';
 
 const router = Router();
+const SN_DEFAULT_DAYS = 7;
+const SN_MAX_DAYS = 15;
 
-// ServiceNow incident tables are not fully normalized across environments.
-// Use to_jsonb(...) so missing candidate fields simply yield NULL instead of
-// breaking the query, then exclude common terminal states.
+function parseDays(query: any): number {
+  const n = parseInt(String(query.days ?? SN_DEFAULT_DAYS), 10);
+  if (isNaN(n)) return SN_DEFAULT_DAYS;
+  return Math.min(Math.max(n, 1), SN_MAX_DAYS);
+}
+
+// Open incidents are identified by sninc_state.
 const OPEN_INCIDENT_FILTER = `
-  COALESCE(LOWER(to_jsonb(sn) ->> 'sninc_active'), '') NOT IN ('false', 'f', '0', 'no', 'n')
-  AND COALESCE(
-    LOWER(to_jsonb(sn) ->> 'sninc_status'),
-    LOWER(to_jsonb(sn) ->> 'sninc_state'),
-    LOWER(to_jsonb(sn) ->> 'sninc_inc_state'),
-    LOWER(to_jsonb(sn) ->> 'sninc_close_state'),
-    ''
-  ) NOT IN ('closed', 'resolved', 'cancelled', 'canceled', 'complete', 'completed')
+  COALESCE(LOWER(TRIM(sn.sninc_state)), '') NOT IN ('closed', 'resolved', 'cancelled', 'canceled', 'complete', 'completed')
 `;
 
 // GET /api/servicenow/incidents?platform=<value>
-// Open P1/P2 incident count grouped by priority; optionally filtered by platform
+// Open incident count grouped by priority; optionally filtered by platform
 router.get('/incidents', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
+    const days = parseDays(req.query);
     const platform = req.query.platform as string | undefined;
     const platformClause = platform ? `AND sn.sninc_applkp_pltf_nm = $1` : '';
     const params = platform ? [platform] : [];
@@ -39,14 +39,21 @@ router.get('/incidents', async (req: Request, res: Response) => {
                sn.sninc_applkp_pltf_nm
         FROM   edoops.service_now_inc sn
          WHERE  ${OPEN_INCIDENT_FILTER}
+           AND sn.sninc_last_updt_dttm::timestamp >= NOW() - INTERVAL '${days} days'
         ORDER BY sn.sninc_inc_num, sn.sninc_last_updt_dttm DESC
       ) sn
       JOIN   edoops.sla_glossary sg
         ON   sn.sninc_priority = sg.snow_priority
-      WHERE  sg.short_priority IN ('P1','P2')
-        ${platformClause}
+      WHERE  ${platformClause ? `1=1 ${platformClause}` : '1=1'}
       GROUP BY sg.short_priority
-      ORDER BY sg.short_priority
+      ORDER BY CASE sg.short_priority
+                 WHEN 'P1' THEN 1
+                 WHEN 'P2' THEN 2
+                 WHEN 'P3' THEN 3
+                 WHEN 'P4' THEN 4
+                 WHEN 'P5' THEN 5
+                 ELSE 99
+               END, sg.short_priority
     `, params);
     res.json(result.rows);
   } catch (err: any) {
@@ -56,30 +63,42 @@ router.get('/incidents', async (req: Request, res: Response) => {
 });
 
 // GET /api/servicenow/missed-incidents?platform=<value>
-// Open P3/P4 incident count for "missed SLA" bar chart; optionally filtered by platform
+// Open P3/P4 incident count with SLA metadata; optionally filtered by platform
 router.get('/missed-incidents', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
+    const days = parseDays(req.query);
     const platform = req.query.platform as string | undefined;
     const platformClause = platform ? `AND sn.sninc_applkp_pltf_nm = $1` : '';
     const params = platform ? [platform] : [];
     const result = await pool.query(`
       SELECT sg.short_priority AS priority_field,
-             COUNT(*)::int     AS incident_count
+            COUNT(*)::int     AS incident_count,
+            MAX(sg.response_sla)   AS response_sla,
+            MAX(sg.resolution_sla) AS resolution_sla,
+            MAX(sg.details_url)    AS details_url
       FROM (
         SELECT DISTINCT ON (sn.sninc_inc_num)
                sn.sninc_priority,
                sn.sninc_applkp_pltf_nm
         FROM   edoops.service_now_inc sn
          WHERE  ${OPEN_INCIDENT_FILTER}
+           AND sn.sninc_last_updt_dttm::timestamp >= NOW() - INTERVAL '${days} days'
         ORDER BY sn.sninc_inc_num, sn.sninc_last_updt_dttm DESC
       ) sn
       JOIN   edoops.sla_glossary sg
         ON   sn.sninc_priority = sg.snow_priority
-      WHERE  sg.short_priority IN ('P3','P4')
+        WHERE  sg.short_priority IN ('P1', 'P2', 'P3', 'P4', 'P5')
         ${platformClause}
-      GROUP BY sg.short_priority
-      ORDER BY sg.short_priority
+        GROUP BY sg.short_priority, sg.response_sla, sg.resolution_sla, sg.details_url
+        ORDER  BY incident_count DESC,
+                  CASE sg.short_priority
+                    WHEN 'P1' THEN 1
+                    WHEN 'P2' THEN 2
+                    WHEN 'P3' THEN 3
+                    WHEN 'P4' THEN 4
+                    ELSE 99
+                  END, sg.short_priority
     `, params);
     res.json(result.rows);
   } catch (err: any) {
@@ -93,6 +112,7 @@ router.get('/missed-incidents', async (req: Request, res: Response) => {
 router.get('/incident-list', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
+    const days = parseDays(req.query);
     const platform = req.query.platform as string | undefined;
     const platformClause = platform ? `AND latest.sninc_applkp_pltf_nm = $1` : '';
     const params = platform ? [platform] : [];
@@ -110,6 +130,7 @@ router.get('/incident-list', async (req: Request, res: Response) => {
         JOIN   edoops.sla_glossary    sg
           ON   sn.sninc_priority = sg.snow_priority
         WHERE  ${OPEN_INCIDENT_FILTER}
+          AND sn.sninc_last_updt_dttm::timestamp >= NOW() - INTERVAL '${days} days'
         ORDER BY sn.sninc_inc_num, sn.sninc_last_updt_dttm DESC
       ) latest
       WHERE  1=1
@@ -153,6 +174,7 @@ router.get('/emergency-changes', async (req: Request, res: Response) => {
 router.get('/incident-detail', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
+    const days = parseDays(req.query);
     const priority = req.query.priority as string | undefined;
     const platform = req.query.platform as string | undefined;
     const priorities = priority ? [priority] : ['P1', 'P2', 'P3', 'P4'];
@@ -163,7 +185,7 @@ router.get('/incident-detail', async (req: Request, res: Response) => {
       platformClause = `AND latest.sninc_applkp_pltf_nm = $${params.length}`;
     }
     const result = await pool.query(`
-      SELECT sninc_inc_num, priority_field, sninc_capability, sninc_short_desc, sninc_assignment_grp
+      SELECT sninc_inc_num, priority_field, sninc_capability, sninc_short_desc, sninc_assignment_grp, response_sla, resolution_sla
       FROM (
         SELECT DISTINCT ON (sn.sninc_inc_num)
                sn.sninc_inc_num        AS sninc_inc_num,
@@ -171,11 +193,14 @@ router.get('/incident-detail', async (req: Request, res: Response) => {
                sn.sninc_capability     AS sninc_capability,
                sn.sninc_short_desc     AS sninc_short_desc,
                sn.sninc_assignment_grp AS sninc_assignment_grp,
+               sg.response_sla         AS response_sla,
+               sg.resolution_sla       AS resolution_sla,
                sn.sninc_applkp_pltf_nm
         FROM   edoops.service_now_inc sn
         JOIN   edoops.sla_glossary    sg
           ON   sn.sninc_priority = sg.snow_priority
         WHERE  ${OPEN_INCIDENT_FILTER}
+          AND sn.sninc_last_updt_dttm::timestamp >= NOW() - INTERVAL '${days} days'
         ORDER BY sn.sninc_inc_num, sn.sninc_last_updt_dttm DESC
       ) latest
       WHERE  priority_field = ANY($1)
@@ -193,6 +218,7 @@ router.get('/incident-detail', async (req: Request, res: Response) => {
 router.get('/by-capability', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
+    const days = parseDays(req.query);
     const platform = req.query.platform as string | undefined;
     const platformClause = platform ? `AND latest.sninc_applkp_pltf_nm = $1` : '';
     const params = platform ? [platform] : [];
@@ -205,6 +231,7 @@ router.get('/by-capability', async (req: Request, res: Response) => {
                sn.sninc_applkp_pltf_nm
         FROM   edoops.service_now_inc sn
          WHERE  ${OPEN_INCIDENT_FILTER}
+           AND sn.sninc_last_updt_dttm::timestamp >= NOW() - INTERVAL '${days} days'
         ORDER BY sn.sninc_inc_num, sn.sninc_last_updt_dttm DESC
       ) latest
       WHERE  sninc_capability IS NOT NULL
@@ -225,6 +252,7 @@ router.get('/by-capability', async (req: Request, res: Response) => {
 router.get('/by-assignment-group', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
+    const days = parseDays(req.query);
     const platform = req.query.platform as string | undefined;
     const platformClause = platform ? `AND latest.sninc_applkp_pltf_nm = $1` : '';
     const params = platform ? [platform] : [];
@@ -237,6 +265,7 @@ router.get('/by-assignment-group', async (req: Request, res: Response) => {
                sn.sninc_applkp_pltf_nm
         FROM   edoops.service_now_inc sn
          WHERE  ${OPEN_INCIDENT_FILTER}
+           AND sn.sninc_last_updt_dttm::timestamp >= NOW() - INTERVAL '${days} days'
         ORDER BY sn.sninc_inc_num, sn.sninc_last_updt_dttm DESC
       ) latest
       WHERE  sninc_assignment_grp IS NOT NULL
@@ -252,11 +281,12 @@ router.get('/by-assignment-group', async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/servicenow/platforms
+// GET /api/servicenow/platforms?days=7
 // All non-null platform names with a flag if they have any active P1/P2 incidents
-router.get('/platforms', async (_req: Request, res: Response) => {
+router.get('/platforms', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
+    const days = parseDays(req.query);
     const result = await pool.query(`
       SELECT platform, BOOL_OR(priority_field IN ('P1','P2')) AS has_critical
       FROM (
@@ -268,6 +298,7 @@ router.get('/platforms', async (_req: Request, res: Response) => {
           ON sn.sninc_priority = sg.snow_priority
         WHERE  sn.sninc_applkp_pltf_nm IS NOT NULL
           AND ${OPEN_INCIDENT_FILTER}
+          AND sn.sninc_last_updt_dttm::timestamp >= NOW() - INTERVAL '${days} days'
         ORDER BY sn.sninc_inc_num, sn.sninc_last_updt_dttm DESC
       ) latest
       GROUP BY platform

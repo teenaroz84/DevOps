@@ -33,16 +33,18 @@ export const MOCK_SERVICENOW_TICKETS = [
   },
 ]
 
-// Query 1: Open P1/P2 incident counts (service_now_inc + sla_glossary, short_priority IN ('P1','P2'))
+// Query 1: Open incident counts by priority (service_now_inc + sla_glossary)
 export const MOCK_SERVICENOW_INCIDENTS = [
   { priority_field: 'P1', incident_count: 3 },
   { priority_field: 'P2', incident_count: 5 },
+  { priority_field: 'P3', incident_count: 8 },
+  { priority_field: 'P4', incident_count: 14 },
 ]
 
 // Query 2: P3/P4 open ("missed") incident counts — bar chart
 export const MOCK_SERVICENOW_MISSED_INCIDENTS = [
-  { priority_field: 'P3', incident_count: 8 },
-  { priority_field: 'P4', incident_count: 14 },
+  { priority_field: 'P3', incident_count: 8,  response_sla: '4 Hrs',  resolution_sla: '2 Days', details_url: 'https://example.local/sla/p3' },
+  { priority_field: 'P4', incident_count: 14, response_sla: '8 Hrs',  resolution_sla: '5 Days', details_url: 'https://example.local/sla/p4' },
 ]
 
 // Query 3: Detailed P3/P4 incident list (used by IncidentListWidget)

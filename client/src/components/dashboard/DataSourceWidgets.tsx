@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { Box, Typography, Chip, Paper, TextField, InputAdornment, Button, Autocomplete, CircularProgress, Snackbar, Alert, TablePagination } from '@mui/material'
+import { Box, Typography, Chip, Paper, TextField, InputAdornment, Button, Autocomplete, CircularProgress, Snackbar, Alert, TablePagination, Slider } from '@mui/material'
 import BugReportIcon from '@mui/icons-material/BugReport'
 import SearchIcon from '@mui/icons-material/Search'
 import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber'
@@ -500,7 +500,7 @@ const INCIDENT_COLORS: Record<string, string> = {
   P5: '#757575',
 }
 
-export const IncidentsWidget: React.FC<{ platform?: string | null }> = ({ platform }) => {
+export const IncidentsWidget: React.FC<{ platform?: string | null; days?: number }> = ({ platform, days = 7 }) => {
   const [incidents, setIncidents] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -517,10 +517,10 @@ export const IncidentsWidget: React.FC<{ platform?: string | null }> = ({ platfo
       setLoading(false)
       return
     }
-    servicenowService.getIncidents(platform ?? undefined)
+    servicenowService.getIncidents(platform ?? undefined, days)
       .then(d => { setIncidents(Array.isArray(d) ? d : []); setLoading(false) })
       .catch(err => { setError(err.message || 'Failed to fetch incidents'); setLoading(false) })
-  }, [useMock, platform])
+  }, [useMock, platform, days])
 
   const totalIncidents = incidents.reduce((sum, i) => sum + (i.incident_count || 0), 0)
 
@@ -533,7 +533,7 @@ export const IncidentsWidget: React.FC<{ platform?: string | null }> = ({ platfo
   return (
     <>
       <WidgetShell
-        title="Critical Incidents (P1 / P2)"
+        title="Open Incidents by Priority"
         titleIcon={<WarningAmberIcon sx={{ color: '#c62828', fontSize: 18 }} />}
         source="PostgreSQL · edoops.service_now_inc"
         loading={loading}
@@ -560,7 +560,7 @@ export const IncidentsWidget: React.FC<{ platform?: string | null }> = ({ platfo
                     if (!platform && count > DRILLDOWN_LIMIT) { setHint(true); return }
                     setDrillDown({
                       type: 'sn_priority',
-                      data: { priority: item.label, count, source: 'Open Incidents', platform: platform ?? undefined },
+                      data: { priority: item.label, count, source: 'Open Incidents', platform: platform ?? undefined, days },
                     })
                   }
                 }}
@@ -590,9 +590,9 @@ export const IncidentsWidget: React.FC<{ platform?: string | null }> = ({ platfo
   )
 }
 
-// ─── Missed / Open P3+P4 Incidents Widget (bar chart) ────
+// ─── Top Incident SLA Widget (bar chart) ──────────────────
 
-export const MissedIncidentsWidget: React.FC<{ platform?: string | null }> = ({ platform }) => {
+export const MissedIncidentsWidget: React.FC<{ platform?: string | null; days?: number }> = ({ platform, days = 7 }) => {
   const [data, setData] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -607,10 +607,10 @@ export const MissedIncidentsWidget: React.FC<{ platform?: string | null }> = ({ 
       setLoading(false)
       return
     }
-    servicenowService.getMissedIncidents(platform ?? undefined)
+    servicenowService.getMissedIncidents(platform ?? undefined, days)
       .then(d => { setData(Array.isArray(d) ? d : []); setLoading(false) })
       .catch(err => { setError(err.message || 'Failed to fetch'); setLoading(false) })
-  }, [useMock, platform])
+  }, [useMock, platform, days])
 
   const total = data.reduce((s, r) => s + (r.incident_count || 0), 0)
   const maxCount = Math.max(...data.map(r => r.incident_count || 0), 1)
@@ -618,7 +618,7 @@ export const MissedIncidentsWidget: React.FC<{ platform?: string | null }> = ({ 
   return (
     <>
       <WidgetShell
-        title="Lower Priority Incidents (P3 / P4)"
+        title="Top Incidents by SLA"
         titleIcon={<WarningAmberIcon sx={{ color: '#e65100', fontSize: 18 }} />}
         source="PostgreSQL · edoops.service_now_inc"
         loading={loading}
@@ -633,9 +633,9 @@ export const MissedIncidentsWidget: React.FC<{ platform?: string | null }> = ({ 
                     label: r.priority_field || 'Unknown',
                     value: r.incident_count || 0,
                     color: INCIDENT_COLORS[r.priority_field] || '#757575',
-                    bg: ({ P3: '#e8f5e9', P4: '#e3f2fd' } as Record<string,string>)[r.priority_field] || '#f5f5f5',
+                    bg: ({ P1: '#fce4ec', P2: '#fff3e0', P3: '#e8f5e9', P4: '#e3f2fd', P5: '#f5f5f5' } as Record<string,string>)[r.priority_field] || '#f5f5f5',
                   })),
-                  { label: 'Total', value: total, color: '#e65100', bg: '#fff3e0' },
+                  { label: 'Total', value: total, color: '#1565c0', bg: '#e3f2fd' },
                 ]}
                 columns={3}
                 compact
@@ -645,7 +645,7 @@ export const MissedIncidentsWidget: React.FC<{ platform?: string | null }> = ({ 
                     if (!platform && count > DRILLDOWN_LIMIT) { setHint(true); return }
                     setDrillDown({
                       type: 'sn_priority',
-                      data: { priority: item.label, count, source: 'Missed SLA', platform: platform ?? undefined },
+                      data: { priority: item.label, count, source: 'Top Incident SLA', platform: platform ?? undefined, days },
                     })
                   }
                 }}
@@ -661,7 +661,7 @@ export const MissedIncidentsWidget: React.FC<{ platform?: string | null }> = ({ 
                       if (!platform && r.incident_count > DRILLDOWN_LIMIT) { setHint(true); return }
                       setDrillDown({
                         type: 'sn_priority',
-                        data: { priority: r.priority_field, count: r.incident_count, source: 'Missed SLA', platform: platform ?? undefined },
+                        data: { priority: r.priority_field, count: r.incident_count, source: 'Top Incident SLA', platform: platform ?? undefined, days },
                       })
                     }}
                     sx={{ cursor: 'pointer', borderRadius: 1, p: 0.5, '&:hover': { backgroundColor: '#f5f5f5' } }}
@@ -670,6 +670,9 @@ export const MissedIncidentsWidget: React.FC<{ platform?: string | null }> = ({ 
                       <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#333' }}>{r.priority_field}</Typography>
                       <Typography sx={{ fontSize: '12px', color: '#666' }}>{r.incident_count} incidents</Typography>
                     </Box>
+                    <Typography sx={{ fontSize: '10px', color: '#78909c', mb: 0.4 }}>
+                      Response SLA: {r.response_sla || '—'} | Resolution SLA: {r.resolution_sla || '—'}
+                    </Typography>
                     <Box sx={{ height: 8, backgroundColor: '#f0f0f0', borderRadius: 4, overflow: 'hidden' }}>
                       <Box sx={{ height: '100%', width: `${pct}%`, backgroundColor: color, borderRadius: 4, transition: 'width 0.4s ease' }} />
                     </Box>
@@ -693,7 +696,7 @@ export const MissedIncidentsWidget: React.FC<{ platform?: string | null }> = ({ 
 
 // ─── Incident List Widget (P3/P4 detailed records) ────────
 
-export const IncidentListWidget: React.FC<{ platform?: string | null }> = ({ platform }) => {
+export const IncidentListWidget: React.FC<{ platform?: string | null; days?: number }> = ({ platform, days = 7 }) => {
   const [data, setData] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -710,10 +713,10 @@ export const IncidentListWidget: React.FC<{ platform?: string | null }> = ({ pla
       setLoading(false)
       return
     }
-    servicenowService.getIncidentList(platform ?? undefined)
+    servicenowService.getIncidentList(platform ?? undefined, days)
       .then(d => { setData(Array.isArray(d) ? d : []); setLoading(false) })
       .catch(err => { setError(err.message || 'Failed to fetch'); setLoading(false) })
-  }, [useMock, platform])
+  }, [useMock, platform, days])
 
   const filtered = useMemo(() =>
     data
@@ -805,7 +808,7 @@ export const IncidentListWidget: React.FC<{ platform?: string | null }> = ({ pla
 
 const CAPABILITY_COLORS = ['#1565c0','#2e7d32','#e65100','#7b1fa2','#c62828','#00838f','#37474f']
 
-export const CapabilityWidget: React.FC<{ platform?: string | null }> = ({ platform }) => {
+export const CapabilityWidget: React.FC<{ platform?: string | null; days?: number }> = ({ platform, days = 7 }) => {
   const [data, setData] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -814,10 +817,10 @@ export const CapabilityWidget: React.FC<{ platform?: string | null }> = ({ platf
   useEffect(() => {
     setLoading(true); setData([]); setError(null)
     if (useMock) { setData(MOCK_SERVICENOW_BY_CAPABILITY); setLoading(false); return }
-    servicenowService.getByCapability(platform ?? undefined)
+    servicenowService.getByCapability(platform ?? undefined, days)
       .then(d => { setData(Array.isArray(d) ? d : []); setLoading(false) })
       .catch(err => { setError(err.message || 'Failed to fetch'); setLoading(false) })
-  }, [useMock, platform])
+  }, [useMock, platform, days])
 
   const max = Math.max(...data.map(r => r.incident_count || 0), 1)
 
@@ -854,7 +857,7 @@ export const CapabilityWidget: React.FC<{ platform?: string | null }> = ({ platf
 
 // ─── By Assignment Group Widget ────────────────────────────
 
-export const AssignmentGroupWidget: React.FC<{ platform?: string | null }> = ({ platform }) => {
+export const AssignmentGroupWidget: React.FC<{ platform?: string | null; days?: number }> = ({ platform, days = 7 }) => {
   const [data, setData] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -863,10 +866,10 @@ export const AssignmentGroupWidget: React.FC<{ platform?: string | null }> = ({ 
   useEffect(() => {
     setLoading(true); setData([]); setError(null)
     if (useMock) { setData(MOCK_SERVICENOW_BY_ASSIGNMENT_GROUP); setLoading(false); return }
-    servicenowService.getByAssignmentGroup(platform ?? undefined)
+    servicenowService.getByAssignmentGroup(platform ?? undefined, days)
       .then(d => { setData(Array.isArray(d) ? d : []); setLoading(false) })
       .catch(err => { setError(err.message || 'Failed to fetch'); setLoading(false) })
-  }, [useMock, platform])
+  }, [useMock, platform, days])
 
   const total = data.reduce((s, r) => s + (r.incident_count || 0), 0)
   const donutData = data.map((r, i) => ({
@@ -1041,6 +1044,7 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
   const [platforms,        setPlatforms]        = useState<{ platform: string; hasCritical: boolean }[]>([])
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null)
   const [platformsLoading, setPlatformsLoading] = useState(false)
+  const [days, setDays] = useState(7)
 
   useEffect(() => {
     setPlatformsLoading(true)
@@ -1049,10 +1053,10 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
       setPlatformsLoading(false)
       return
     }
-    servicenowService.getPlatforms()
+    servicenowService.getPlatforms(days)
       .then(d => { setPlatforms(Array.isArray(d) ? d : []); setPlatformsLoading(false) })
       .catch(() => setPlatformsLoading(false))
-  }, [useMock])
+  }, [useMock, days])
 
   return (
     <Box sx={{ bgcolor: '#f5f6f8', minHeight: '100%', p: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -1109,6 +1113,25 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
               )}
               ListboxProps={{ sx: { fontSize: '12px' } }}
             />
+          <Box sx={{ width: 220, display: 'flex', alignItems: 'center', gap: 1, ml: 0.5 }}>
+            <Typography sx={{ fontSize: '11px', color: '#666', minWidth: 58 }}>Last {days}d</Typography>
+            <Slider
+              size="small"
+              value={days}
+              onChange={(_, v) => setDays(Array.isArray(v) ? v[0] : v)}
+              valueLabelDisplay="auto"
+              min={1}
+              max={15}
+              step={1}
+              //marks={[{ value: 1, label: '1' }, { value: 7, label: '7' }, { value: 15, label: '15' }]}
+              sx={{
+                color: '#1976d2',
+                '& .MuiSlider-markLabel': { fontSize: '9px' },
+                '& .MuiSlider-valueLabel': { fontSize: '10px' },
+              }}
+            />
+            <Typography sx={{ fontSize: '10px', color: '#bbb', whiteSpace: 'nowrap' }}>15d</Typography>
+          </Box>
           <Typography sx={{ fontSize: '11px', color: '#aaa', ml: 'auto' }}>
             Source: PostgreSQL · edoops.service_now_inc
           </Typography>
@@ -1134,28 +1157,43 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
         </Box>
       </Paper>
 
-      {/* ── Row 1: Open P1/P2/P3 counts + Missed P3/P4 bar chart ── */}
+      {/* ── Row 1: Open incidents by priority + Top incidents by SLA ── */}
       <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, alignItems: 'stretch' }}>
         <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #c62828', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
-          <IncidentsWidget platform={selectedPlatform} />
+          <IncidentsWidget platform={selectedPlatform} days={days} />
         </Paper>
         <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #e65100', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
-          <MissedIncidentsWidget platform={selectedPlatform} />
+          <MissedIncidentsWidget platform={selectedPlatform} days={days} />
         </Paper>
       </Box>
 
       {/* ── Row 2: Incident list (full width) ── */}
-      <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #1565c0', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-        <IncidentListWidget platform={selectedPlatform} />
+      <Paper
+        elevation={0}
+        sx={{
+          borderRadius: 2,
+          overflow: 'hidden',
+          border: '1px solid #e8ecf1',
+          borderTop: '3px solid #1565c0',
+          boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+          display: 'flex',
+          flexDirection: 'column',
+          height: 420,
+          '@media (max-width: 900px)': {
+            height: 360,
+          },
+        }}
+      >
+        <IncidentListWidget platform={selectedPlatform} days={days} />
       </Paper>
 
       {/* ── Row 3: By Capability + By Assignment Group ── */}
       <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, alignItems: 'stretch' }}>
         <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #1565c0', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
-          <CapabilityWidget platform={selectedPlatform} />
+          <CapabilityWidget platform={selectedPlatform} days={days} />
         </Paper>
         <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #2e7d32', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
-          <AssignmentGroupWidget platform={selectedPlatform} />
+          <AssignmentGroupWidget platform={selectedPlatform} days={days} />
         </Paper>
       </Box>
 

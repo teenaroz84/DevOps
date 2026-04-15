@@ -291,7 +291,7 @@ const PRIORITY_COLORS: Record<string, { bg: string; color: string; border: strin
   P4: { bg: '#f3e5f5', color: '#6a1b9a', border: '#ce93d8' },
 }
 
-const SnIncidentDetail: React.FC<{ data: { priority: string; count: number; source?: string; platform?: string } }> = ({ data }) => {
+const SnIncidentDetail: React.FC<{ data: { priority: string; count: number; source?: string; platform?: string; days?: number } }> = ({ data }) => {
   const { useMock: isMock } = useMockData()
   const [rows, setRows] = React.useState<any[]>([])
   const [loading, setLoading] = React.useState(true)
@@ -303,12 +303,12 @@ const SnIncidentDetail: React.FC<{ data: { priority: string; count: number; sour
       setRows(filtered)
       setLoading(false)
     } else {
-      servicenowService.getIncidentDetail(data.priority, data.platform)
+      servicenowService.getIncidentDetail(data.priority, data.platform, data.days ?? 7)
         .then((res: any) => setRows(Array.isArray(res) ? res : res?.data ?? []))
         .catch(() => setRows([]))
         .finally(() => setLoading(false))
     }
-  }, [data.priority, data.platform, isMock])
+  }, [data.priority, data.platform, data.days, isMock])
 
   const pc = PRIORITY_COLORS[data.priority] ?? { bg: '#f5f5f5', color: '#555', border: '#ccc' }
 
@@ -347,6 +347,8 @@ const SnIncidentDetail: React.FC<{ data: { priority: string; count: number; sour
                       capability: r.sninc_capability,
                       description: r.sninc_short_desc,
                       assignment_group: r.sninc_assignment_grp,
+                      response_sla: r.response_sla || '',
+                      resolution_sla: r.resolution_sla || '',
                     })),
                     `servicenow_incidents_${data.priority}`
                   )}
@@ -361,7 +363,7 @@ const SnIncidentDetail: React.FC<{ data: { priority: string; count: number; sour
           <Table size="small" sx={{ minWidth: 580 }}>
             <TableHead sx={{ position: 'sticky', top: 0, zIndex: 1 }}>
               <TableRow sx={{ backgroundColor: '#f5f5f5' }}>
-                {['Incident #', 'Priority', 'Capability', 'Description', 'Assignment Group'].map(h => (
+                {['Incident #', 'Priority', 'Capability', 'Description', 'Assignment Group', 'Response SLA', 'Resolution SLA'].map(h => (
                   <TableCell key={h} sx={{ fontWeight: 700, fontSize: '12px', color: '#555', whiteSpace: 'nowrap' }}>{h}</TableCell>
                 ))}
               </TableRow>
@@ -384,6 +386,8 @@ const SnIncidentDetail: React.FC<{ data: { priority: string; count: number; sour
                     </Tooltip>
                   </TableCell>
                   <TableCell sx={{ fontSize: '12px', color: '#555', whiteSpace: 'nowrap' }}>{r.sninc_assignment_grp}</TableCell>
+                  <TableCell sx={{ fontSize: '11px', color: '#666', whiteSpace: 'nowrap' }}>{r.response_sla || '—'}</TableCell>
+                  <TableCell sx={{ fontSize: '11px', color: '#666', whiteSpace: 'nowrap' }}>{r.resolution_sla || '—'}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
