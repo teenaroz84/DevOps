@@ -23,6 +23,8 @@ import { BatchWriteCommand, DeleteCommand, DynamoDBDocumentClient, GetCommand, P
 const router = Router();
 
 const TABLE = process.env.SESSIONS_TABLE || 'ChatSessions';
+const PARTITION_KEY = process.env.SESSIONS_PARTITION_KEY || process.env.SESSIONS_PK || 'session_id';
+const SORT_KEY = process.env.SESSIONS_SORT_KEY || process.env.SESSIONS_SK || 'agent_id';
 const TTL_SECONDS = 30 * 24 * 60 * 60; // 30 days
 const DEBUG_SESSIONS = process.env.DEBUG_SESSIONS === '1';
 
@@ -44,8 +46,12 @@ function debugLog(event: string, details?: Record<string, unknown>): void {
 type SessionRecordInput = {
   session_id?: string;
   sessionId?: string;
+  pk?: string;
+  PK?: string;
   agent_id?: string;
   agentId?: string;
+  sk?: string;
+  SK?: string;
   messages?: unknown[] | string;
   updated_at?: string;
   updatedAt?: string;
@@ -61,8 +67,8 @@ type SessionItem = {
 };
 
 function toSessionItem(record: SessionRecordInput): SessionItem | null {
-  const session_id = record.session_id ?? record.sessionId;
-  const agent_id = record.agent_id ?? record.agentId;
+  const session_id = record.session_id ?? record.sessionId ?? record.pk ?? record.PK;
+  const agent_id = record.agent_id ?? record.agentId ?? record.sk ?? record.SK;
   if (!session_id || !agent_id) return null;
 
   const rawMessages = Array.isArray(record.messages)
@@ -83,6 +89,26 @@ function toSessionItem(record: SessionRecordInput): SessionItem | null {
     messages: JSON.stringify(rawMessages),
     updated_at: record.updated_at ?? record.updatedAt ?? new Date().toISOString(),
     ttl: Number.isFinite(record.ttl) ? Number(record.ttl) : Math.floor(Date.now() / 1000) + TTL_SECONDS,
+  };
+}
+
+function buildSessionKey(sessionId: string, agentId: string): Record<string, string> {
+  return {
+    [PARTITION_KEY]: sessionId,
+    [SORT_KEY]: agentId,
+  };
+}
+
+function buildSessionItem(sessionId: string, agentId: string, messages: unknown[]): Record<string, unknown> {
+  return {
+    [PARTITION_KEY]: sessionId,
+    [SORT_KEY]: agentId,
+    // Keep canonical fields for backward compatibility and easy querying.
+    session_id: sessionId,
+    agent_id: agentId,
+    messages: JSON.stringify(messages),
+    updated_at: new Date().toISOString(),
+    ttl: Math.floor(Date.now() / 1000) + TTL_SECONDS,
   };
 }
 
@@ -108,6 +134,8 @@ router.get('/diagnostic/health', async (req: Request, res: Response) => {
     config: {
       table,
       region,
+      partitionKey: PARTITION_KEY,
+      sortKey: SORT_KEY,
       hasAccessKey,
       hasSecretKey,
       isDev: process.env.NODE_ENV !== 'production',
@@ -141,6 +169,8 @@ router.get('/diagnostic/dynamodb', async (req: Request, res: Response) => {
       status: 'DynamoDB Connected',
       table,
       region,
+      configuredPartitionKey: PARTITION_KEY,
+      configuredSortKey: SORT_KEY,
       keySchema: schema,
       canRead: true,
       hasItems: !!(result.Items && result.Items.length > 0),
@@ -195,6 +225,10 @@ router.get('/diagnostic/sample-item', async (_req: Request, res: Response) => {
       table: TABLE,
       hasItems: true,
       sample: {
+        configuredPartitionKey: PARTITION_KEY,
+        configuredSortKey: SORT_KEY,
+        partitionValue: item[PARTITION_KEY],
+        sortValue: item[SORT_KEY],
         session_id: item.session_id,
         agent_id: item.agent_id,
         updated_at: item.updated_at,
@@ -230,9 +264,18 @@ router.post('/bulk', async (req: Request, res: Response) => {
     const batches = chunk<SessionItem>(validItems, 25);
 
     for (const batch of batches) {
+      const mapped = batch.map((item) => ({
+        [PARTITION_KEY]: item.session_id,
+        [SORT_KEY]: item.agent_id,
+        session_id: item.session_id,
+        agent_id: item.agent_id,
+        messages: item.messages,
+        updated_at: item.updated_at,
+        ttl: item.ttl,
+      }));
       await getClient().send(new BatchWriteCommand({
         RequestItems: {
-          [TABLE]: batch.map((item) => ({ PutRequest: { Item: item } })),
+          [TABLE]: mapped.map((item) => ({ PutRequest: { Item: item } })),
         },
       }));
       inserted += batch.length;
@@ -264,7 +307,7 @@ router.get('/:sessionId/:agentId', async (req: Request, res: Response) => {
   try {
     const result = await getClient().send(new GetCommand({
       TableName: TABLE,
-      Key: { session_id: sessionId, agent_id: agentId },
+      Key: buildSessionKey(sessionId, agentId),
     }));
     const messages = result.Item ? JSON.parse(result.Item.messages || '[]') : [];
     res.json({ messages });
@@ -282,13 +325,7 @@ router.post('/:sessionId/:agentId', async (req: Request, res: Response) => {
   try {
     await getClient().send(new PutCommand({
       TableName: TABLE,
-      Item: {
-        session_id: sessionId,
-        agent_id: agentId,
-        messages: JSON.stringify(messages),
-        updated_at: new Date().toISOString(),
-        ttl: Math.floor(Date.now() / 1000) + TTL_SECONDS,
-      },
+      Item: buildSessionItem(sessionId, agentId, messages),
     }));
     res.json({ ok: true, persisted: true });
   } catch (err: any) {
@@ -312,7 +349,7 @@ router.delete('/:sessionId/:agentId', async (req: Request, res: Response) => {
   try {
     await getClient().send(new DeleteCommand({
       TableName: TABLE,
-      Key: { session_id: sessionId, agent_id: agentId },
+      Key: buildSessionKey(sessionId, agentId),
     }));
     res.json({ ok: true, persisted: true });
   } catch (err: any) {
