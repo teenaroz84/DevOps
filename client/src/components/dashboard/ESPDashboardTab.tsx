@@ -155,6 +155,8 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   // Aggregates load first so widgets appear immediately; job list is fetched separately.
   React.useEffect(() => {
     if (!selectedPlatform || selected || useMock) return
+    let cancelled = false
+
     setLoading(true)
     setData(null)
     setJobListLoading(false)
@@ -162,6 +164,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
     setJobListHasMore(false)
     espService.getPlatformDetail(selectedPlatform)
       .then((res: any) => {
+        if (cancelled) return
         if (!res || res.error) { setData(null); setLoading(false); return }
         setData({
           ...res,
@@ -180,15 +183,24 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
         setJobListLoading(true)
         espService.getPlatformJobList(selectedPlatform)
           .then((jobRes: any) => {
-            if (!jobRes) return
+            if (cancelled || !jobRes) return
             setData(prev => prev ? { ...prev, job_list: Array.isArray(jobRes.jobs) ? jobRes.jobs : [] } : prev)
             if (jobRes.limited) setJobListLimited({ showing: jobRes.limit, total: jobRes.total })
             setJobListHasMore(!!jobRes.hasMore)
           })
           .catch(() => {})
-          .finally(() => setJobListLoading(false))
+          .finally(() => { if (!cancelled) setJobListLoading(false) })
       })
-      .catch(() => { setData(null); setLoading(false) })
+      .catch(() => {
+        if (!cancelled) {
+          setData(null)
+          setLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
   }, [selectedPlatform, selected, useMock])
 
   React.useEffect(() => {
