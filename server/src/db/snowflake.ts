@@ -9,9 +9,24 @@ import snowflake from 'snowflake-sdk';
 
 snowflake.configure({ logLevel: 'WARN' });
 
+function normalizeSnowflakeAccount(rawAccount: string): string {
+  const trimmed = (rawAccount || '').trim();
+  if (!trimmed) return '';
+
+  // Accept values like:
+  // - https://xy12345.us-east-1.snowflakecomputing.com
+  // - xy12345.us-east-1.snowflakecomputing.com
+  // - xy12345.us-east-1
+  const withoutProtocol = trimmed.replace(/^https?:\/\//i, '');
+  const hostOnly = withoutProtocol.split('/')[0].split('?')[0].split('#')[0];
+  return hostOnly.replace(/\.snowflakecomputing\.com$/i, '');
+}
+
 function createConnection(): snowflake.Connection {
+  const account = normalizeSnowflakeAccount(process.env.SNOWFLAKE_ACCOUNT || '');
+
   return snowflake.createConnection({
-    account:   process.env.SNOWFLAKE_ACCOUNT   || '',
+    account,
     username:  process.env.SNOWFLAKE_USERNAME  || '',
     password:  process.env.SNOWFLAKE_PASSWORD  || '',
     database:  process.env.SNOWFLAKE_DATABASE  || '_DMF',

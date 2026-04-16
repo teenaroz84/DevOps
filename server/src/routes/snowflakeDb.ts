@@ -1,16 +1,18 @@
 /**
- * Snowflake routes — live queries via snowflake-sdk
+ * Snowflake dashboard routes — queries executed via PostgreSQL.
  */
 import { Router, Request, Response } from 'express';
-import { querySnowflake } from '../db/snowflake';
+import { getPgPool } from '../db';
 
 const router = Router();
 
 async function safeQuery(sql: string, fallback: any = null): Promise<any> {
   try {
-    return await querySnowflake(sql);
+    const pool = getPgPool();
+    const result = await pool.query(sql);
+    return result.rows;
   } catch (e: any) {
-    console.error('Snowflake query error:', e.message);
+    console.error('Snowflake dashboard Postgres query error:', e.message);
     return fallback;
   }
 }
@@ -294,32 +296,32 @@ router.get('/platform-summary', async (_req: Request, res: Response) => {
   const [qRows, tRows, wRows, loginRows] = await Promise.all([
     safeQuery(`
       SELECT
-        COUNT_IF(total_elapsed_time > 60000)           AS long_queries,
-        COUNT_IF(execution_status NOT ILIKE 'SUCCESS%') AS query_errors,
+        COUNT(*) FILTER (WHERE total_elapsed_time > 60000) AS long_queries,
+        COUNT(*) FILTER (WHERE execution_status NOT ILIKE 'SUCCESS%') AS query_errors,
         COUNT(*)                                        AS queries_today,
         ROUND(
-          100.0 * COUNT_IF(execution_status ILIKE 'SUCCESS%') / NULLIF(COUNT(*), 0)
+          100.0 * COUNT(*) FILTER (WHERE execution_status ILIKE 'SUCCESS%') / NULLIF(COUNT(*), 0)
         , 1) AS query_success_pct,
         ROUND(AVG(total_elapsed_time), 0)               AS avg_query_time_ms
       FROM edoops.sf_query_history
-      WHERE start_time >= DATEADD('day', -1, CURRENT_TIMESTAMP)
+      WHERE start_time >= CURRENT_TIMESTAMP - INTERVAL '1 day'
     `, [{}]),
     safeQuery(`
-      SELECT COUNT_IF(state ILIKE 'FAILED%') AS task_failures
+      SELECT COUNT(*) FILTER (WHERE state ILIKE 'FAILED%') AS task_failures
       FROM edoops.sf_task_history
-      WHERE scheduled_time >= DATEADD('day', -1, CURRENT_TIMESTAMP)
+      WHERE scheduled_time >= CURRENT_TIMESTAMP - INTERVAL '1 day'
     `, [{}]),
     safeQuery(`
       SELECT
-        ROUND(100.0 * COUNT_IF(COALESCE(credits_used, 0) > 0) / NULLIF(COUNT(*), 0), 1) AS warehouse_util_pct,
+        ROUND(100.0 * COUNT(*) FILTER (WHERE COALESCE(credits_used, 0) > 0) / NULLIF(COUNT(*), 0), 1) AS warehouse_util_pct,
         ROUND(COALESCE(SUM(credits_used), 0)::numeric, 2) AS warehouse_credits_used
       FROM edoops.sf_warehouse_metering_history
-      WHERE start_time >= DATEADD('day', -1, CURRENT_TIMESTAMP)
+      WHERE start_time >= CURRENT_TIMESTAMP - INTERVAL '1 day'
     `, [{}]),
     safeQuery(`
       SELECT COUNT(*) AS failed_logins
       FROM edoops.sf_login_history
-      WHERE event_timestamp >= DATEADD('day', -1, CURRENT_TIMESTAMP)
+      WHERE event_timestamp >= CURRENT_TIMESTAMP - INTERVAL '1 day'
         AND is_success = 'NO'
     `, [{}]),
   ]);
@@ -348,7 +350,7 @@ router.get('/warehouse-heatmap', async (_req: Request, res: Response) => {
       EXTRACT(HOUR FROM start_time)        AS hour,
       ROUND(SUM(credits_used), 2)          AS util_pct
     FROM edoops.sf_warehouse_metering_history
-    WHERE start_time >= DATEADD('day', -7, CURRENT_TIMESTAMP)
+      WHERE start_time >= CURRENT_TIMESTAMP - INTERVAL '7 day'
     GROUP BY warehouse_name, hour
     ORDER BY warehouse_name, hour
   `, []);
@@ -377,7 +379,7 @@ router.get('/hourly-queries', async (_req: Request, res: Response) => {
       DATE_PART('hour', start_time) AS hour,
       COUNT(*)                       AS queries
     FROM edoops.sf_query_history
-    WHERE start_time >= DATEADD('day', -1, CURRENT_TIMESTAMP)
+    WHERE start_time >= CURRENT_TIMESTAMP - INTERVAL '1 day'
     GROUP BY hour
     ORDER BY hour
   `, []);
@@ -396,17 +398,17 @@ router.get('/top-slow-queries', async (_req: Request, res: Response) => {
         MAX(start_time) AS last_run,
         ROUND(AVG(total_elapsed_time), 2) AS avg_elapsed_ms,
         ROUND(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY total_elapsed_time), 2) AS p95_elapsed_ms,
-        COUNT_IF(execution_status NOT ILIKE 'SUCCESS%') AS error_count,
+        COUNT(*) FILTER (WHERE execution_status NOT ILIKE 'SUCCESS%') AS error_count,
         MAX(error_message) AS latest_error_message
       FROM edoops.sf_query_history
-      WHERE start_time >= DATEADD('day', -30, CURRENT_TIMESTAMP)
+      WHERE start_time >= CURRENT_TIMESTAMP - INTERVAL '30 day'
       GROUP BY COALESCE(query_hash, MD5(COALESCE(query_text, '')))
     )
     SELECT
       query_pattern AS pipeline,
       TO_CHAR(last_run, 'HH24:MI') AS last_run,
-      IFF(error_count > 0, 'ERROR', 'SLOW') AS error_type,
-      IFF(error_count > 0 OR p95_elapsed_ms >= 15000, FALSE, TRUE) AS sla_ok,
+      CASE WHEN error_count > 0 THEN 'ERROR' ELSE 'SLOW' END AS error_type,
+      CASE WHEN error_count > 0 OR p95_elapsed_ms >= 15000 THEN FALSE ELSE TRUE END AS sla_ok,
       CASE
         WHEN p95_elapsed_ms >= 60000 THEN 'Consider clustering, pruning, or materialized view'
         WHEN p95_elapsed_ms >= 15000 THEN 'Review joins and warehouse sizing'
@@ -450,8 +452,8 @@ router.get('/task-reliability', async (_req: Request, res: Response) => {
     SELECT
       TO_CHAR(DATE_TRUNC('day', scheduled_time), 'MM/DD') AS date,
       COUNT(*)                                              AS total,
-      COUNT_IF(state ILIKE 'SUCCEEDED%')                   AS succeeded,
-      COUNT_IF(state ILIKE 'FAILED%')                      AS failed
+      COUNT(*) FILTER (WHERE state ILIKE 'SUCCEEDED%')      AS succeeded,
+      COUNT(*) FILTER (WHERE state ILIKE 'FAILED%')         AS failed
     FROM edoops.sf_task_history
     WHERE scheduled_time >= CURRENT_DATE - INTERVAL '14 day'
     GROUP BY DATE_TRUNC('day', scheduled_time)
