@@ -150,6 +150,8 @@ interface ChatPanelProps {
   agentConfig?: AgentConfig
 }
 
+type ResizeDirection = 'top' | 'right' | 'bottom' | 'left' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
+
 const DEFAULT_WELCOME: Message = {
   role: 'agent',
   content: '👋 Hi! I\'m your DataOps Knowledge Assistant. Ask me about DMF ingestion, enrichment standards, ESP scheduling, Talend development, or any other platform guidelines.',
@@ -158,6 +160,10 @@ const DEFAULT_WELCOME: Message = {
 
 export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: ChatPanelProps) {
   const PANEL_MARGIN = 24
+  const MIN_PANEL_WIDTH = 400
+  const MAX_PANEL_WIDTH = Number.MAX_SAFE_INTEGER
+  const MIN_PANEL_HEIGHT = 520
+  const MAX_PANEL_HEIGHT = Number.MAX_SAFE_INTEGER
   // Resolved config — fall back to global knowledge agent
   const agent: AgentConfig = agentConfig ?? AGENTS.knowledge
   const [input, setInput] = useState('')
@@ -259,21 +265,39 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
   const [isSessionSidebarCollapsed, setIsSessionSidebarCollapsed] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const sessionsListRef = useRef<HTMLDivElement>(null)
+  const [panelSize, setPanelSize] = useState(() => {
+    const fallback = { width: 440, height: 780 }
+    if (typeof window === 'undefined') return fallback
+    return {
+      width: fallback.width,
+      height: Math.min(window.innerHeight - PANEL_MARGIN * 2, 820),
+    }
+  })
+  const [resizing, setResizing] = useState(false)
+  const resizeRef = useRef<{
+    startX: number
+    startY: number
+    originWidth: number
+    originHeight: number
+    originX: number
+    originY: number
+    direction: ResizeDirection
+  } | null>(null)
 
   const isCompactFullScreen = useMediaQuery('(max-width:980px)')
   const isMobileViewport = !fullScreen && typeof window !== 'undefined' && window.innerWidth <= 600
-  const panelWidth = isMobileViewport ? (typeof window !== 'undefined' ? window.innerWidth : 440) : (expanded ? 760 : 440)
+  const panelWidth = isMobileViewport ? (typeof window !== 'undefined' ? window.innerWidth : 440) : panelSize.width
   const panelHeight = isMobileViewport
     ? (typeof window !== 'undefined' ? window.innerHeight : 0)
-    : (typeof window !== 'undefined' ? Math.min(window.innerHeight - PANEL_MARGIN * 2, 820) : 780)
+    : panelSize.height
 
   const clampPanelPosition = useCallback((x: number, y: number) => {
     if (typeof window === 'undefined' || isMobileViewport) return { x: 0, y: 0 }
-    const maxX = Math.max(PANEL_MARGIN, window.innerWidth - panelWidth - PANEL_MARGIN)
-    const maxY = Math.max(PANEL_MARGIN, window.innerHeight - panelHeight - PANEL_MARGIN)
+    const maxX = Math.max(0, window.innerWidth - panelWidth)
+    const maxY = Math.max(0, window.innerHeight - panelHeight)
     return {
-      x: Math.min(Math.max(PANEL_MARGIN, x), maxX),
-      y: Math.min(Math.max(PANEL_MARGIN, y), maxY),
+      x: Math.min(Math.max(0, x), maxX),
+      y: Math.min(Math.max(0, y), maxY),
     }
   }, [isMobileViewport, panelHeight, panelWidth])
 
@@ -292,6 +316,16 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
       return clampPanelPosition(prev.x, prev.y)
     })
   }, [clampPanelPosition, fullScreen, isMobileViewport, panelHeight, panelWidth])
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || fullScreen || isMobileViewport) return
+    const maxHeightInViewport = Math.min(window.innerHeight, MAX_PANEL_HEIGHT)
+    const targetWidth = expanded ? 760 : 440
+    setPanelSize(prev => ({
+      width: Math.min(Math.max(targetWidth, MIN_PANEL_WIDTH), MAX_PANEL_WIDTH),
+      height: Math.min(Math.max(prev.height, MIN_PANEL_HEIGHT), maxHeightInViewport),
+    }))
+  }, [expanded, fullScreen, isMobileViewport])
 
   useEffect(() => {
     if (fullScreen || isMobileViewport || !dragging) return
@@ -317,6 +351,62 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
     }
   }, [clampPanelPosition, dragging, fullScreen, isMobileViewport])
 
+  useEffect(() => {
+    if (fullScreen || isMobileViewport || !resizing) return
+
+    const handleMouseMove = (event: MouseEvent) => {
+      const resize = resizeRef.current
+      if (!resize || typeof window === 'undefined') return
+
+      const dx = event.clientX - resize.startX
+      const dy = event.clientY - resize.startY
+      const dir = resize.direction
+
+      let nextX = resize.originX
+      let nextY = resize.originY
+      let nextWidth = resize.originWidth
+      let nextHeight = resize.originHeight
+
+      if (dir.includes('right')) {
+        const maxWidth = Math.min(MAX_PANEL_WIDTH, window.innerWidth - resize.originX)
+        nextWidth = Math.min(Math.max(MIN_PANEL_WIDTH, resize.originWidth + dx), maxWidth)
+      }
+      if (dir.includes('left')) {
+        const rightEdge = resize.originX + resize.originWidth
+        const minLeft = Math.max(0, rightEdge - MAX_PANEL_WIDTH)
+        const maxLeft = rightEdge - MIN_PANEL_WIDTH
+        nextX = Math.min(Math.max(minLeft, resize.originX + dx), maxLeft)
+        nextWidth = rightEdge - nextX
+      }
+      if (dir.includes('bottom')) {
+        const maxHeight = Math.min(MAX_PANEL_HEIGHT, window.innerHeight - resize.originY)
+        nextHeight = Math.min(Math.max(MIN_PANEL_HEIGHT, resize.originHeight + dy), maxHeight)
+      }
+      if (dir.includes('top')) {
+        const bottomEdge = resize.originY + resize.originHeight
+        const minTop = Math.max(0, bottomEdge - MAX_PANEL_HEIGHT)
+        const maxTop = bottomEdge - MIN_PANEL_HEIGHT
+        nextY = Math.min(Math.max(minTop, resize.originY + dy), maxTop)
+        nextHeight = bottomEdge - nextY
+      }
+
+      setPanelPosition({ x: nextX, y: nextY })
+      setPanelSize({ width: nextWidth, height: nextHeight })
+    }
+
+    const handleMouseUp = () => {
+      resizeRef.current = null
+      setResizing(false)
+    }
+
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [fullScreen, isMobileViewport, resizing])
+
   const handleDragStart = (event: React.MouseEvent<HTMLDivElement>) => {
     if (fullScreen || isMobileViewport) return
     const target = event.target as HTMLElement
@@ -328,6 +418,22 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
       originY: panelPosition.y,
     }
     setDragging(true)
+  }
+
+  const handleResizeStart = (direction: ResizeDirection) => (event: React.MouseEvent<HTMLDivElement>) => {
+    if (fullScreen || isMobileViewport) return
+    event.preventDefault()
+    event.stopPropagation()
+    resizeRef.current = {
+      startX: event.clientX,
+      startY: event.clientY,
+      originWidth: panelWidth,
+      originHeight: panelHeight,
+      originX: panelPosition.x,
+      originY: panelPosition.y,
+      direction,
+    }
+    setResizing(true)
   }
 
   // Persist to localStorage + DynamoDB whenever messages change
@@ -1016,7 +1122,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
         top: isMobileViewport ? 0 : panelPosition.y,
         height: isMobileViewport ? '100vh' : panelHeight,
         width: isMobileViewport ? '100%' : panelWidth,
-        transition: 'width 0.22s cubic-bezier(0.4,0,0.2,1)',
+        transition: resizing ? 'none' : 'width 0.22s cubic-bezier(0.4,0,0.2,1), height 0.22s cubic-bezier(0.4,0,0.2,1)',
         display: 'flex',
         flexDirection: 'column',
         boxShadow: isMobileViewport ? '-2px 0 12px rgba(0,0,0,0.18)' : '0 12px 32px rgba(0,0,0,0.22)',
@@ -1024,7 +1130,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
         zIndex: 3000,
         borderRadius: isMobileViewport ? 0 : 3,
         overflow: 'hidden',
-        userSelect: dragging ? 'none' : 'auto',
+        userSelect: dragging || resizing ? 'none' : 'auto',
         '@media (max-width: 600px)': {
           width: '100%',
         },
@@ -1372,6 +1478,35 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
           Enter to send · Shift+Enter for new line · ↑↓ history
         </Typography>
       </Box>
+
+      {!fullScreen && !isMobileViewport && (
+        <>
+          <Box onMouseDown={handleResizeStart('top')} sx={{ position: 'absolute', top: 0, left: 10, right: 10, height: 8, cursor: 'ns-resize' }} />
+          <Box onMouseDown={handleResizeStart('right')} sx={{ position: 'absolute', top: 10, right: 0, bottom: 10, width: 8, cursor: 'ew-resize' }} />
+          <Box onMouseDown={handleResizeStart('bottom')} sx={{ position: 'absolute', left: 10, right: 10, bottom: 0, height: 8, cursor: 'ns-resize' }} />
+          <Box onMouseDown={handleResizeStart('left')} sx={{ position: 'absolute', top: 10, left: 0, bottom: 10, width: 8, cursor: 'ew-resize' }} />
+
+          <Box onMouseDown={handleResizeStart('top-left')} sx={{ position: 'absolute', top: 0, left: 0, width: 12, height: 12, cursor: 'nwse-resize' }} />
+          <Box onMouseDown={handleResizeStart('top-right')} sx={{ position: 'absolute', top: 0, right: 0, width: 12, height: 12, cursor: 'nesw-resize' }} />
+          <Box onMouseDown={handleResizeStart('bottom-left')} sx={{ position: 'absolute', bottom: 0, left: 0, width: 12, height: 12, cursor: 'nesw-resize' }} />
+          <Box
+            onMouseDown={handleResizeStart('bottom-right')}
+            sx={{
+              position: 'absolute',
+              right: 0,
+              bottom: 0,
+              width: 14,
+              height: 14,
+              cursor: 'nwse-resize',
+              borderRight: '2px solid #90a4ae',
+              borderBottom: '2px solid #90a4ae',
+              borderRadius: '0 0 4px 0',
+              opacity: 0.8,
+              '&:hover': { opacity: 1, borderColor: '#607d8b' },
+            }}
+          />
+        </>
+      )}
     </Paper>
   )
 }
