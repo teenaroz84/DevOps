@@ -480,6 +480,10 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  useEffect(() => {
+    if (hasConversationStarted) setShowQuickActions(false)
+  }, [hasConversationStarted])
+
   const sendMessage = async (messageText?: string) => {
     if (!activeSessionId) return
     const requestSessionId = activeSessionId
@@ -1017,32 +1021,43 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
               </Box>
 
               {/* Quick Actions Strip */}
-              <Box sx={{ px: 2.5, py: 1.25, backgroundColor: '#fff', borderTop: '1px solid #f0f0f0', flexShrink: 0 }}>
-                <Typography sx={{ color: '#78909c', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', mb: 0.75 }}>
-                  Quick Actions
-                </Typography>
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
-                  {quickActions.map((action, idx) => (
-                    <Chip
-                      key={idx}
-                      label={action.label}
-                      size="small"
-                      onClick={() => sendMessage(action.query)}
-                      disabled={isSessionLoading}
-                      sx={{
-                        fontSize: '11px',
-                        height: 28,
-                        cursor: 'pointer',
-                        backgroundColor: '#e3f2fd',
-                        color: '#1565c0',
-                        border: '1px solid #bbdefb',
-                        fontWeight: 500,
-                        '&:hover': { backgroundColor: '#bbdefb' },
-                        '& .MuiChip-label': { px: 1.2 },
-                      }}
-                    />
-                  ))}
+              <Box sx={{ borderTop: '1px solid #f0f0f0', flexShrink: 0, backgroundColor: '#fff' }}>
+                <Box
+                  onClick={() => setShowQuickActions(v => !v)}
+                  sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2.5, py: 0.6, cursor: 'pointer', '&:hover': { backgroundColor: '#f9f9f9' } }}
+                >
+                  <Typography sx={{ color: '#78909c', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+                    Quick Actions
+                  </Typography>
+                  {showQuickActions
+                    ? <ExpandLessIcon sx={{ fontSize: 15, color: '#90a4ae' }} />
+                    : <ExpandMoreIcon sx={{ fontSize: 15, color: '#90a4ae' }} />
+                  }
                 </Box>
+                {showQuickActions && (
+                  <Box sx={{ px: 2.5, pb: 0.75, display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+                    {quickActions.map((action, idx) => (
+                      <Chip
+                        key={idx}
+                        label={action.label}
+                        size="small"
+                        onClick={() => sendMessage(action.query)}
+                        disabled={isSessionLoading}
+                        sx={{
+                          fontSize: '11px',
+                          height: 28,
+                          cursor: 'pointer',
+                          backgroundColor: '#e3f2fd',
+                          color: '#1565c0',
+                          border: '1px solid #bbdefb',
+                          fontWeight: 500,
+                          '&:hover': { backgroundColor: '#bbdefb' },
+                          '& .MuiChip-label': { px: 1.2 },
+                        }}
+                      />
+                    ))}
+                  </Box>
+                )}
               </Box>
 
               {/* Divider */}
