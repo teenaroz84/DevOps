@@ -45,7 +45,7 @@ export type FullscreenAgentMenuId =
 export const AGENTS: Record<string, AgentConfig> = {
   knowledge: {
     id: 'knowledge',
-    name: 'TDD DataOps Knowledge Assistant',
+    name: 'TDT DataOps Knowledge Assistant',
     subtitle: 'Cross-platform · Documentation & Standards',
     color: '#1976d2',
     endpoint: '/api/v1/chat',
@@ -62,7 +62,7 @@ export const AGENTS: Record<string, AgentConfig> = {
 
   esp: {
     id: 'esp',
-    name: 'TDD ESP Scheduling Agent',
+    name: 'TDT ESP Scheduling Agent',
     subtitle: 'Enterprise Scheduler Platform · Job Intelligence',
     color: '#2e7d32',
     endpoint: '/api/esp/chat',
@@ -79,7 +79,7 @@ export const AGENTS: Record<string, AgentConfig> = {
 
   dmf: {
     id: 'dmf',
-    name: 'TDD DMF Pipeline Agent',
+    name: 'TDT DMF Pipeline Agent',
     subtitle: 'Data Management Framework · Pipeline Intelligence',
     color: '#1565c0',
     endpoint: '/api/dmf/chat',
@@ -96,7 +96,7 @@ export const AGENTS: Record<string, AgentConfig> = {
 
   servicenow: {
     id: 'servicenow',
-    name: 'TDD ServiceNow Incident Agent',
+    name: 'TDT ServiceNow Incident Agent',
     subtitle: 'ITSM · Incidents & Problem Management',
     color: '#5c6bc0',
     endpoint: '/api/snow/chat',
@@ -113,7 +113,7 @@ export const AGENTS: Record<string, AgentConfig> = {
 
   talend: {
     id: 'talend',
-    name: 'TDD Talend Integration Agent',
+    name: 'TDT Talend Integration Agent',
     subtitle: 'Data Integration · Job Monitoring',
     color: '#e65100',
     endpoint: '/api/talend/chat',
@@ -130,7 +130,7 @@ export const AGENTS: Record<string, AgentConfig> = {
 
   snowflake: {
     id: 'snowflake',
-    name: 'TDD Snowflake Analytics Agent',
+    name: 'TDT Snowflake Analytics Agent',
     subtitle: 'Cloud Data Platform · Cost & Query Intelligence',
     color: '#0277bd',
     endpoint: '/api/snow/chat',
