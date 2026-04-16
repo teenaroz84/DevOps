@@ -139,6 +139,9 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
     return [WELCOME_MESSAGE]
   })
   const [sessionLoading, setSessionLoading] = useState(false)
+  // Blocks the save effect while the session is being loaded for the first time
+  // or while switching agents — prevents overwriting DynamoDB with [WELCOME_MESSAGE]
+  const isInitializing = useRef(true)
 
   // Load DynamoDB session for the current agent
   const loadAgentSession = useCallback(async (agentId: string, welcome: Message) => {
@@ -151,33 +154,21 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
           type: m.type as Message['type'],
         })) as Message[]
         setMessages([welcome, ...typed.slice(1)])
-        // Sync to localStorage so next mount is instant
-        // localStorage.setItem(`chat_history_${agentId}`, JSON.stringify([welcome, ...typed.slice(1)]))
       } else {
         // Nothing in DynamoDB yet — keep whatever was in localStorage
         setMessages(prev => prev.length > 0 ? prev : [welcome])
       }
     } catch {
-      // DynamoDB unreachable — keep localStorage version
+      // DynamoDB unreachable — keep current messages
     } finally {
       setSessionLoading(false)
+      isInitializing.current = false
     }
   }, [])
 
   // When the agent changes, reload the correct history and welcome message
   useEffect(() => {
-    // Immediately paint localStorage version
-    // try {
-    //   const saved = localStorage.getItem(`chat_history_${agent.id}`)
-    //   if (saved) {
-    //     const parsed = JSON.parse(saved) as Message[]
-    //     setMessages([WELCOME_MESSAGE, ...parsed.slice(1)])
-    //   } else {
-    //     setMessages([WELCOME_MESSAGE])
-    //   }
-    // } catch {
-    //   setMessages([WELCOME_MESSAGE])
-    // }
+    isInitializing.current = true
     setMessages([WELCOME_MESSAGE])
     // Then hydrate from DynamoDB in the background
     loadAgentSession(agent.id, WELCOME_MESSAGE)
@@ -266,8 +257,8 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
     // } catch {
     //   // storage quota exceeded — ignore
     // }
-    // Skip DynamoDB sync while the initial load is still in flight
-    if (!sessionLoading) {
+    // Skip DynamoDB sync while the initial load is still in flight or agent is switching
+    if (!sessionLoading && !isInitializing.current) {
       chatService.saveSession(agent.id, messages)
     }
   }, [messages, STORAGE_KEY, agent.id, sessionLoading])
