@@ -177,6 +177,61 @@ router.get('/cost-scatter', async (_req: Request, res: Response) => {
   })));
 });
 
+// ─── GET /api/snowflake/warehouse-cost-efficiency ────────
+router.get('/warehouse-cost-efficiency', async (_req: Request, res: Response) => {
+  const rows = await safeQuery(`
+    WITH q AS (
+      SELECT
+        warehouse_name,
+        COUNT(*) AS query_count,
+        ROUND(AVG(total_elapsed_time)::numeric, 2) AS avg_runtime_ms
+      FROM edoops.sf_query_history
+      WHERE start_time >= CURRENT_DATE - INTERVAL '30 day'
+        AND warehouse_name IS NOT NULL
+      GROUP BY warehouse_name
+    ),
+    w AS (
+      SELECT
+        warehouse_name,
+        SUM(credits_used) AS total_credits
+      FROM edoops.sf_warehouse_metering_history
+      WHERE start_time >= CURRENT_DATE - INTERVAL '30 day'
+        AND warehouse_name IS NOT NULL
+      GROUP BY warehouse_name
+    )
+    SELECT
+      w.warehouse_name,
+      ROUND(COALESCE(w.total_credits, 0)::numeric, 2) AS total_credits,
+      COALESCE(q.query_count, 0) AS query_count,
+      ROUND(COALESCE(q.avg_runtime_ms, 0)::numeric, 2) AS avg_runtime_ms,
+      CASE
+        WHEN COALESCE(q.query_count, 0) > 0
+        THEN ROUND((w.total_credits / q.query_count)::numeric, 4)
+        ELSE NULL
+      END AS credits_per_query
+    FROM w
+    LEFT JOIN q ON w.warehouse_name = q.warehouse_name
+    ORDER BY credits_per_query DESC NULLS LAST, total_credits DESC
+    LIMIT 15
+  `, []);
+
+  res.json((rows ?? []).map((r: any) => {
+    const creditsPerQuery = parseFloat(r.CREDITS_PER_QUERY ?? r.credits_per_query ?? 0);
+    let efficiency: 'good' | 'warn' | 'bad' = 'good';
+    if (creditsPerQuery >= 0.35) efficiency = 'bad';
+    else if (creditsPerQuery >= 0.2) efficiency = 'warn';
+
+    return {
+      warehouse_name: r.WAREHOUSE_NAME ?? r.warehouse_name ?? '',
+      total_credits: parseFloat(r.TOTAL_CREDITS ?? r.total_credits ?? 0),
+      query_count: parseInt(r.QUERY_COUNT ?? r.query_count ?? 0, 10),
+      avg_runtime_ms: parseFloat(r.AVG_RUNTIME_MS ?? r.avg_runtime_ms ?? 0),
+      credits_per_query: Number.isFinite(creditsPerQuery) ? creditsPerQuery : 0,
+      efficiency,
+    };
+  }));
+});
+
 // ─── GET /api/snowflake/cost-by-duration ──────────────────
 router.get('/cost-by-duration', async (_req: Request, res: Response) => {
   const rows = await safeQuery(`
@@ -236,11 +291,16 @@ router.get('/top-costly-jobs', async (_req: Request, res: Response) => {
 
 // ─── GET /api/snowflake/platform-summary ──────────────────
 router.get('/platform-summary', async (_req: Request, res: Response) => {
-  const [qRows, tRows, wRows] = await Promise.all([
+  const [qRows, tRows, wRows, loginRows] = await Promise.all([
     safeQuery(`
       SELECT
         COUNT_IF(total_elapsed_time > 60000)           AS long_queries,
-        COUNT_IF(execution_status NOT ILIKE 'SUCCESS%') AS query_errors
+        COUNT_IF(execution_status NOT ILIKE 'SUCCESS%') AS query_errors,
+        COUNT(*)                                        AS queries_today,
+        ROUND(
+          100.0 * COUNT_IF(execution_status ILIKE 'SUCCESS%') / NULLIF(COUNT(*), 0)
+        , 1) AS query_success_pct,
+        ROUND(AVG(total_elapsed_time), 0)               AS avg_query_time_ms
       FROM edoops.sf_query_history
       WHERE start_time >= DATEADD('day', -1, CURRENT_TIMESTAMP)
     `, [{}]),
@@ -250,19 +310,33 @@ router.get('/platform-summary', async (_req: Request, res: Response) => {
       WHERE scheduled_time >= DATEADD('day', -1, CURRENT_TIMESTAMP)
     `, [{}]),
     safeQuery(`
-      SELECT ROUND(100.0 * COUNT_IF(COALESCE(credits_used, 0) > 0) / NULLIF(COUNT(*), 0), 1) AS warehouse_util_pct
+      SELECT
+        ROUND(100.0 * COUNT_IF(COALESCE(credits_used, 0) > 0) / NULLIF(COUNT(*), 0), 1) AS warehouse_util_pct,
+        ROUND(COALESCE(SUM(credits_used), 0)::numeric, 2) AS warehouse_credits_used
       FROM edoops.sf_warehouse_metering_history
       WHERE start_time >= DATEADD('day', -1, CURRENT_TIMESTAMP)
+    `, [{}]),
+    safeQuery(`
+      SELECT COUNT(*) AS failed_logins
+      FROM edoops.sf_login_history
+      WHERE event_timestamp >= DATEADD('day', -1, CURRENT_TIMESTAMP)
+        AND is_success = 'NO'
     `, [{}]),
   ]);
   const q = qRows?.[0] ?? {};
   const t = tRows?.[0] ?? {};
   const w = wRows?.[0] ?? {};
+  const l = loginRows?.[0] ?? {};
   res.json({
     long_queries:       parseInt(q.LONG_QUERIES       ?? q.long_queries       ?? 0, 10),
     task_failures:      parseInt(t.TASK_FAILURES       ?? t.task_failures       ?? 0, 10),
     warehouse_util_pct: parseFloat(w.WAREHOUSE_UTIL_PCT ?? w.warehouse_util_pct ?? 0),
     query_errors:       parseInt(q.QUERY_ERRORS        ?? q.query_errors        ?? 0, 10),
+    queries_today:      parseInt(q.QUERIES_TODAY        ?? q.queries_today       ?? 0, 10),
+    query_success_pct:  parseFloat(q.QUERY_SUCCESS_PCT  ?? q.query_success_pct  ?? 0),
+    avg_query_time_ms:  parseInt(q.AVG_QUERY_TIME_MS   ?? q.avg_query_time_ms   ?? 0, 10),
+    warehouse_credits_used: parseFloat(w.WAREHOUSE_CREDITS_USED ?? w.warehouse_credits_used ?? 0),
+    failed_logins:      parseInt(l.FAILED_LOGINS        ?? l.failed_logins       ?? 0, 10),
   });
 });
 
@@ -348,6 +422,81 @@ router.get('/top-slow-queries', async (_req: Request, res: Response) => {
     error_type: r.ERROR_TYPE ?? r.error_type ?? null,
     sla_ok:     !!(r.SLA_OK  ?? r.sla_ok),
     fix:        r.FIX        ?? r.fix        ?? '',
+  })));
+});
+
+// ─── GET /api/snowflake/query-volume-trend ────────────────
+router.get('/query-volume-trend', async (_req: Request, res: Response) => {
+  const rows = await safeQuery(`
+    SELECT
+      TO_CHAR(DATE_TRUNC('day', start_time), 'MM/DD') AS date,
+      COUNT(*)                                          AS queries,
+      ROUND(AVG(total_elapsed_time), 0)                 AS avg_time_ms
+    FROM edoops.sf_query_history
+    WHERE start_time >= CURRENT_DATE - INTERVAL '14 day'
+    GROUP BY DATE_TRUNC('day', start_time)
+    ORDER BY DATE_TRUNC('day', start_time)
+  `, []);
+  res.json((rows ?? []).map((r: any) => ({
+    date:        r.DATE        ?? r.date        ?? '',
+    queries:     parseInt(r.QUERIES    ?? r.queries    ?? 0, 10),
+    avg_time_ms: parseInt(r.AVG_TIME_MS ?? r.avg_time_ms ?? 0, 10),
+  })));
+});
+
+// ─── GET /api/snowflake/task-reliability ──────────────────
+router.get('/task-reliability', async (_req: Request, res: Response) => {
+  const rows = await safeQuery(`
+    SELECT
+      TO_CHAR(DATE_TRUNC('day', scheduled_time), 'MM/DD') AS date,
+      COUNT(*)                                              AS total,
+      COUNT_IF(state ILIKE 'SUCCEEDED%')                   AS succeeded,
+      COUNT_IF(state ILIKE 'FAILED%')                      AS failed
+    FROM edoops.sf_task_history
+    WHERE scheduled_time >= CURRENT_DATE - INTERVAL '14 day'
+    GROUP BY DATE_TRUNC('day', scheduled_time)
+    ORDER BY DATE_TRUNC('day', scheduled_time)
+  `, []);
+  res.json((rows ?? []).map((r: any) => ({
+    date:      r.DATE      ?? r.date      ?? '',
+    total:     parseInt(r.TOTAL     ?? r.total     ?? 0, 10),
+    succeeded: parseInt(r.SUCCEEDED ?? r.succeeded ?? 0, 10),
+    failed:    parseInt(r.FAILED    ?? r.failed    ?? 0, 10),
+  })));
+});
+
+// ─── GET /api/snowflake/login-failures ────────────────────
+router.get('/login-failures', async (_req: Request, res: Response) => {
+  const rows = await safeQuery(`
+    SELECT
+      TO_CHAR(DATE_TRUNC('day', event_timestamp), 'MM/DD') AS date,
+      COUNT(*) AS failed_logins
+    FROM edoops.sf_login_history
+    WHERE event_timestamp >= CURRENT_DATE - INTERVAL '14 day'
+      AND is_success = 'NO'
+    GROUP BY DATE_TRUNC('day', event_timestamp)
+    ORDER BY DATE_TRUNC('day', event_timestamp)
+  `, []);
+  res.json((rows ?? []).map((r: any) => ({
+    date:          r.DATE          ?? r.date          ?? '',
+    failed_logins: parseInt(r.FAILED_LOGINS ?? r.failed_logins ?? 0, 10),
+  })));
+});
+
+// ─── GET /api/snowflake/storage-growth ────────────────────
+router.get('/storage-growth', async (_req: Request, res: Response) => {
+  const rows = await safeQuery(`
+    SELECT
+      TO_CHAR(usage_date, 'MM/DD') AS date,
+      ROUND(COALESCE(SUM(average_stage_bytes), 0) / 1024.0 / 1024 / 1024 / 1024, 2) AS storage_tb
+    FROM edoops.sf_stage_storage_usage_history
+    WHERE usage_date >= CURRENT_DATE - INTERVAL '30 day'
+    GROUP BY usage_date
+    ORDER BY usage_date
+  `, []);
+  res.json((rows ?? []).map((r: any) => ({
+    date:       r.DATE       ?? r.date       ?? '',
+    storage_tb: parseFloat(r.STORAGE_TB ?? r.storage_tb ?? 0),
   })));
 });
 

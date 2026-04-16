@@ -13,6 +13,13 @@ export const MOCK_SF_COST_SUMMARY = {
   wasted_spend:    2100,
   budget:         18000,
 }
+// Extended fields (also returned by the live /cost-summary endpoint)
+;(MOCK_SF_COST_SUMMARY as any).cost_today    = 5420
+;(MOCK_SF_COST_SUMMARY as any).cost_mtd      = 45876
+;(MOCK_SF_COST_SUMMARY as any).avg_daily_burn_30d = 1529
+;(MOCK_SF_COST_SUMMARY as any).remaining_balance  = 22154
+;(MOCK_SF_COST_SUMMARY as any).days_remaining     = 14
+;(MOCK_SF_COST_SUMMARY as any).optimization_opportunity_currency_7d = 3300
 
 export const MOCK_SF_COST_BY_PIPELINE = [
   { name: 'ingestion_main',   cost: 3200, color: '#e53935' },
@@ -38,6 +45,12 @@ export const MOCK_SF_COST_SCATTER = [
   { bucket: '>120m',   cost: 13.8, runs:  5, name: 'transform_core'   },
 ]
 
+export const MOCK_SF_WAREHOUSE_COST_EFFICIENCY = [
+  { warehouse_name: 'WH_QUERY01', total_credits: 7.8, query_count: 210, avg_runtime_ms: 210000, credits_per_query: 0.0371, efficiency: 'warn' as const },
+  { warehouse_name: 'API_SYNC_JOB', total_credits: 4.6, query_count: 75, avg_runtime_ms: 75000, credits_per_query: 0.0613, efficiency: 'bad' as const },
+  { warehouse_name: 'EXPORT_PROC', total_credits: 3.2, query_count: 48, avg_runtime_ms: 48000, credits_per_query: 0.0667, efficiency: 'good' as const },
+]
+
 /** Bar chart: cost by duration bucket */
 export const MOCK_SF_COST_BY_DURATION = [
   { bucket: '<30m',   cost: 3200 },
@@ -61,6 +74,11 @@ export const MOCK_SF_PLATFORM_SUMMARY = {
   warehouse_util_pct:   72,
   query_errors:         28,
 }
+;(MOCK_SF_PLATFORM_SUMMARY as any).queries_today          = 1214
+;(MOCK_SF_PLATFORM_SUMMARY as any).query_success_pct      = 98.3
+;(MOCK_SF_PLATFORM_SUMMARY as any).avg_query_time_ms      = 375
+;(MOCK_SF_PLATFORM_SUMMARY as any).warehouse_credits_used = 3785
+;(MOCK_SF_PLATFORM_SUMMARY as any).failed_logins          = 5
 
 /** Heatmap: rows = warehouses, cols = hours 0-23 */
 const WAREHOUSES = ['WH_PROD_XL', 'WH_PROD_LG', 'WH_STAGE', 'WH_DEV', 'WH_REPORT']
@@ -93,3 +111,32 @@ export const MOCK_SF_TOP_SLOW_QUERIES = [
 ]
 
 export const MOCK_SF_ALERT = 'DLQ count is high – review poison pill batching'
+
+// ─── New trend datasets ─────────────────────────────────────
+
+const DATES_14 = Array.from({ length: 14 }, (_, i) => {
+  const d = new Date(); d.setDate(d.getDate() - (13 - i))
+  return `${d.getMonth() + 1}/${String(d.getDate()).padStart(2, '0')}`
+})
+
+export const MOCK_SF_QUERY_VOLUME_TREND = DATES_14.map((date, i) => ({
+  date,
+  queries:     Math.round(900 + Math.sin(i * 0.7) * 200 + (i % 2 === 0 ? 100 : 0)),
+  avg_time_ms: Math.round(320 + Math.cos(i * 0.5) * 80),
+}))
+
+export const MOCK_SF_TASK_RELIABILITY = DATES_14.map((date, i) => {
+  const total = Math.round(80 + Math.sin(i * 0.6) * 15)
+  const failed = Math.round(Math.abs(Math.sin(i * 1.2)) * 8)
+  return { date, total, succeeded: total - failed, failed }
+})
+
+export const MOCK_SF_LOGIN_FAILURES = DATES_14.map((date, i) => ({
+  date,
+  failed_logins: Math.round(2 + Math.abs(Math.sin(i * 0.9)) * 6),
+}))
+
+export const MOCK_SF_STORAGE_GROWTH = DATES_14.map((date, i) => ({
+  date,
+  storage_tb: parseFloat((480 + i * 4.5 + Math.sin(i) * 8).toFixed(1)),
+}))
