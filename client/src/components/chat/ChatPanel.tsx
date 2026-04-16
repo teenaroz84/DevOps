@@ -31,6 +31,8 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import AddIcon from '@mui/icons-material/Add'
 import HistoryIcon from '@mui/icons-material/History'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
+import KeyboardDoubleArrowLeftIcon from '@mui/icons-material/KeyboardDoubleArrowLeft'
+import KeyboardDoubleArrowRightIcon from '@mui/icons-material/KeyboardDoubleArrowRight'
 import { chatService } from '../../services'
 import { AGENTS } from '../../config/agentConfig'
 import type { AgentConfig } from '../../config/agentConfig'
@@ -254,7 +256,9 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null)
   const [inputHistory, setInputHistory] = useState<string[]>([])
   const [historyIdx, setHistoryIdx] = useState(-1)
+  const [isSessionSidebarCollapsed, setIsSessionSidebarCollapsed] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const sessionsListRef = useRef<HTMLDivElement>(null)
 
   const isCompactFullScreen = useMediaQuery('(max-width:980px)')
   const isMobileViewport = !fullScreen && typeof window !== 'undefined' && window.innerWidth <= 600
@@ -482,10 +486,18 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
     }
   }, [agent.id, activeSessionId, chatSessions, WELCOME_MESSAGE])
 
+  const scrollSessionsToEnd = useCallback(() => {
+    const node = sessionsListRef.current
+    if (!node) return
+    node.scrollTo({ top: node.scrollHeight, behavior: 'smooth' })
+  }, [])
+
   // Get the last message with data
   if (!isOpen && !fullScreen) return null
 
   if (fullScreen) {
+    const showCollapsedSessionRail = !isCompactFullScreen && isSessionSidebarCollapsed
+
     // Full-screen chat layout — results panel hidden
     return (
       <Box
@@ -497,79 +509,161 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
         }}
       >
         {/* Session Sidebar */}
-        <Box
-          sx={{
-            width: isCompactFullScreen ? '100%' : 320,
-            borderRight: isCompactFullScreen ? 'none' : '1px solid #dde5ef',
-            borderBottom: isCompactFullScreen ? '1px solid #dde5ef' : 'none',
-            backgroundColor: '#f7fafc',
-            display: 'flex',
-            flexDirection: 'column',
-            maxHeight: isCompactFullScreen ? 260 : '100vh',
-          }}
-        >
-          <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <HistoryIcon sx={{ fontSize: 18, color: '#546e7a' }} />
-              <Typography sx={{ fontSize: '12px', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', color: '#607d8b' }}>
-                Chat Sessions
-              </Typography>
-            </Box>
-            <Button
-              size="small"
-              variant="contained"
-              startIcon={<AddIcon sx={{ fontSize: 14 }} />}
-              onClick={createNewChat}
-              sx={{ textTransform: 'none', fontWeight: 600, borderRadius: 2, backgroundColor: '#1565c0', '&:hover': { backgroundColor: '#0d47a1' } }}
-            >
-              New Chat
-            </Button>
+        {showCollapsedSessionRail ? (
+          <Box
+            sx={{
+              width: 56,
+              borderRight: '1px solid #dde5ef',
+              backgroundColor: '#f7fafc',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              py: 1,
+              gap: 1,
+            }}
+          >
+            <Tooltip title="Expand sessions" placement="right">
+              <IconButton
+                size="small"
+                onClick={() => setIsSessionSidebarCollapsed(false)}
+                sx={{ color: '#546e7a' }}
+              >
+                <KeyboardDoubleArrowRightIcon sx={{ fontSize: 18 }} />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="New chat" placement="right">
+              <IconButton
+                size="small"
+                onClick={createNewChat}
+                sx={{ color: '#1565c0', backgroundColor: '#e3f2fd', '&:hover': { backgroundColor: '#bbdefb' } }}
+              >
+                <AddIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
+            <HistoryIcon sx={{ fontSize: 18, color: '#90a4ae', mt: 0.5 }} />
           </Box>
-          <Box sx={{ px: 1.5, pb: 1.5, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 1 }}>
-            {chatSessions.map(session => {
-              const active = session.sessionId === activeSessionId
-              return (
-                <Paper
-                  key={session.sessionId}
-                  onClick={() => switchToSession(session.sessionId)}
-                  sx={{
-                    p: 1.25,
-                    borderRadius: 2,
-                    boxShadow: 'none',
-                    border: active ? '1px solid #1e88e5' : '1px solid #dbe5f0',
-                    backgroundColor: active ? '#eaf4ff' : '#fff',
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease',
-                    '&:hover': { borderColor: '#90caf9', transform: 'translateY(-1px)' },
-                  }}
-                >
-                  <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 0.5 }}>
-                    <Typography sx={{ fontSize: '13px', fontWeight: 700, color: '#1f2937', mb: 0.3 }}>
-                      {session.title}
-                    </Typography>
+        ) : (
+          <Box
+            sx={{
+              width: isCompactFullScreen ? '100%' : 320,
+              borderRight: isCompactFullScreen ? 'none' : '1px solid #dde5ef',
+              borderBottom: isCompactFullScreen ? '1px solid #dde5ef' : 'none',
+              backgroundColor: '#f7fafc',
+              display: 'flex',
+              flexDirection: 'column',
+              maxHeight: isCompactFullScreen ? 260 : '100vh',
+            }}
+          >
+            <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <HistoryIcon sx={{ fontSize: 18, color: '#546e7a' }} />
+                <Typography sx={{ fontSize: '12px', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', color: '#607d8b' }}>
+                  Chat Sessions
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                {!isCompactFullScreen && (
+                  <Tooltip title="Collapse sessions" placement="bottom">
                     <IconButton
                       size="small"
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        deleteChatSession(session.sessionId)
-                      }}
-                      sx={{ mt: -0.6, mr: -0.6, color: '#90a4ae', '&:hover': { color: '#c62828', backgroundColor: '#ffebee' } }}
-                      title="Delete chat session"
+                      onClick={() => setIsSessionSidebarCollapsed(true)}
+                      sx={{ color: '#607d8b' }}
                     >
-                      <DeleteOutlineIcon sx={{ fontSize: 16 }} />
+                      <KeyboardDoubleArrowLeftIcon sx={{ fontSize: 18 }} />
                     </IconButton>
-                  </Box>
-                  <Typography sx={{ fontSize: '11px', color: '#607d8b', lineHeight: 1.35, mb: 0.6 }}>
-                    {session.preview}
-                  </Typography>
-                  <Typography sx={{ fontSize: '10px', color: '#90a4ae' }}>
-                    {formatSessionTime(session.updatedAt)}
-                  </Typography>
-                </Paper>
-              )
-            })}
+                  </Tooltip>
+                )}
+                <Button
+                  size="small"
+                  variant="contained"
+                  startIcon={<AddIcon sx={{ fontSize: 14 }} />}
+                  onClick={createNewChat}
+                  sx={{ textTransform: 'none', fontWeight: 600, borderRadius: 2, backgroundColor: '#1565c0', '&:hover': { backgroundColor: '#0d47a1' } }}
+                >
+                  New Chat
+                </Button>
+              </Box>
+            </Box>
+            <Box
+              ref={sessionsListRef}
+              sx={{
+                px: 1.5,
+                pb: 1.5,
+                overflowY: 'auto',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 1,
+                scrollbarWidth: 'thin',
+                scrollbarColor: '#90a4ae #eaf0f6',
+                '&::-webkit-scrollbar': { width: 8 },
+                '&::-webkit-scrollbar-track': { backgroundColor: '#eaf0f6', borderRadius: 8 },
+                '&::-webkit-scrollbar-thumb': { backgroundColor: '#90a4ae', borderRadius: 8 },
+                '&::-webkit-scrollbar-thumb:hover': { backgroundColor: '#78909c' },
+              }}
+            >
+              {chatSessions.map(session => {
+                const active = session.sessionId === activeSessionId
+                return (
+                  <Paper
+                    key={session.sessionId}
+                    onClick={() => switchToSession(session.sessionId)}
+                    sx={{
+                      p: 1.25,
+                      borderRadius: 2,
+                      boxShadow: 'none',
+                      border: active ? '1px solid #1e88e5' : '1px solid #dbe5f0',
+                      backgroundColor: active ? '#eaf4ff' : '#fff',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                      '&:hover': { borderColor: '#90caf9', transform: 'translateY(-1px)' },
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 0.5 }}>
+                      <Typography sx={{ fontSize: '13px', fontWeight: 700, color: '#1f2937', mb: 0.3 }}>
+                        {session.title}
+                      </Typography>
+                      <IconButton
+                        size="small"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          deleteChatSession(session.sessionId)
+                        }}
+                        sx={{ mt: -0.6, mr: -0.6, color: '#90a4ae', '&:hover': { color: '#c62828', backgroundColor: '#ffebee' } }}
+                        title="Delete chat session"
+                      >
+                        <DeleteOutlineIcon sx={{ fontSize: 16 }} />
+                      </IconButton>
+                    </Box>
+                    <Typography sx={{ fontSize: '11px', color: '#607d8b', lineHeight: 1.35, mb: 0.6 }}>
+                      {session.preview}
+                    </Typography>
+                    <Typography sx={{ fontSize: '10px', color: '#90a4ae' }}>
+                      {formatSessionTime(session.updatedAt)}
+                    </Typography>
+                  </Paper>
+                )
+              })}
+            </Box>
+            <Box sx={{ p: 1.5, pt: 0.75, borderTop: '1px solid #dde5ef', backgroundColor: '#f7fafc' }}>
+              <Button
+                fullWidth
+                size="small"
+                variant="outlined"
+                onClick={scrollSessionsToEnd}
+                sx={{
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  borderRadius: 2,
+                  borderColor: '#90caf9',
+                  color: '#1565c0',
+                  '&:hover': { borderColor: '#64b5f6', backgroundColor: '#edf6ff' },
+                }}
+              >
+                See All Chats
+              </Button>
+            </Box>
           </Box>
-        </Box>
+        )}
 
         {/* Chat — main conversation pane */}
         <Box
