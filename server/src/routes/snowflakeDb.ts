@@ -21,20 +21,20 @@ async function safeQuery(sql: string, fallback: any = null): Promise<any> {
 router.get('/cost-summary', async (_req: Request, res: Response) => {
   const rows = await safeQuery(`
     WITH cost_today_cte AS (
-      SELECT ROUND(COALESCE(SUM(usage_in_currency), 0)::numeric, 2) AS cost_today
+      SELECT ROUND(COALESCE(SUM(NULLIF(usage_in_currency::text, '')::numeric), 0)::numeric, 2) AS cost_today
       FROM edoops.sf_usage_in_currency_daily
       WHERE usage_date = CURRENT_DATE
     ),
     cost_mtd_cte AS (
-      SELECT ROUND(COALESCE(SUM(usage_in_currency), 0)::numeric, 2) AS cost_mtd
+      SELECT ROUND(COALESCE(SUM(NULLIF(usage_in_currency::text, '')::numeric), 0)::numeric, 2) AS cost_mtd
       FROM edoops.sf_usage_in_currency_daily
       WHERE usage_date >= DATE_TRUNC('month', CURRENT_DATE)::date
         AND usage_date <= CURRENT_DATE
     ),
     burn_cte AS (
-      SELECT ROUND(COALESCE(AVG(daily_cost), 0)::numeric, 2) AS avg_daily_burn_30d
+      SELECT ROUND(COALESCE(AVG(daily_cost::numeric), 0)::numeric, 2) AS avg_daily_burn_30d
       FROM (
-        SELECT usage_date, SUM(usage_in_currency) AS daily_cost
+        SELECT usage_date, SUM(NULLIF(usage_in_currency::text, '')::numeric) AS daily_cost
         FROM edoops.sf_usage_in_currency_daily
         WHERE usage_date >= CURRENT_DATE - INTERVAL '30 day'
         GROUP BY usage_date
@@ -42,10 +42,10 @@ router.get('/cost-summary', async (_req: Request, res: Response) => {
     ),
     balance_cte AS (
       SELECT ROUND((
-          COALESCE(capacity_balance, 0)
-        + COALESCE(free_usage_balance, 0)
-        + COALESCE(rollover_balance, 0)
-        + COALESCE(marketplace_capacity_drawdown_balance, 0)
+          COALESCE(NULLIF(capacity_balance::text, '')::numeric, 0)
+        + COALESCE(NULLIF(free_usage_balance::text, '')::numeric, 0)
+        + COALESCE(NULLIF(rollover_balance::text, '')::numeric, 0)
+        + COALESCE(NULLIF(marketplace_capacity_drawdown_balance::text, '')::numeric, 0)
       )::numeric, 2) AS remaining_balance
       FROM edoops.sf_remaining_balance_daily
       WHERE usage_date = (
@@ -54,12 +54,18 @@ router.get('/cost-summary', async (_req: Request, res: Response) => {
     ),
     opp_cte AS (
       WITH wasted AS (
-        SELECT SUM(GREATEST(COALESCE(credits_used, 0) - COALESCE(credits_attributed_compute_queries, 0), 0)) AS wasted_credits
+        SELECT SUM(
+          GREATEST(
+            COALESCE(NULLIF(credits_used::text, '')::numeric, 0)
+            - COALESCE(NULLIF(credits_attributed_compute_queries::text, '')::numeric, 0),
+            0
+          )
+        ) AS wasted_credits
         FROM edoops.sf_warehouse_metering_history
         WHERE start_time >= CURRENT_DATE - INTERVAL '7 day'
       ),
       rate_cte AS (
-        SELECT COALESCE(AVG(effective_rate), 0) AS avg_rate
+        SELECT COALESCE(AVG(NULLIF(effective_rate::text, '')::numeric), 0) AS avg_rate
         FROM edoops.sf_rate_sheet_daily
         WHERE usage_date >= CURRENT_DATE - INTERVAL '7 day'
       )
@@ -119,7 +125,7 @@ router.get('/cost-by-pipeline', async (_req: Request, res: Response) => {
   const rows = await safeQuery(`
     SELECT
       service_type AS name,
-      ROUND(COALESCE(SUM(usage_in_currency), 0)::numeric, 2) AS cost
+      ROUND(COALESCE(SUM(NULLIF(usage_in_currency::text, '')::numeric), 0)::numeric, 2) AS cost
     FROM edoops.sf_usage_in_currency_daily
     WHERE usage_date >= CURRENT_DATE - INTERVAL '30 day'
     GROUP BY service_type
@@ -140,7 +146,7 @@ router.get('/cost-scatter', async (_req: Request, res: Response) => {
       SELECT
         warehouse_name,
         COUNT(*) AS query_count,
-        ROUND(AVG(total_elapsed_time)::numeric, 2) AS avg_runtime_ms
+        ROUND(AVG(NULLIF(total_elapsed_time::text, '')::numeric)::numeric, 2) AS avg_runtime_ms
       FROM edoops.sf_query_history
       WHERE start_time >= CURRENT_DATE - INTERVAL '30 day'
         AND warehouse_name IS NOT NULL
@@ -149,7 +155,7 @@ router.get('/cost-scatter', async (_req: Request, res: Response) => {
     w AS (
       SELECT
         warehouse_name,
-        SUM(credits_used) AS total_credits
+        SUM(NULLIF(credits_used::text, '')::numeric) AS total_credits
       FROM edoops.sf_warehouse_metering_history
       WHERE start_time >= CURRENT_DATE - INTERVAL '30 day'
         AND warehouse_name IS NOT NULL
@@ -186,7 +192,7 @@ router.get('/warehouse-cost-efficiency', async (_req: Request, res: Response) =>
       SELECT
         warehouse_name,
         COUNT(*) AS query_count,
-        ROUND(AVG(total_elapsed_time)::numeric, 2) AS avg_runtime_ms
+        ROUND(AVG(NULLIF(total_elapsed_time::text, '')::numeric)::numeric, 2) AS avg_runtime_ms
       FROM edoops.sf_query_history
       WHERE start_time >= CURRENT_DATE - INTERVAL '30 day'
         AND warehouse_name IS NOT NULL
@@ -195,7 +201,7 @@ router.get('/warehouse-cost-efficiency', async (_req: Request, res: Response) =>
     w AS (
       SELECT
         warehouse_name,
-        SUM(credits_used) AS total_credits
+        SUM(NULLIF(credits_used::text, '')::numeric) AS total_credits
       FROM edoops.sf_warehouse_metering_history
       WHERE start_time >= CURRENT_DATE - INTERVAL '30 day'
         AND warehouse_name IS NOT NULL
@@ -239,7 +245,7 @@ router.get('/cost-by-duration', async (_req: Request, res: Response) => {
   const rows = await safeQuery(`
     SELECT
       TO_CHAR(usage_date, 'YYYY-MM-DD') AS bucket,
-      ROUND(COALESCE(SUM(usage_in_currency), 0)::numeric, 2) AS cost
+      ROUND(COALESCE(SUM(NULLIF(usage_in_currency::text, '')::numeric), 0)::numeric, 2) AS cost
     FROM edoops.sf_usage_in_currency_daily
     WHERE usage_date >= CURRENT_DATE - INTERVAL '30 day'
     GROUP BY usage_date
@@ -256,19 +262,19 @@ router.get('/top-costly-jobs', async (_req: Request, res: Response) => {
   const rows = await safeQuery(`
     WITH query_patterns AS (
       SELECT
-        COALESCE(query_hash, MD5(COALESCE(query_text, ''))) AS query_pattern,
+        COALESCE(query_hash::text, MD5(COALESCE(query_text::text, ''))) AS query_pattern,
         warehouse_name,
         COUNT(*) AS execution_count,
-        ROUND(AVG(total_elapsed_time)::numeric, 2) AS avg_runtime_ms,
-        ROUND(SUM(COALESCE(bytes_scanned, 0)) / 1024.0 / 1024 / 1024 / 1024, 2) AS scanned_tb
+        ROUND(AVG(NULLIF(total_elapsed_time::text, '')::numeric)::numeric, 2) AS avg_runtime_ms,
+        ROUND(SUM(COALESCE(NULLIF(bytes_scanned::text, '')::numeric, 0)) / 1024.0 / 1024 / 1024 / 1024, 2) AS scanned_tb
       FROM edoops.sf_query_history
       WHERE start_time >= CURRENT_DATE - INTERVAL '30 day'
-      GROUP BY COALESCE(query_hash, MD5(COALESCE(query_text, ''))), warehouse_name
+      GROUP BY COALESCE(query_hash::text, MD5(COALESCE(query_text::text, ''))), warehouse_name
     ),
     warehouse_cost AS (
       SELECT
         warehouse_name,
-        SUM(credits_used) AS total_credits
+        SUM(NULLIF(credits_used::text, '')::numeric) AS total_credits
       FROM edoops.sf_warehouse_metering_history
       WHERE start_time >= CURRENT_DATE - INTERVAL '30 day'
       GROUP BY warehouse_name
@@ -296,13 +302,13 @@ router.get('/platform-summary', async (_req: Request, res: Response) => {
   const [qRows, tRows, wRows, loginRows] = await Promise.all([
     safeQuery(`
       SELECT
-        COUNT(*) FILTER (WHERE total_elapsed_time > 60000) AS long_queries,
+        COUNT(*) FILTER (WHERE NULLIF(total_elapsed_time::text, '')::numeric > 60000) AS long_queries,
         COUNT(*) FILTER (WHERE execution_status NOT ILIKE 'SUCCESS%') AS query_errors,
         COUNT(*)                                        AS queries_today,
         ROUND(
           100.0 * COUNT(*) FILTER (WHERE execution_status ILIKE 'SUCCESS%') / NULLIF(COUNT(*), 0)
         , 1) AS query_success_pct,
-        ROUND(AVG(total_elapsed_time), 0)               AS avg_query_time_ms
+        ROUND(AVG(NULLIF(total_elapsed_time::text, '')::numeric), 0) AS avg_query_time_ms
       FROM edoops.sf_query_history
       WHERE start_time >= CURRENT_TIMESTAMP - INTERVAL '1 day'
     `, [{}]),
@@ -313,8 +319,8 @@ router.get('/platform-summary', async (_req: Request, res: Response) => {
     `, [{}]),
     safeQuery(`
       SELECT
-        ROUND(100.0 * COUNT(*) FILTER (WHERE COALESCE(credits_used, 0) > 0) / NULLIF(COUNT(*), 0), 1) AS warehouse_util_pct,
-        ROUND(COALESCE(SUM(credits_used), 0)::numeric, 2) AS warehouse_credits_used
+        ROUND(100.0 * COUNT(*) FILTER (WHERE COALESCE(NULLIF(credits_used::text, '')::numeric, 0) > 0) / NULLIF(COUNT(*), 0), 1) AS warehouse_util_pct,
+        ROUND(COALESCE(SUM(NULLIF(credits_used::text, '')::numeric), 0)::numeric, 2) AS warehouse_credits_used
       FROM edoops.sf_warehouse_metering_history
       WHERE start_time >= CURRENT_TIMESTAMP - INTERVAL '1 day'
     `, [{}]),
@@ -348,7 +354,7 @@ router.get('/warehouse-heatmap', async (_req: Request, res: Response) => {
     SELECT
       warehouse_name,
       EXTRACT(HOUR FROM start_time)        AS hour,
-      ROUND(SUM(credits_used), 2)          AS util_pct
+      ROUND(SUM(NULLIF(credits_used::text, '')::numeric), 2) AS util_pct
     FROM edoops.sf_warehouse_metering_history
       WHERE start_time >= CURRENT_TIMESTAMP - INTERVAL '7 day'
     GROUP BY warehouse_name, hour
@@ -394,15 +400,15 @@ router.get('/top-slow-queries', async (_req: Request, res: Response) => {
   const rows = await safeQuery(`
     WITH q AS (
       SELECT
-        COALESCE(query_hash, MD5(COALESCE(query_text, ''))) AS query_pattern,
+        COALESCE(query_hash::text, MD5(COALESCE(query_text::text, ''))) AS query_pattern,
         MAX(start_time) AS last_run,
-        ROUND(AVG(total_elapsed_time), 2) AS avg_elapsed_ms,
-        ROUND(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY total_elapsed_time), 2) AS p95_elapsed_ms,
+        ROUND(AVG(NULLIF(total_elapsed_time::text, '')::numeric), 2) AS avg_elapsed_ms,
+        ROUND(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY NULLIF(total_elapsed_time::text, '')::numeric), 2) AS p95_elapsed_ms,
         COUNT(*) FILTER (WHERE execution_status NOT ILIKE 'SUCCESS%') AS error_count,
         MAX(error_message) AS latest_error_message
       FROM edoops.sf_query_history
       WHERE start_time >= CURRENT_TIMESTAMP - INTERVAL '30 day'
-      GROUP BY COALESCE(query_hash, MD5(COALESCE(query_text, '')))
+      GROUP BY COALESCE(query_hash::text, MD5(COALESCE(query_text::text, '')))
     )
     SELECT
       query_pattern AS pipeline,
@@ -433,7 +439,7 @@ router.get('/query-volume-trend', async (_req: Request, res: Response) => {
     SELECT
       TO_CHAR(DATE_TRUNC('day', start_time), 'MM/DD') AS date,
       COUNT(*)                                          AS queries,
-      ROUND(AVG(total_elapsed_time), 0)                 AS avg_time_ms
+      ROUND(AVG(NULLIF(total_elapsed_time::text, '')::numeric), 0) AS avg_time_ms
     FROM edoops.sf_query_history
     WHERE start_time >= CURRENT_DATE - INTERVAL '14 day'
     GROUP BY DATE_TRUNC('day', start_time)
@@ -490,7 +496,7 @@ router.get('/storage-growth', async (_req: Request, res: Response) => {
   const rows = await safeQuery(`
     SELECT
       TO_CHAR(usage_date, 'MM/DD') AS date,
-      ROUND(COALESCE(SUM(average_stage_bytes), 0) / 1024.0 / 1024 / 1024 / 1024, 2) AS storage_tb
+      ROUND(COALESCE(SUM(NULLIF(average_stage_bytes::text, '')::numeric), 0) / 1024.0 / 1024 / 1024 / 1024, 2) AS storage_tb
     FROM edoops.sf_stage_storage_usage_history
     WHERE usage_date >= CURRENT_DATE - INTERVAL '30 day'
     GROUP BY usage_date
