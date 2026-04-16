@@ -108,6 +108,18 @@ export const chatService = {
     return normaliseResponse(raw)
   },
 
+  listSessions: async (agentId: string, browserSessionId = SESSION_ID): Promise<Array<{ sessionId: string; title: string; preview: string; updatedAt: number }>> => {
+    try {
+      const url = `${config.apiBaseUrl}/api/sessions/agent/${encodeURIComponent(agentId)}?browserSessionId=${encodeURIComponent(browserSessionId)}`
+      const res = await fetch(url)
+      if (!res.ok) return []
+      const json = await res.json()
+      return Array.isArray(json.sessions) ? json.sessions : []
+    } catch {
+      return []
+    }
+  },
+
   /**
    * Load chat history for a session + agent from DynamoDB.
    * Returns an empty array if the session does not exist or the request fails.
@@ -128,12 +140,12 @@ export const chatService = {
    * Persist the current message list for a session + agent to DynamoDB.
    * Fire-and-forget — failures are silently swallowed so they never block the UI.
    */
-  saveSession: (agentId: string, messages: unknown[], sessionId = SESSION_ID): void => {
+  saveSession: (agentId: string, messages: unknown[], sessionId: string, browserSessionId = SESSION_ID): void => {
     const url = `${config.apiBaseUrl}/api/sessions/${encodeURIComponent(sessionId)}/${encodeURIComponent(agentId)}`
     fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages }),
+      body: JSON.stringify({ messages, browserSessionId }),
     }).then(res => res.json()).then(data => {
       if (data.error) {
         console.warn('[chatService] Session save failed:', { agentId, error: data.error, code: data.code })

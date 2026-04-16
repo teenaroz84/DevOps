@@ -90,9 +90,17 @@ type SessionRecordInput = {
 type SessionItem = {
   session_id: string;
   agent_id: string;
+  browser_session_id?: string;
   messages: string;
   updated_at: string;
   ttl: number;
+};
+
+type SessionSummary = {
+  sessionId: string;
+  title: string;
+  preview: string;
+  updatedAt: number;
 };
 
 function toSessionItem(record: SessionRecordInput): SessionItem | null {
@@ -115,6 +123,11 @@ function toSessionItem(record: SessionRecordInput): SessionItem | null {
   return {
     session_id,
     agent_id,
+    browser_session_id: typeof (record as any).browser_session_id === 'string'
+      ? (record as any).browser_session_id
+      : typeof (record as any).browserSessionId === 'string'
+        ? (record as any).browserSessionId
+        : undefined,
     messages: JSON.stringify(rawMessages),
     updated_at: record.updated_at ?? record.updatedAt ?? new Date().toISOString(),
     ttl: Number.isFinite(record.ttl) ? Number(record.ttl) : Math.floor(Date.now() / 1000) + TTL_SECONDS,
@@ -139,6 +152,7 @@ function buildSessionItem(
   sessionId: string,
   agentId: string,
   messages: unknown[],
+  browserSessionId: string | undefined,
   partitionKey: string,
   sortKey?: string | null,
 ): Record<string, unknown> {
@@ -151,10 +165,29 @@ function buildSessionItem(
     updated_at: new Date().toISOString(),
     ttl: Math.floor(Date.now() / 1000) + TTL_SECONDS,
   };
+  if (browserSessionId) {
+    item.browser_session_id = browserSessionId;
+  }
   if (sortKey) {
     item[sortKey] = getSortKeyValue(sortKey, sessionId, agentId);
   }
   return item;
+}
+
+function buildSessionSummary(sessionId: string, messages: unknown[], updatedAt: string | undefined): SessionSummary {
+  const typed = Array.isArray(messages) ? messages as Array<Record<string, unknown>> : [];
+  const meaningfulMessages = typed.filter((message) => String(message.content ?? '').trim().length > 0);
+  const firstUser = meaningfulMessages.find((message) => message.role === 'user');
+  const lastMessage = meaningfulMessages[meaningfulMessages.length - 1];
+  const title = String(firstUser?.content ?? '').trim().slice(0, 48) || 'New Chat';
+  const preview = String(lastMessage?.content ?? '').trim().slice(0, 90) || 'No messages yet';
+
+  return {
+    sessionId,
+    title,
+    preview,
+    updatedAt: updatedAt ? Date.parse(updatedAt) || Date.now() : Date.now(),
+  };
 }
 
 function chunk<T>(arr: T[], size: number): T[][] {
@@ -392,6 +425,61 @@ router.post('/bulk', async (req: Request, res: Response) => {
 
 // ─── Session persistence routes ──────────────────────────────────────────────
 
+// GET /api/sessions/agent/:agentId?browserSessionId=<id>
+router.get('/agent/:agentId', async (req: Request, res: Response) => {
+  const { agentId } = req.params;
+  const browserSessionId = typeof req.query.browserSessionId === 'string'
+    ? req.query.browserSessionId
+    : '';
+
+  debugLog('LIST', { agentId, browserSessionId });
+
+  if (!browserSessionId) {
+    res.json({ sessions: [] });
+    return;
+  }
+
+  try {
+    let cursor: Record<string, unknown> | undefined;
+    const sessions: SessionSummary[] = [];
+
+    for (let page = 0; page < 25; page += 1) {
+      const result = await getClient().send(new ScanCommand({
+        TableName: TABLE,
+        FilterExpression: 'agent_id = :agentId AND browser_session_id = :browserSessionId',
+        ExpressionAttributeValues: {
+          ':agentId': agentId,
+          ':browserSessionId': browserSessionId,
+        },
+        ExclusiveStartKey: cursor,
+      }));
+
+      for (const raw of (result.Items || []) as Array<Record<string, unknown>>) {
+        const sessionId = String(raw.session_id ?? '');
+        if (!sessionId) continue;
+
+        let parsedMessages: unknown[] = [];
+        try {
+          parsedMessages = JSON.parse(String(raw.messages ?? '[]'));
+        } catch {
+          parsedMessages = [];
+        }
+
+        sessions.push(buildSessionSummary(sessionId, parsedMessages, String(raw.updated_at ?? '')));
+      }
+
+      if (!result.LastEvaluatedKey) break;
+      cursor = result.LastEvaluatedKey as Record<string, unknown>;
+    }
+
+    sessions.sort((a, b) => b.updatedAt - a.updatedAt);
+    res.json({ sessions });
+  } catch (err: any) {
+    console.warn('[sessions] LIST failed, returning empty session list:', err.message);
+    res.json({ sessions: [] });
+  }
+});
+
 // GET /api/sessions/:sessionId/:agentId
 router.get('/:sessionId/:agentId', async (req: Request, res: Response) => {
   const { sessionId, agentId } = req.params;
@@ -441,11 +529,16 @@ router.get('/:sessionId/:agentId', async (req: Request, res: Response) => {
 router.post('/:sessionId/:agentId', async (req: Request, res: Response) => {
   const { sessionId, agentId } = req.params;
   const messages = Array.isArray(req.body.messages) ? req.body.messages : [];
+  const browserSessionId = typeof req.body.browserSessionId === 'string'
+    ? req.body.browserSessionId
+    : typeof req.body.browser_session_id === 'string'
+      ? req.body.browser_session_id
+      : undefined;
   debugLog('POST', { sessionId, agentId, messageCount: messages.length });
   let writeKeyMeta: { partitionKey: string; partitionValue: string; sortKey: string | null; sortValue: string | null } | null = null;
   try {
     const keys = await resolveKeySchema();
-    const item = buildSessionItem(sessionId, agentId, messages, keys.partitionKey, keys.sortKey);
+    const item = buildSessionItem(sessionId, agentId, messages, browserSessionId, keys.partitionKey, keys.sortKey);
     writeKeyMeta = {
       partitionKey: keys.partitionKey,
       partitionValue: String(item[keys.partitionKey] ?? ''),

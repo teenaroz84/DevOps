@@ -179,7 +179,6 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
     type: 'info',
   }), [agentConfig])
 
-  const SESSION_LIST_KEY = `chat_sessions_${agent.id}`
   const [chatSessions, setChatSessions] = useState<ChatSessionSummary[]>([])
   const [activeSessionId, setActiveSessionId] = useState('')
 
@@ -224,21 +223,48 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
     }
   }, [])
 
-  // When the agent changes, load its local session list and pick the latest.
+  // When the agent changes, load its DynamoDB-backed session list and pick the latest.
   useEffect(() => {
-    isInitializing.current = true
-    setMessages([WELCOME_MESSAGE])
-  }, [SESSION_LIST_KEY, WELCOME_MESSAGE])
+    let alive = true
 
-  useEffect(() => {
-    try {
-      if (chatSessions.length > 0) {
-        localStorage.setItem(SESSION_LIST_KEY, JSON.stringify(chatSessions))
+    const loadSessions = async () => {
+      isInitializing.current = true
+      setMessages([WELCOME_MESSAGE])
+      setSessionLoading(true)
+      setSessionListLoading(true)
+
+      try {
+        const remoteSessions = await chatService.listSessions(agent.id)
+        if (!alive) return
+
+        if (remoteSessions.length > 0) {
+          const ordered = [...remoteSessions].sort((a, b) => b.updatedAt - a.updatedAt)
+          setChatSessions(ordered)
+          setActiveSessionId(ordered[0].sessionId)
+          return
+        }
+
+        const starter = buildSessionSummary(createSessionId(), [WELCOME_MESSAGE])
+        setChatSessions([starter])
+        setActiveSessionId(starter.sessionId)
+      } catch {
+        if (!alive) return
+        const starter = buildSessionSummary(createSessionId(), [WELCOME_MESSAGE])
+        setChatSessions([starter])
+        setActiveSessionId(starter.sessionId)
+      } finally {
+        if (alive) {
+          setSessionLoading(false)
+          setSessionListLoading(false)
+        }
       }
-    } catch {
-      // Ignore storage errors.
     }
-  }, [chatSessions, SESSION_LIST_KEY])
+
+    loadSessions()
+    return () => {
+      alive = false
+    }
+  }, [agent.id, WELCOME_MESSAGE])
 
   useEffect(() => {
     if (!activeSessionId) return
@@ -247,6 +273,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
 
   const [loading, setLoading] = useState(false)
   const [loadingSessionId, setLoadingSessionId] = useState<string | null>(null)
+  const [sessionListLoading, setSessionListLoading] = useState(false)
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null)
   const [inputHistory, setInputHistory] = useState<string[]>([])
   const [historyIdx, setHistoryIdx] = useState(-1)
@@ -432,8 +459,14 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
     //   // storage quota exceeded — ignore
     // }
     // Skip DynamoDB sync while the initial load is still in flight or agent is switching
-    if (!sessionLoading && !isInitializing.current) {
-      chatService.saveSession(agent.id, messages)
+    if (!sessionLoading && !isInitializing.current && activeSessionId) {
+      chatService.saveSession(agent.id, messages, activeSessionId)
+
+      const summary = buildSessionSummary(activeSessionId, messages)
+      setChatSessions(prev => {
+        const others = prev.filter(item => item.sessionId !== activeSessionId)
+        return [summary, ...others]
+      })
     }
   }, [messages, agent.id, sessionLoading, activeSessionId])
 
@@ -531,6 +564,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
   const resetToMainMenu = () => {
     if (!activeSessionId) return
     chatService.clearSession(agent.id, activeSessionId)
+    isInitializing.current = false
     setMessages([WELCOME_MESSAGE])
     setInput('')
     setChatSessions(prev => [buildSessionSummary(activeSessionId, [WELCOME_MESSAGE]), ...prev.filter(item => item.sessionId !== activeSessionId)])
@@ -539,6 +573,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
   const createNewChat = useCallback(() => {
     const nextSessionId = createSessionId()
     const nextSummary = buildSessionSummary(nextSessionId, [WELCOME_MESSAGE])
+    isInitializing.current = false
     setChatSessions(prev => [nextSummary, ...prev])
     setActiveSessionId(nextSessionId)
     setMessages([WELCOME_MESSAGE])
@@ -548,6 +583,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
   }, [WELCOME_MESSAGE])
 
   const switchToSession = useCallback((sessionId: string) => {
+    isInitializing.current = true
     setActiveSessionId(sessionId)
     setInput('')
     setLoading(false)
@@ -560,6 +596,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
 
     if (remaining.length === 0) {
       const starter = buildSessionSummary(createSessionId(), [WELCOME_MESSAGE])
+      isInitializing.current = false
       setChatSessions([starter])
       setActiveSessionId(starter.sessionId)
       setMessages([WELCOME_MESSAGE])
@@ -572,6 +609,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
     setChatSessions(remaining)
 
     if (activeSessionId === sessionId) {
+      isInitializing.current = true
       setActiveSessionId(remaining[0].sessionId)
       setMessages([WELCOME_MESSAGE])
       setInput('')
@@ -695,7 +733,18 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
                 '&::-webkit-scrollbar-thumb:hover': { backgroundColor: '#78909c' },
               }}
             >
-              {chatSessions.map(session => {
+              {sessionListLoading ? (
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1, py: 4, color: '#90a4ae' }}>
+                  <CircularProgress size={18} sx={{ color: '#90a4ae' }} />
+                  <Typography sx={{ fontSize: '11px' }}>Loading chat sessions...</Typography>
+                </Box>
+              ) : chatSessions.length === 0 ? (
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1, py: 4, px: 2, textAlign: 'center' }}>
+                  <HistoryIcon sx={{ fontSize: 20, color: '#b0bec5' }} />
+                  <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#607d8b' }}>No chats yet</Typography>
+                  <Typography sx={{ fontSize: '11px', color: '#90a4ae', lineHeight: 1.4 }}>Start a new conversation to create your first saved session for this agent.</Typography>
+                </Box>
+              ) : chatSessions.map(session => {
                 const active = session.sessionId === activeSessionId
                 return (
                   <Paper
@@ -1000,33 +1049,44 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
               <Divider />
 
               {/* Input Area */}
-              <Box sx={{ p: 2.5, backgroundColor: '#fff', display: 'flex', gap: 1 }}>
-                <TextField
-                  fullWidth
-                  multiline
-                  maxRows={3}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder={agent.placeholder}
-                  disabled={isSessionLoading}
-                  size="small"
-                  variant="outlined"
-                  sx={{
-                    '& .MuiOutlinedInput-root': {
-                      fontSize: '13px',
-                      borderRadius: 1,
-                    },
-                  }}
-                />
-                <Button
-                  variant="contained"
-                  onClick={() => sendMessage()}
-                  disabled={isSessionLoading || !input.trim()}
-                  sx={{ backgroundColor: agent.color, minWidth: '44px', height: '44px', p: 1 }}
-                >
-                  <SendIcon sx={{ fontSize: '18px' }} />
-                </Button>
+              <Box sx={{ p: 2.5, backgroundColor: '#fff' }}>
+                <Paper sx={{ p: 1.25, borderRadius: 3, border: '1px solid #d9e3ee', boxShadow: '0 8px 24px rgba(20,36,58,0.06)' }}>
+                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end' }}>
+                    <TextField
+                      fullWidth
+                      multiline
+                      minRows={2}
+                      maxRows={6}
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      placeholder={agent.placeholder}
+                      disabled={isSessionLoading}
+                      size="small"
+                      variant="outlined"
+                      sx={{
+                        '& .MuiOutlinedInput-root': {
+                          fontSize: '14px',
+                          borderRadius: 2.5,
+                          backgroundColor: '#fff',
+                          minHeight: 72,
+                          alignItems: 'flex-start',
+                        },
+                        '& .MuiOutlinedInput-input': {
+                          py: 1.6,
+                        },
+                      }}
+                    />
+                    <Button
+                      variant="contained"
+                      onClick={() => sendMessage()}
+                      disabled={isSessionLoading || !input.trim()}
+                      sx={{ backgroundColor: agent.color, minWidth: '52px', height: '52px', p: 1, borderRadius: 2.5, '&:hover': { backgroundColor: agent.color, filter: 'brightness(0.92)' } }}
+                    >
+                      <SendIcon sx={{ fontSize: '20px' }} />
+                    </Button>
+                  </Box>
+                </Paper>
               </Box>
             </>
           ) : (
@@ -1041,12 +1101,13 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
                     <Typography sx={{ fontSize: '11px', color: '#90a4ae' }}>Restoring history...</Typography>
                   </Box>
                 )}
-                <Paper sx={{ width: '100%', p: 1.2, borderRadius: 3, border: '1px solid #d9e3ee', boxShadow: '0 10px 32px rgba(20,36,58,0.06)' }}>
-                  <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 1 }}>
+                <Paper sx={{ width: '100%', p: 1.4, borderRadius: 3.5, border: '1px solid #d9e3ee', boxShadow: '0 10px 32px rgba(20,36,58,0.06)' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 1.1 }}>
                     <TextField
                       fullWidth
                       multiline
-                      maxRows={5}
+                      minRows={2}
+                      maxRows={6}
                       value={input}
                       onChange={(e) => setInput(e.target.value)}
                       onKeyDown={handleKeyDown}
@@ -1056,9 +1117,14 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
                       variant="outlined"
                       sx={{
                         '& .MuiOutlinedInput-root': {
-                          fontSize: '14px',
-                          borderRadius: 2,
+                          fontSize: '15px',
+                          borderRadius: 2.5,
                           backgroundColor: '#fff',
+                          minHeight: 76,
+                          alignItems: 'flex-start',
+                        },
+                        '& .MuiOutlinedInput-input': {
+                          py: 1.75,
                         },
                       }}
                     />
@@ -1066,9 +1132,9 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
                       variant="contained"
                       onClick={() => sendMessage()}
                       disabled={isSessionLoading || !input.trim()}
-                      sx={{ backgroundColor: agent.color, minWidth: '46px', height: '46px', p: 1, borderRadius: 2, '&:hover': { backgroundColor: agent.color, filter: 'brightness(0.92)' } }}
+                      sx={{ backgroundColor: agent.color, minWidth: '54px', height: '54px', p: 1, borderRadius: 2.5, '&:hover': { backgroundColor: agent.color, filter: 'brightness(0.92)' } }}
                     >
-                      <SendIcon sx={{ fontSize: '18px' }} />
+                      <SendIcon sx={{ fontSize: '20px' }} />
                     </Button>
                   </Box>
                 </Paper>
@@ -1415,54 +1481,62 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
       <Divider />
 
       {/* Input Area */}
-      <Box sx={{ p: 1.25, backgroundColor: '#fff' }}>
-        <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'flex-end' }}>
-          <Box sx={{ flex: 1, position: 'relative' }}>
-            <TextField
-              fullWidth
-              multiline
-              maxRows={4}
-              value={input}
-              onChange={(e) => { setInput(e.target.value); setHistoryIdx(-1) }}
-              onKeyDown={handleKeyDown}
-              placeholder={agent.placeholder}
-              disabled={loading}
-              size="small"
-              variant="outlined"
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  fontSize: '13px',
-                  borderRadius: 2.5,
-                },
-              }}
-            />
-            {input.length > 60 && (
-              <Typography sx={{ position: 'absolute', bottom: 6, right: 12, fontSize: '10px', color: input.length > 500 ? '#e53935' : '#bbb', pointerEvents: 'none' }}>
-                {input.length}
-              </Typography>
-            )}
-          </Box>
-          <Tooltip title={input.trim() ? 'Send (Enter)' : 'Type a message'}>
-            <span>
-              <Button
-                variant="contained"
-                onClick={() => sendMessage()}
-                disabled={isSessionLoading || !input.trim()}
+      <Box sx={{ p: 1.5, backgroundColor: '#fff' }}>
+        <Paper sx={{ p: 1.1, borderRadius: 3, border: '1px solid #d9e3ee', boxShadow: '0 8px 24px rgba(20,36,58,0.06)' }}>
+          <Box sx={{ display: 'flex', gap: 0.9, alignItems: 'flex-end' }}>
+            <Box sx={{ flex: 1, position: 'relative' }}>
+              <TextField
+                fullWidth
+                multiline
+                minRows={2}
+                maxRows={6}
+                value={input}
+                onChange={(e) => { setInput(e.target.value); setHistoryIdx(-1) }}
+                onKeyDown={handleKeyDown}
+                placeholder={agent.placeholder}
+                disabled={loading}
+                size="small"
+                variant="outlined"
                 sx={{
-                  backgroundColor: agent.color,
-                  minWidth: '40px',
-                  height: '40px',
-                  p: 0.75,
-                  borderRadius: 2.5,
-                  '&:hover': { backgroundColor: agent.color, filter: 'brightness(0.9)' },
+                  '& .MuiOutlinedInput-root': {
+                    fontSize: '14px',
+                    borderRadius: 2.5,
+                    minHeight: 72,
+                    alignItems: 'flex-start',
+                  },
+                  '& .MuiOutlinedInput-input': {
+                    py: 1.5,
+                  },
                 }}
-              >
-                <SendIcon sx={{ fontSize: '18px' }} />
-              </Button>
-            </span>
-          </Tooltip>
-        </Box>
-        <Typography sx={{ fontSize: '10px', color: '#ccc', mt: 0.5, textAlign: 'center' }}>
+              />
+              {input.length > 60 && (
+                <Typography sx={{ position: 'absolute', bottom: 8, right: 14, fontSize: '10px', color: input.length > 500 ? '#e53935' : '#9aa5b1', pointerEvents: 'none' }}>
+                  {input.length}
+                </Typography>
+              )}
+            </Box>
+            <Tooltip title={input.trim() ? 'Send (Enter)' : 'Type a message'}>
+              <span>
+                <Button
+                  variant="contained"
+                  onClick={() => sendMessage()}
+                  disabled={isSessionLoading || !input.trim()}
+                  sx={{
+                    backgroundColor: agent.color,
+                    minWidth: '52px',
+                    height: '52px',
+                    p: 0.75,
+                    borderRadius: 2.5,
+                    '&:hover': { backgroundColor: agent.color, filter: 'brightness(0.9)' },
+                  }}
+                >
+                  <SendIcon sx={{ fontSize: '20px' }} />
+                </Button>
+              </span>
+            </Tooltip>
+          </Box>
+        </Paper>
+        <Typography sx={{ fontSize: '10px', color: '#b0b8c4', mt: 0.6, textAlign: 'center' }}>
           Enter to send · Shift+Enter for new line · ↑↓ history
         </Typography>
       </Box>
