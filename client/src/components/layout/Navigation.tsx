@@ -148,7 +148,7 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuChange
             Agents
           </Typography>
         )}
-        {FULLSCREEN_AGENT_MENUS.filter((item) => !item.mockOnly || useMock).map((item) => {
+        {FULLSCREEN_AGENT_MENUS.map((item) => {
           const agent = AGENTS[item.agentId]
           return (
             <React.Fragment key={item.menuId}>
@@ -205,12 +205,6 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuChange
         </Box>
       </Tooltip>
 
-      {/* Status */}
-      {isExpanded && (
-        <>
-          <Divider sx={{ my: 1 }} />
-        </>
-      )}
     </Drawer>
   )
 }

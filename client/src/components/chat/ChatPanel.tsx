@@ -198,6 +198,9 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
     return [WELCOME_MESSAGE]
   })
   const [sessionLoading, setSessionLoading] = useState(false)
+  // Blocks the save effect while the session is being loaded for the first time
+  // or while switching agents — prevents overwriting DynamoDB with [WELCOME_MESSAGE]
+  const isInitializing = useRef(true)
 
   // Load DynamoDB session for the current agent + selected chat session
   const loadAgentSession = useCallback(async (agentId: string, welcome: Message, sessionId: string) => {
@@ -214,31 +217,16 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
         setMessages([welcome])
       }
     } catch {
-      setMessages([welcome])
+      // DynamoDB unreachable — keep current messages
     } finally {
       setSessionLoading(false)
+      isInitializing.current = false
     }
   }, [])
 
   // When the agent changes, load its local session list and pick the latest.
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(SESSION_LIST_KEY)
-      const parsed = saved ? (JSON.parse(saved) as ChatSessionSummary[]) : []
-      if (parsed.length > 0) {
-        const ordered = [...parsed].sort((a, b) => b.updatedAt - a.updatedAt)
-        setChatSessions(ordered)
-        setActiveSessionId(ordered[0].sessionId)
-      } else {
-        const starter = buildSessionSummary(createSessionId(), [WELCOME_MESSAGE])
-        setChatSessions([starter])
-        setActiveSessionId(starter.sessionId)
-      }
-    } catch {
-      const starter = buildSessionSummary(createSessionId(), [WELCOME_MESSAGE])
-      setChatSessions([starter])
-      setActiveSessionId(starter.sessionId)
-    }
+    isInitializing.current = true
     setMessages([WELCOME_MESSAGE])
   }, [SESSION_LIST_KEY, WELCOME_MESSAGE])
 
@@ -438,14 +426,14 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
 
   // Persist to localStorage + DynamoDB whenever messages change
   useEffect(() => {
-    if (!sessionLoading && activeSessionId) {
-      chatService.saveSession(agent.id, messages, activeSessionId)
-
-      const summary = buildSessionSummary(activeSessionId, messages)
-      setChatSessions(prev => {
-        const others = prev.filter(item => item.sessionId !== activeSessionId)
-        return [summary, ...others]
-      })
+    // try {
+    //   localStorage.setItem(STORAGE_KEY, JSON.stringify(messages))
+    // } catch {
+    //   // storage quota exceeded — ignore
+    // }
+    // Skip DynamoDB sync while the initial load is still in flight or agent is switching
+    if (!sessionLoading && !isInitializing.current) {
+      chatService.saveSession(agent.id, messages)
     }
   }, [messages, agent.id, sessionLoading, activeSessionId])
 

@@ -27,7 +27,6 @@ import { MOCK_DMF_SUMMARY, MOCK_DMF_RUNS_OVER_TIME } from '../../services/dmfMoc
 import { MOCK_TALEND_SUMMARY } from '../../services/talendMockData'
 import { MOCK_SERVICENOW_INCIDENTS, MOCK_SERVICENOW_TICKETS } from '../../services/servicenowMockData'
 import { MOCK_ESP_JOB_COUNTS } from '../../services/espMockData'
-import { MOCK_SF_COST_SUMMARY, MOCK_SF_PLATFORM_SUMMARY } from '../../services/snowflakeMockData'
 import { useMockData } from '../../context/MockDataContext'
 import { SESSION_ID } from '../../services/session'
 import { AGENTS } from '../../config/agentConfig'
@@ -41,14 +40,13 @@ const SOURCES: {
   icon: React.ReactElement
   accent: string
   sub: string
-  mockOnly?: boolean
 }[] = [
   { key: 'overview',   label: 'Overview',        icon: <DashboardIcon />,    accent: '#1976d2', sub: 'Executive Summary'       },
   { key: 'servicenow', label: 'ServiceNow',      icon: <SupportAgentIcon />, accent: '#c62828', sub: ''                    },
   { key: 'pipeline',   label: 'ESP',             icon: <CloudIcon />,        accent: '#2e7d32', sub: '' },
   { key: 'dmf',        label: 'DMF',             icon: <StorageIcon />,      accent: '#1565c0', sub: ''              },
   { key: 'logs',       label: 'Talend',          icon: <AccountTreeIcon />,  accent: '#e65100', sub: ''        },
-  { key: 'snowflake',  label: 'Snowflake',       icon: <AcUnitIcon />,       accent: '#29b6f6', sub: '',     mockOnly: true },
+  { key: 'snowflake',  label: 'Snowflake',       icon: <AcUnitIcon />,       accent: '#29b6f6', sub: '' },
 ]
 
 // ─── Overview widget preferences ─────────────────────────────
@@ -104,10 +102,23 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
   const [tickets,       setTickets]       = useState<any[]>([])
   const [espJobCounts,     setEspJobCounts]     = useState<any[]>([])
   const [snowflakePlatform, setSnowflakePlatform] = useState<any>(null)
-  const [loading,           setLoading]           = useState(true)
+  const [loadingCore,       setLoadingCore]       = useState(true)
+  const [loadingSnowflake,  setLoadingSnowflake]  = useState(true)
 
   useEffect(() => {
-    setLoading(true)
+    setLoadingSnowflake(true)
+    snowflakeService.getCost()
+      .then(setCost)
+      .catch(() => setCost(null))
+      .finally(() => setLoadingSnowflake(false))
+
+    snowflakeService.getPlatformSummary()
+      .then(setSnowflakePlatform)
+      .catch(() => setSnowflakePlatform(null))
+  }, [])
+
+  useEffect(() => {
+    setLoadingCore(true)
     // Clear stale data immediately so mock values don't persist into live view
     setDmfSummary(null)
     setRunsOverTime([])
@@ -115,8 +126,7 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
     setIncidents([])
     setTickets([])
     setEspJobCounts([])
-    setCost(null)
-    setSnowflakePlatform(null)
+
     if (useMock) {
       setDmfSummary(MOCK_DMF_SUMMARY)
       setRunsOverTime(MOCK_DMF_RUNS_OVER_TIME)
@@ -124,33 +134,29 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
       setIncidents(MOCK_SERVICENOW_INCIDENTS)
       setTickets(MOCK_SERVICENOW_TICKETS)
       setEspJobCounts(MOCK_ESP_JOB_COUNTS)
-      setCost({ total: MOCK_SF_COST_SUMMARY.monthly_cost, budget: MOCK_SF_COST_SUMMARY.budget, overage: Math.max(0, MOCK_SF_COST_SUMMARY.monthly_cost - MOCK_SF_COST_SUMMARY.budget), efficient_pct: MOCK_SF_COST_SUMMARY.efficient_pct, wasted_spend: MOCK_SF_COST_SUMMARY.wasted_spend })
-      setSnowflakePlatform(MOCK_SF_PLATFORM_SUMMARY)
-      setLoading(false)
+      setLoadingCore(false)
       return
     }
+
     Promise.all([
       dmfService.getSummary(),
-      snowflakeService.getCost(),
       dmfService.getRunsOverTime(),
       talendService.getSummary(),
       servicenowService.getIncidents(),
       servicenowService.getTickets(),
       espService.getJobCounts(),
-    ]).then(([dmf, cst, rot, tln, inc, tkt, esp]) => {
+    ]).then(([dmf, rot, tln, inc, tkt, esp]) => {
       setDmfSummary(dmf)
-      setCost(cst)
       setRunsOverTime(Array.isArray(rot) ? rot : [])
       setTalendSummary(tln)
       setIncidents(Array.isArray(inc) ? inc : [])
       setTickets(Array.isArray(tkt) ? tkt : [])
       setEspJobCounts(Array.isArray(esp) ? esp : Array.isArray(esp?.jobs_summary) ? esp.jobs_summary : [])
-      setSnowflakePlatform(null)
-      setLoading(false)
-    }).catch(() => setLoading(false))
+      setLoadingCore(false)
+    }).catch(() => setLoadingCore(false))
   }, [useMock])
 
-  if (loading) {
+  if (loadingCore || loadingSnowflake) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 300 }}>
         <CircularProgress />
@@ -271,10 +277,9 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
       bg: budgetPct > 110 ? '#fce4ec' : budgetPct > 100 ? '#fff3e0' : '#e8f5e9',
       trend: cost
         ? `$${(cost.total / 1000).toFixed(0)}K of $${(cost.budget / 1000).toFixed(0)}K`
-        : 'Snowflake (mock mode)',
+        : 'Snowflake',
       trendPositiveIsGood: false,
-      description: `Snowflake compute + infrastructure budget utilisation.${!useMock ? '\n\n⚠ Mock data — /api/snowflake/cost returns hardcoded values from server/src/mockData.ts. No live Snowflake cost query is connected yet.' : ''}`,
-      tag: !useMock ? { label: 'Mock Data', color: '#b45309', bg: '#fef3c7' } : undefined,
+      description: 'Snowflake compute + infrastructure budget utilisation.',
     },
   ]
 
@@ -867,12 +872,11 @@ interface ExecutiveDashboardProps {
 }
 
 export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onChatClick, onOpenAgent, source: controlledSource, onSourceChange }) => {
-  const { useMock } = useMockData()
   const [internalSource, setInternalSource] = useState<SourceKey>('overview')
   const source = controlledSource ?? internalSource
   const setSource = onSourceChange ?? setInternalSource
   const [lastUpdatedMap, setLastUpdatedMap] = useState<Partial<Record<SourceKey, Date>>>({ overview: new Date() })
-  const visibleSources = SOURCES.filter(s => !s.mockOnly || useMock)
+  const visibleSources = SOURCES
   const active = visibleSources.find(s => s.key === source) ?? visibleSources[0]!
 
   useEffect(() => {
