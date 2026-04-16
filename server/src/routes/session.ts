@@ -29,7 +29,7 @@ const TTL_SECONDS = 30 * 24 * 60 * 60; // 30 days
 const DEBUG_SESSIONS = process.env.DEBUG_SESSIONS === '1';
 
 let ddb: DynamoDBDocumentClient | null = null;
-let keySchemaCache: { partitionKey: string; sortKey: string } | null = null;
+let keySchemaCache: { partitionKey: string; sortKey: string | null } | null = null;
 
 function getClient(): DynamoDBDocumentClient {
   if (!ddb) {
@@ -44,7 +44,7 @@ function debugLog(event: string, details?: Record<string, unknown>): void {
   details ? console.log(`[sessions] ${event}`, details) : console.log(`[sessions] ${event}`);
 }
 
-async function resolveKeySchema(): Promise<{ partitionKey: string; sortKey: string }> {
+async function resolveKeySchema(): Promise<{ partitionKey: string; sortKey: string | null }> {
   if (keySchemaCache) return keySchemaCache;
 
   const region = process.env.AWS_REGION || 'us-east-1';
@@ -56,7 +56,7 @@ async function resolveKeySchema(): Promise<{ partitionKey: string; sortKey: stri
 
   keySchemaCache = {
     partitionKey: hash || PARTITION_KEY,
-    sortKey: range || SORT_KEY,
+    sortKey: range || null,
   };
   return keySchemaCache;
 }
@@ -65,6 +65,11 @@ function getSortKeyValue(sortKey: string, sessionId: string, agentId: string): s
   if (sortKey === 'agent_id') return agentId;
   if (sortKey === 'session_id_timestamp') return `${agentId}#${Date.now()}`;
   return agentId;
+}
+
+function getPartitionKeyValue(sessionId: string, agentId: string, hasSortKey: boolean): string {
+  // For PK-only tables, fold agent into PK to avoid overwriting other agents.
+  return hasSortKey ? sessionId : `${sessionId}#${agentId}`;
 }
 
 type SessionRecordInput = {
@@ -116,11 +121,18 @@ function toSessionItem(record: SessionRecordInput): SessionItem | null {
   };
 }
 
-function buildSessionKey(sessionId: string, sortValue: string, partitionKey: string, sortKey: string): Record<string, string> {
-  return {
-    [partitionKey]: sessionId,
-    [sortKey]: sortValue,
+function buildSessionKey(
+  sessionId: string,
+  agentId: string,
+  partitionKey: string,
+  sortKey?: string | null,
+  sortValue?: string,
+): Record<string, string> {
+  const key: Record<string, string> = {
+    [partitionKey]: getPartitionKeyValue(sessionId, agentId, !!sortKey),
   };
+  if (sortKey && sortValue) key[sortKey] = sortValue;
+  return key;
 }
 
 function buildSessionItem(
@@ -128,12 +140,10 @@ function buildSessionItem(
   agentId: string,
   messages: unknown[],
   partitionKey: string,
-  sortKey: string,
+  sortKey?: string | null,
 ): Record<string, unknown> {
-  const sortValue = getSortKeyValue(sortKey, sessionId, agentId);
-  return {
-    [partitionKey]: sessionId,
-    [sortKey]: sortValue,
+  const item: Record<string, unknown> = {
+    [partitionKey]: getPartitionKeyValue(sessionId, agentId, !!sortKey),
     // Keep canonical fields for backward compatibility and easy querying.
     session_id: sessionId,
     agent_id: agentId,
@@ -141,6 +151,10 @@ function buildSessionItem(
     updated_at: new Date().toISOString(),
     ttl: Math.floor(Date.now() / 1000) + TTL_SECONDS,
   };
+  if (sortKey) {
+    item[sortKey] = getSortKeyValue(sortKey, sessionId, agentId);
+  }
+  return item;
 }
 
 function chunk<T>(arr: T[], size: number): T[][] {
@@ -305,7 +319,7 @@ router.get('/diagnostic/sample-item', async (_req: Request, res: Response) => {
         configuredPartitionKey: keys.partitionKey,
         configuredSortKey: keys.sortKey,
         partitionValue: item[keys.partitionKey],
-        sortValue: item[keys.sortKey],
+        sortValue: keys.sortKey ? item[keys.sortKey] : null,
         session_id: item.session_id,
         agent_id: item.agent_id,
         updated_at: item.updated_at,
@@ -343,8 +357,8 @@ router.post('/bulk', async (req: Request, res: Response) => {
 
     for (const batch of batches) {
       const mapped = batch.map((item) => ({
-        [keys.partitionKey]: item.session_id,
-        [keys.sortKey]: getSortKeyValue(keys.sortKey, item.session_id, item.agent_id),
+        [keys.partitionKey]: getPartitionKeyValue(item.session_id, item.agent_id, !!keys.sortKey),
+        ...(keys.sortKey ? { [keys.sortKey]: getSortKeyValue(keys.sortKey, item.session_id, item.agent_id) } : {}),
         session_id: item.session_id,
         agent_id: item.agent_id,
         messages: item.messages,
@@ -389,11 +403,30 @@ router.get('/:sessionId/:agentId', async (req: Request, res: Response) => {
     if (keys.sortKey === 'agent_id') {
       const result = await getClient().send(new GetCommand({
         TableName: TABLE,
-        Key: buildSessionKey(sessionId, agentId, keys.partitionKey, keys.sortKey),
+        Key: buildSessionKey(sessionId, agentId, keys.partitionKey, keys.sortKey, agentId),
       }));
       item = result.Item as Record<string, unknown> | undefined;
-    } else {
+    } else if (keys.sortKey) {
       item = await findLatestAgentItem(sessionId, agentId, keys.partitionKey, keys.sortKey);
+    } else {
+      // PK-only table: primary key is sessionId#agentId.
+      const result = await getClient().send(new GetCommand({
+        TableName: TABLE,
+        Key: buildSessionKey(sessionId, agentId, keys.partitionKey, null),
+      }));
+      item = result.Item as Record<string, unknown> | undefined;
+
+      // Backward compatibility: older data keyed only by sessionId.
+      if (!item) {
+        const legacy = await getClient().send(new GetCommand({
+          TableName: TABLE,
+          Key: { [keys.partitionKey]: sessionId },
+        }));
+        const legacyItem = legacy.Item as Record<string, unknown> | undefined;
+        if (legacyItem && String(legacyItem.agent_id ?? '') === agentId) {
+          item = legacyItem;
+        }
+      }
     }
 
     const messages = item ? JSON.parse((item.messages as string) || '[]') : [];
@@ -409,7 +442,7 @@ router.post('/:sessionId/:agentId', async (req: Request, res: Response) => {
   const { sessionId, agentId } = req.params;
   const messages = Array.isArray(req.body.messages) ? req.body.messages : [];
   debugLog('POST', { sessionId, agentId, messageCount: messages.length });
-  let writeKeyMeta: { partitionKey: string; partitionValue: string; sortKey: string; sortValue: string } | null = null;
+  let writeKeyMeta: { partitionKey: string; partitionValue: string; sortKey: string | null; sortValue: string | null } | null = null;
   try {
     const keys = await resolveKeySchema();
     const item = buildSessionItem(sessionId, agentId, messages, keys.partitionKey, keys.sortKey);
@@ -417,7 +450,7 @@ router.post('/:sessionId/:agentId', async (req: Request, res: Response) => {
       partitionKey: keys.partitionKey,
       partitionValue: String(item[keys.partitionKey] ?? ''),
       sortKey: keys.sortKey,
-      sortValue: String(item[keys.sortKey] ?? ''),
+      sortValue: keys.sortKey ? String(item[keys.sortKey] ?? '') : null,
     };
     await getClient().send(new PutCommand({
       TableName: TABLE,
@@ -453,19 +486,24 @@ router.delete('/:sessionId/:agentId', async (req: Request, res: Response) => {
     if (keys.sortKey === 'agent_id') {
       await getClient().send(new DeleteCommand({
         TableName: TABLE,
-        Key: buildSessionKey(sessionId, agentId, keys.partitionKey, keys.sortKey),
+        Key: buildSessionKey(sessionId, agentId, keys.partitionKey, keys.sortKey, agentId),
       }));
-    } else {
+    } else if (keys.sortKey) {
       const item = await findLatestAgentItem(sessionId, agentId, keys.partitionKey, keys.sortKey);
       if (item) {
         const sortValue = String(item[keys.sortKey] ?? '');
         if (sortValue) {
           await getClient().send(new DeleteCommand({
             TableName: TABLE,
-            Key: buildSessionKey(sessionId, sortValue, keys.partitionKey, keys.sortKey),
+            Key: buildSessionKey(sessionId, agentId, keys.partitionKey, keys.sortKey, sortValue),
           }));
         }
       }
+    } else {
+      await getClient().send(new DeleteCommand({
+        TableName: TABLE,
+        Key: buildSessionKey(sessionId, agentId, keys.partitionKey, null),
+      }));
     }
     res.json({ ok: true, persisted: true });
   } catch (err: any) {

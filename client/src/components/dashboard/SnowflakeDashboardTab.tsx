@@ -3,10 +3,8 @@
  * Two sub-screens toggled by inner tabs:
  *   1. Cost & Efficiency Overview
  *   2. Snowflake Platform Intelligence
- *
- * Visible in MOCK mode only (enforced in ExecutiveDashboard).
  */
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Box, Typography, Paper, Chip, Tooltip, Button } from '@mui/material'
 import AcUnitIcon from '@mui/icons-material/AcUnit'
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney'
@@ -25,6 +23,7 @@ import type { ColumnDef } from '../widgets'
 import {
   MOCK_SF_COST_SUMMARY,
   MOCK_SF_COST_BY_PIPELINE,
+  MOCK_SF_COST_SCATTER,
   MOCK_SF_COST_BY_DURATION,
   MOCK_SF_TOP_COSTLY_JOBS,
   MOCK_SF_PLATFORM_SUMMARY,
@@ -33,6 +32,8 @@ import {
   MOCK_SF_TOP_SLOW_QUERIES,
   MOCK_SF_ALERT,
 } from '../../services/snowflakeMockData'
+import { snowflakeService } from '../../services/snowflakeService'
+import { useMockData } from '../../context/MockDataContext'
 
 // ── Helpers ────────────────────────────────────────────────
 
@@ -86,9 +87,8 @@ const Treemap: React.FC<{ items: typeof MOCK_SF_COST_BY_PIPELINE }> = ({ items }
 // ── Scatter plot (SVG) ────────────────────────────────────
 
 const BUCKETS = ['<30m', '30–45m', '45–60m', '60–75m', '>120m']
-import { MOCK_SF_COST_SCATTER } from '../../services/snowflakeMockData'
 
-const ScatterPlot: React.FC = () => {
+const ScatterPlot: React.FC<{ items: typeof MOCK_SF_COST_SCATTER }> = ({ items }) => {
   const W = 260, H = 140, PL = 36, PR = 8, PT = 8, PB = 28
   const minCost = 11, maxCost = 25
   const xStep = (W - PL - PR) / (BUCKETS.length - 1)
@@ -113,8 +113,8 @@ const ScatterPlot: React.FC = () => {
           fontSize={7} fill="#999">{b}</text>
       ))}
       {/* Dots */}
-      {MOCK_SF_COST_SCATTER.map((d, i) => {
-        const xi = BUCKETS.indexOf(d.bucket.replace('>', '>').replace('30-45m', '30–45m').replace('45-60m', '45–60m').replace('60-75m', '60–75m').replace('>120m', '>120m'))
+      {items.map((d, i) => {
+        const xi = BUCKETS.indexOf(d.bucket.replace('30-45m', '30–45m').replace('45-60m', '45–60m').replace('60-75m', '60–75m').replace('>120m', '>120m'))
         const x = PL + (xi < 0 ? 0 : xi) * xStep + (Math.sin(i * 2.3) * 6)
         const y = yScale(d.cost)
         const r = Math.max(3, Math.min(8, d.runs / 8))
@@ -130,8 +130,16 @@ const ScatterPlot: React.FC = () => {
 
 // ── Sub-screen 1: Cost & Efficiency ──────────────────────
 
-const CostEfficiencyScreen: React.FC = () => {
-  const s = MOCK_SF_COST_SUMMARY
+interface CostData {
+  summary: typeof MOCK_SF_COST_SUMMARY
+  byPipeline: typeof MOCK_SF_COST_BY_PIPELINE
+  scatter: typeof MOCK_SF_COST_SCATTER
+  byDuration: typeof MOCK_SF_COST_BY_DURATION
+  topCostlyJobs: typeof MOCK_SF_TOP_COSTLY_JOBS
+}
+
+const CostEfficiencyScreen: React.FC<{ data: CostData }> = ({ data }) => {
+  const s = data.summary
 
   const costCols: ColumnDef[] = [
     { key: 'pipeline',   header: 'Pipeline',   width: 180 },
@@ -166,14 +174,14 @@ const CostEfficiencyScreen: React.FC = () => {
         <Paper elevation={0} sx={{ p: 2, border: '1px solid #e8ecf1', borderTop: '3px solid #1976d2', borderRadius: 2 }}>
           <Typography sx={{ fontSize: '12px', fontWeight: 600, mb: 1, color: '#1a2535' }}>Cost by Pipeline</Typography>
           <Box sx={{ height: 160 }}>
-            <Treemap items={MOCK_SF_COST_BY_PIPELINE} />
+            <Treemap items={data.byPipeline} />
           </Box>
         </Paper>
 
         <Paper elevation={0} sx={{ p: 2, border: '1px solid #e8ecf1', borderTop: '3px solid #f57c00', borderRadius: 2 }}>
           <Typography sx={{ fontSize: '12px', fontWeight: 600, mb: 1, color: '#1a2535' }}>Cost vs Duration</Typography>
           <Box sx={{ height: 160 }}>
-            <ScatterPlot />
+            <ScatterPlot items={data.scatter} />
           </Box>
         </Paper>
 
@@ -181,7 +189,7 @@ const CostEfficiencyScreen: React.FC = () => {
           <Typography sx={{ fontSize: '12px', fontWeight: 600, mb: 1, color: '#1a2535' }}>Cost by Duration Bucket</Typography>
           <Box sx={{ height: 160 }}>
             <ComposedBarLineChart
-              data={MOCK_SF_COST_BY_DURATION}
+              data={data.byDuration}
               xKey="bucket"
               bars={[{ key: 'cost', color: '#1976d2', label: 'Cost ($)' }]}
               lines={[]}
@@ -195,7 +203,7 @@ const CostEfficiencyScreen: React.FC = () => {
         <Box sx={{ px: 2, py: 1.5, backgroundColor: '#fafafa', borderBottom: '1px solid #e8ecf1' }}>
           <Typography sx={{ fontSize: '13px', fontWeight: 700, color: '#1a2535' }}>Top Costly Jobs</Typography>
         </Box>
-        <DataTable columns={costCols} rows={MOCK_SF_TOP_COSTLY_JOBS} />
+        <DataTable columns={costCols} rows={data.topCostlyJobs} />
       </Paper>
     </Box>
   )
@@ -203,13 +211,36 @@ const CostEfficiencyScreen: React.FC = () => {
 
 // ── Sub-screen 2: Platform Intelligence ──────────────────
 
-const PlatformIntelligenceScreen: React.FC = () => {
-  const s = MOCK_SF_PLATFORM_SUMMARY
+interface PlatformData {
+  summary: typeof MOCK_SF_PLATFORM_SUMMARY
+  heatmap: typeof MOCK_SF_HEATMAP
+  hourlyQueries: typeof MOCK_SF_HOURLY_QUERIES
+  topSlowQueries: typeof MOCK_SF_TOP_SLOW_QUERIES
+  alert: string
+}
+
+const EMPTY_COST_SUMMARY: typeof MOCK_SF_COST_SUMMARY = {
+  monthly_cost: 0,
+  warehouse_spend: 0,
+  efficient_pct: 0,
+  wasted_spend: 0,
+  budget: 0,
+}
+
+const EMPTY_PLATFORM_SUMMARY: typeof MOCK_SF_PLATFORM_SUMMARY = {
+  long_queries: 0,
+  task_failures: 0,
+  warehouse_util_pct: 0,
+  query_errors: 0,
+}
+
+const PlatformIntelligenceScreen: React.FC<{ data: PlatformData }> = ({ data }) => {
+  const s = data.summary
 
   // Build HeatmapGrid input
-  const heatRows = MOCK_SF_HEATMAP.map(r => r.row)
-  const heatCols = MOCK_SF_HEATMAP[0]?.cells.map(c => c.col) ?? []
-  const heatValues = MOCK_SF_HEATMAP.map(r => r.cells.map(c => c.value))
+  const heatRows = data.heatmap.map(r => r.row)
+  const heatCols = data.heatmap[0]?.cells.map(c => c.col) ?? []
+  const heatValues = data.heatmap.map(r => r.cells.map(c => c.value))
 
   // Heatmap color: red=high util (bad), blue=low
   const utilColor = (v: number) => {
@@ -239,7 +270,7 @@ const PlatformIntelligenceScreen: React.FC = () => {
       {/* Alert banner */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, backgroundColor: '#fff8e1', border: '1px solid #fdd835', borderRadius: 2, px: 2, py: 1 }}>
         <WarningAmberIcon sx={{ fontSize: 16, color: '#f57c00' }} />
-        <Typography sx={{ fontSize: '12px', color: '#795548' }}>{MOCK_SF_ALERT}</Typography>
+        <Typography sx={{ fontSize: '12px', color: '#795548' }}>{data.alert}</Typography>
       </Box>
 
       {/* KPI strip */}
@@ -269,7 +300,7 @@ const PlatformIntelligenceScreen: React.FC = () => {
           <Typography sx={{ fontSize: '12px', fontWeight: 600, mb: 1, color: '#1a2535' }}>Hourly Query Volume</Typography>
           <Box sx={{ height: 180 }}>
             <ComposedBarLineChart
-              data={MOCK_SF_HOURLY_QUERIES.filter((_, i) => i % 2 === 0)}
+              data={data.hourlyQueries.filter((_, i) => i % 2 === 0)}
               xKey="hour"
               bars={[{ key: 'queries', color: '#1976d2', label: 'Queries' }]}
               lines={[]}
@@ -283,7 +314,7 @@ const PlatformIntelligenceScreen: React.FC = () => {
         <Box sx={{ px: 2, py: 1.5, backgroundColor: '#fafafa', borderBottom: '1px solid #e8ecf1' }}>
           <Typography sx={{ fontSize: '13px', fontWeight: 700, color: '#1a2535' }}>Top Slow Queries</Typography>
         </Box>
-        <DataTable columns={queryCols} rows={MOCK_SF_TOP_SLOW_QUERIES} />
+        <DataTable columns={queryCols} rows={data.topSlowQueries} />
       </Paper>
     </Box>
   )
@@ -294,11 +325,107 @@ const PlatformIntelligenceScreen: React.FC = () => {
 type SubTab = 'cost' | 'platform'
 
 export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void }> = ({ onOpenAgent }) => {
-  const [subTab, setSubTab] = useState<SubTab>('cost')
+  const { useMock } = useMockData()
+  const [subTab, setSubTab] = useState<SubTab>('platform')
+  const [isLive, setIsLive] = useState(false)
+
+  const [costData, setCostData] = useState<CostData>({
+    summary: EMPTY_COST_SUMMARY,
+    byPipeline: [],
+    scatter: [],
+    byDuration: [],
+    topCostlyJobs: [],
+  })
+
+  const [platformData, setPlatformData] = useState<PlatformData>({
+    summary: EMPTY_PLATFORM_SUMMARY,
+    heatmap: [],
+    hourlyQueries: [],
+    topSlowQueries: [],
+    alert: 'Loading live Snowflake data...',
+  })
+
+  useEffect(() => {
+    let alive = true
+    setIsLive(false)
+
+    if (useMock) {
+      setCostData({
+        summary: MOCK_SF_COST_SUMMARY,
+        byPipeline: MOCK_SF_COST_BY_PIPELINE,
+        scatter: MOCK_SF_COST_SCATTER,
+        byDuration: MOCK_SF_COST_BY_DURATION,
+        topCostlyJobs: MOCK_SF_TOP_COSTLY_JOBS,
+      })
+      setPlatformData({
+        summary: MOCK_SF_PLATFORM_SUMMARY,
+        heatmap: MOCK_SF_HEATMAP,
+        hourlyQueries: MOCK_SF_HOURLY_QUERIES,
+        topSlowQueries: MOCK_SF_TOP_SLOW_QUERIES,
+        alert: MOCK_SF_ALERT,
+      })
+      return () => { alive = false }
+    }
+
+    // Live mode: reset to empty values to avoid mock data leakage while loading.
+    setCostData({
+      summary: EMPTY_COST_SUMMARY,
+      byPipeline: [],
+      scatter: [],
+      byDuration: [],
+      topCostlyJobs: [],
+    })
+    setPlatformData({
+      summary: EMPTY_PLATFORM_SUMMARY,
+      heatmap: [],
+      hourlyQueries: [],
+      topSlowQueries: [],
+      alert: 'Loading live Snowflake data...',
+    })
+
+    Promise.allSettled([
+      snowflakeService.getCostSummary(),
+      snowflakeService.getCostByPipeline(),
+      snowflakeService.getCostScatter(),
+      snowflakeService.getCostByDuration(),
+      snowflakeService.getTopCostlyJobs(),
+      snowflakeService.getPlatformSummary(),
+      snowflakeService.getWarehouseHeatmap(),
+      snowflakeService.getHourlyQueries(),
+      snowflakeService.getTopSlowQueries(),
+    ]).then((results) => {
+      if (!alive) return
+
+      const [summary, byPipeline, scatter, byDuration, topCostlyJobs, platformSummary, heatmap, hourlyQueries, topSlowQueries] = results
+      const valueOr = <T,>(result: PromiseSettledResult<T>, fallback: T): T =>
+        result.status === 'fulfilled' ? result.value : fallback
+
+      setCostData({
+        summary: valueOr(summary, EMPTY_COST_SUMMARY),
+        byPipeline: valueOr(byPipeline, []),
+        scatter: valueOr(scatter, []),
+        byDuration: valueOr(byDuration, []),
+        topCostlyJobs: valueOr(topCostlyJobs, []),
+      })
+
+      const successCount = results.filter(r => r.status === 'fulfilled').length
+      setPlatformData({
+        summary: valueOr(platformSummary, EMPTY_PLATFORM_SUMMARY),
+        heatmap: valueOr(heatmap, []),
+        hourlyQueries: valueOr(hourlyQueries, []),
+        topSlowQueries: valueOr(topSlowQueries, []),
+        alert: successCount > 0
+          ? 'Live Snowflake metrics loaded from database queries.'
+          : 'Unable to load live Snowflake data. Check server query errors.',
+      })
+      setIsLive(successCount > 0)
+    })
+    return () => { alive = false }
+  }, [useMock])
 
   const SUB_TABS: { key: SubTab; label: string; icon: React.ReactElement; accent: string }[] = [
-    { key: 'cost',     label: 'Cost & Efficiency',       icon: <AttachMoneyIcon />, accent: '#1976d2' },
     { key: 'platform', label: 'Platform Intelligence',   icon: <QueryStatsIcon />,  accent: '#6a1b9a' },
+    { key: 'cost',     label: 'Cost & Efficiency',       icon: <AttachMoneyIcon />, accent: '#1976d2' },
   ]
 
   return (
@@ -314,7 +441,12 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
             <Typography sx={{ fontWeight: 700, fontSize: '14px', color: '#1a2535' }}>
               Snowflake Analytics
             </Typography>
-            <Chip label="MOCK DATA" size="small" sx={{ fontSize: '9px', height: 16, backgroundColor: '#fff3e0', color: '#e65100', fontWeight: 700 }} />
+            {useMock
+              ? <Chip label="MOCK DATA" size="small" sx={{ fontSize: '9px', height: 16, backgroundColor: '#fff3e0', color: '#e65100', fontWeight: 700 }} />
+              : isLive
+              ? <Chip label="LIVE" size="small" sx={{ fontSize: '9px', height: 16, backgroundColor: '#e8f5e9', color: '#2e7d32', fontWeight: 700 }} />
+              : <Chip label="LIVE (NO DATA)" size="small" sx={{ fontSize: '9px', height: 16, backgroundColor: '#ffebee', color: '#c62828', fontWeight: 700 }} />
+            }
           </Box>
           {onOpenAgent && (
             <Button
@@ -364,8 +496,8 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
 
       {/* Content */}
       <Box sx={{ p: 2 }}>
-        {subTab === 'cost'     && <CostEfficiencyScreen />}
-        {subTab === 'platform' && <PlatformIntelligenceScreen />}
+        {subTab === 'cost'     && <CostEfficiencyScreen data={costData} />}
+        {subTab === 'platform' && <PlatformIntelligenceScreen data={platformData} />}
       </Box>
     </Box>
   )
