@@ -202,28 +202,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
   // or while switching agents — prevents overwriting DynamoDB with [WELCOME_MESSAGE]
   const isInitializing = useRef(true)
 
-  // Load DynamoDB session for the current agent + selected chat session
-  const loadAgentSession = useCallback(async (agentId: string, welcome: Message, sessionId: string) => {
-    setSessionLoading(true)
-    try {
-      const remote = await chatService.loadSession(agentId, sessionId)
-      if (remote.length > 0) {
-        const typed = remote.map(m => ({
-          ...m,
-          type: m.type as Message['type'],
-        })) as Message[]
-        setMessages([welcome, ...typed.slice(1)])
-      } else {
-        setMessages([welcome])
-      }
-    } catch {
-      // DynamoDB unavailable — start with a fresh chat
-      setMessages([welcome])
-    } finally {
-      setSessionLoading(false)
-      isInitializing.current = false
-    }
-  }, [])
+  // (loadAgentSession is inlined in the effect below with an alive guard)
 
   // When the agent changes, load its DynamoDB-backed session list and pick the latest.
   useEffect(() => {
@@ -279,13 +258,39 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
   }, [agent.id, WELCOME_MESSAGE, fullScreen])
 
   useEffect(() => {
+    let alive = true
     if (!activeSessionId) return
     if (!fullScreen) {
       isInitializing.current = false
       return
     }
-    loadAgentSession(agent.id, WELCOME_MESSAGE, activeSessionId)
-  }, [activeSessionId, agent.id, WELCOME_MESSAGE, loadAgentSession, fullScreen])
+    const doLoad = async () => {
+      setSessionLoading(true)
+      try {
+        const remote = await chatService.loadSession(agent.id, activeSessionId)
+        if (!alive) return
+        if (remote.length > 0) {
+          const typed = remote.map(m => ({
+            ...m,
+            type: m.type as Message['type'],
+          })) as Message[]
+          setMessages([WELCOME_MESSAGE, ...typed.slice(1)])
+        } else {
+          setMessages([WELCOME_MESSAGE])
+        }
+      } catch {
+        if (!alive) return
+        setMessages([WELCOME_MESSAGE])
+      } finally {
+        if (alive) {
+          setSessionLoading(false)
+          isInitializing.current = false
+        }
+      }
+    }
+    doLoad()
+    return () => { alive = false }
+  }, [activeSessionId, agent.id, WELCOME_MESSAGE, fullScreen])
 
   const [loading, setLoading] = useState(false)
   const [loadingSessionId, setLoadingSessionId] = useState<string | null>(null)
@@ -612,7 +617,13 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
     setInput('')
     setLoading(false)
     setLoadingSessionId(null)
-  }, [WELCOME_MESSAGE])
+    // Persist immediately — do not rely on the save effect which may be blocked
+    // by sessionLoading=true from a concurrent load. This guarantees the new
+    // session is in DynamoDB with browser_session_id before the user navigates away.
+    if (fullScreen) {
+      chatService.saveSession(agent.id, [WELCOME_MESSAGE], nextSessionId)
+    }
+  }, [WELCOME_MESSAGE, agent.id, fullScreen])
 
   const switchToSession = useCallback((sessionId: string) => {
     isInitializing.current = true
