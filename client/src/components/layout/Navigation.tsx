@@ -154,7 +154,7 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuChange
               {renderMenuButton(
                 item.menuId,
                 item.label,
-                <Box component="img" src={agent.icon} alt={`${agent.name} icon`} sx={{ width: '20%', height: '20%', borderRadius: 1, objectFit: 'contain', display: 'block', flexShrink: 0 }} />,
+                <Box component="img" src={agent.icon} alt={`${agent.name} icon`} sx={{ width: '20%', height: '20%', minWidth: 28, minHeight: 28, borderRadius: 1, objectFit: 'contain', display: 'block', flexShrink: 0 }} />,
                 agent.color,
               )}
             </React.Fragment>

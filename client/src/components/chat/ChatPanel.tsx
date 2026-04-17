@@ -165,14 +165,18 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
   const MAX_PANEL_HEIGHT = Number.MAX_SAFE_INTEGER
   // Resolved config — fall back to global knowledge agent
   const agent: AgentConfig = agentConfig ?? AGENTS.knowledge
-  const renderAgentIcon = (size: number) => (
+  const renderAgentIcon = (size: number) => {
+    const effectiveSize = Math.max(14, Math.round(size * 0.75))
+
+    return (
     <Box
       component="img"
       src={agent.icon}
       alt={`${agent.name} icon`}
-      sx={{ width: '20%', height: '20%', borderRadius: size > 18 ? 2 : '50%', objectFit: 'contain', display: 'block', flexShrink: 0 }}
+      sx={{ width: effectiveSize, height: effectiveSize, borderRadius: effectiveSize > 18 ? 2 : '50%', objectFit: 'contain', display: 'block', flexShrink: 0 }}
     />
-  )
+    )
+  }
   const [input, setInput] = useState('')
   const [expanded, setExpanded] = useState(false)
   const [showQuickActions, setShowQuickActions] = useState(true)
