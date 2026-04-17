@@ -244,7 +244,7 @@ router.get('/warehouse-cost-efficiency', async (_req: Request, res: Response) =>
 router.get('/cost-by-duration', async (_req: Request, res: Response) => {
   const rows = await safeQuery(`
     SELECT
-      TO_CHAR(usage_date, 'YYYY-MM-DD') AS bucket,
+      TO_CHAR(NULLIF(usage_date::text, '')::date, 'YYYY-MM-DD') AS bucket,
       ROUND(COALESCE(SUM(NULLIF(usage_in_currency::text, '')::numeric), 0)::numeric, 2) AS cost
     FROM edoops.sf_usage_in_currency_daily
     WHERE usage_date >= CURRENT_DATE - INTERVAL '30 day'
@@ -266,7 +266,7 @@ router.get('/top-costly-jobs', async (_req: Request, res: Response) => {
         warehouse_name,
         COUNT(*) AS execution_count,
         ROUND(AVG(NULLIF(total_elapsed_time::text, '')::numeric)::numeric, 2) AS avg_runtime_ms,
-        ROUND(SUM(COALESCE(NULLIF(bytes_scanned::text, '')::numeric, 0)) / 1024.0 / 1024 / 1024 / 1024, 2) AS scanned_tb
+        ROUND((SUM(COALESCE(NULLIF(bytes_scanned::text, '')::numeric, 0)) / 1024 / 1024 / 1024 / 1024)::numeric, 2) AS scanned_tb
       FROM edoops.sf_query_history
       WHERE start_time >= CURRENT_DATE - INTERVAL '30 day'
       GROUP BY COALESCE(query_hash::text, MD5(COALESCE(query_text::text, ''))), warehouse_name
@@ -401,7 +401,7 @@ router.get('/top-slow-queries', async (_req: Request, res: Response) => {
     WITH q AS (
       SELECT
         COALESCE(query_hash::text, MD5(COALESCE(query_text::text, ''))) AS query_pattern,
-        MAX(start_time) AS last_run,
+        MAX(NULLIF(start_time::text, '')::timestamp) AS last_run,
         ROUND(AVG(NULLIF(total_elapsed_time::text, '')::numeric), 2) AS avg_elapsed_ms,
         ROUND(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY NULLIF(total_elapsed_time::text, '')::numeric), 2) AS p95_elapsed_ms,
         COUNT(*) FILTER (WHERE execution_status NOT ILIKE 'SUCCESS%') AS error_count,
@@ -437,7 +437,7 @@ router.get('/top-slow-queries', async (_req: Request, res: Response) => {
 router.get('/query-volume-trend', async (_req: Request, res: Response) => {
   const rows = await safeQuery(`
     SELECT
-      TO_CHAR(DATE_TRUNC('day', start_time), 'MM/DD') AS date,
+      TO_CHAR(DATE_TRUNC('day', NULLIF(start_time::text, '')::timestamp), 'MM/DD') AS date,
       COUNT(*)                                          AS queries,
       ROUND(AVG(NULLIF(total_elapsed_time::text, '')::numeric), 0) AS avg_time_ms
     FROM edoops.sf_query_history
@@ -456,7 +456,7 @@ router.get('/query-volume-trend', async (_req: Request, res: Response) => {
 router.get('/task-reliability', async (_req: Request, res: Response) => {
   const rows = await safeQuery(`
     SELECT
-      TO_CHAR(DATE_TRUNC('day', scheduled_time), 'MM/DD') AS date,
+      TO_CHAR(DATE_TRUNC('day', NULLIF(scheduled_time::text, '')::timestamp), 'MM/DD') AS date,
       COUNT(*)                                              AS total,
       COUNT(*) FILTER (WHERE state ILIKE 'SUCCEEDED%')      AS succeeded,
       COUNT(*) FILTER (WHERE state ILIKE 'FAILED%')         AS failed
@@ -477,7 +477,7 @@ router.get('/task-reliability', async (_req: Request, res: Response) => {
 router.get('/login-failures', async (_req: Request, res: Response) => {
   const rows = await safeQuery(`
     SELECT
-      TO_CHAR(DATE_TRUNC('day', event_timestamp), 'MM/DD') AS date,
+      TO_CHAR(DATE_TRUNC('day', NULLIF(event_timestamp::text, '')::timestamp), 'MM/DD') AS date,
       COUNT(*) AS failed_logins
     FROM edoops.sf_login_history
     WHERE event_timestamp >= CURRENT_DATE - INTERVAL '14 day'
@@ -495,8 +495,8 @@ router.get('/login-failures', async (_req: Request, res: Response) => {
 router.get('/storage-growth', async (_req: Request, res: Response) => {
   const rows = await safeQuery(`
     SELECT
-      TO_CHAR(usage_date, 'MM/DD') AS date,
-      ROUND(COALESCE(SUM(NULLIF(average_stage_bytes::text, '')::numeric), 0) / 1024.0 / 1024 / 1024 / 1024, 2) AS storage_tb
+      TO_CHAR(NULLIF(usage_date::text, '')::date, 'MM/DD') AS date,
+      ROUND((COALESCE(SUM(NULLIF(average_stage_bytes::text, '')::numeric), 0) / 1024 / 1024 / 1024 / 1024)::numeric, 2) AS storage_tb
     FROM edoops.sf_stage_storage_usage_history
     WHERE usage_date >= CURRENT_DATE - INTERVAL '30 day'
     GROUP BY usage_date
