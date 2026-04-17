@@ -100,16 +100,22 @@ const Treemap: React.FC<{ items: typeof MOCK_SF_COST_BY_PIPELINE }> = ({ items }
 const BUCKETS = ['<30m', '30-60m', '60-90m', '90-120m', '>120m']
 
 const ScatterPlot: React.FC<{ items: typeof MOCK_SF_COST_SCATTER }> = ({ items }) => {
-  const W = 260, H = 140, PL = 36, PR = 8, PT = 8, PB = 28
+  const W = 260, H = 140, PL = 36, PR = 8, PT = 10, PB = 34
   const costs = items.map(item => Number(item.cost) || 0)
   const minCost = costs.length > 0 ? Math.min(...costs) : 0
   const maxCost = costs.length > 0 ? Math.max(...costs) : 1
   const paddedMin = Math.max(0, minCost - (maxCost - minCost || 1) * 0.1)
   const paddedMax = maxCost + (maxCost - minCost || 1) * 0.15
   const xStep = (W - PL - PR) / (BUCKETS.length - 1)
+  const plotHeight = H - PT - PB
+
   const yScale = (c: number) => {
     const range = Math.max(1, paddedMax - paddedMin)
-    return PT + (H - PT - PB) * (1 - (c - paddedMin) / range)
+    const linear = Math.max(0, Math.min(1, (c - paddedMin) / range))
+    // Use sqrt transform to spread clustered low values away from the x-axis.
+    const eased = Math.sqrt(linear)
+    const y = PT + plotHeight * (1 - eased)
+    return Math.max(PT + 2, Math.min(H - PB - 3, y))
   }
   const DOT_COLORS = ['#e53935', '#f57c00', '#fdd835', '#43a047', '#1e88e5', '#8e24aa', '#00acc1', '#795548']
   const yTicks = Array.from({ length: 4 }, (_, index) => {
@@ -120,7 +126,7 @@ const ScatterPlot: React.FC<{ items: typeof MOCK_SF_COST_SCATTER }> = ({ items }
   return (
     <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ overflow: 'visible' }}>
       {yTicks.map(v => (
-        <line key={v} x1={PL} x2={W - PR} y1={yScale(v)} y2={yScale(v)} stroke="#e0e0e0" strokeWidth={0.5} />
+        <line key={v} x1={PL} x2={W - PR} y1={yScale(v)} y2={yScale(v)} stroke="#dde4ec" strokeWidth={0.35} />
       ))}
       {yTicks.map(v => (
         <text key={`yl${v}`} x={PL - 3} y={yScale(v) + 3} textAnchor="end" fontSize={7} fill="#999">{v.toFixed(v < 10 ? 2 : 1)}</text>
@@ -326,8 +332,8 @@ const CostEfficiencyScreen: React.FC<{ data: CostData }> = ({ data }) => {
           <Box sx={{ height: 180, minWidth: 0, overflow: 'hidden', flexShrink: 0 }}>
             <ScatterPlot items={data.scatter} />
           </Box>
-          <Box sx={{ mt: 1, width: '100%', minWidth: 0, minHeight: 0, flex: 1, overflow: 'hidden' }}>
-            <DataTable columns={warehouseEffCols} rows={data.warehouseCostEfficiency} maxHeight={190} compact />
+          <Box sx={{ mt: 1, width: '100%', minWidth: 0, minHeight: 0, flex: 1, overflow: 'visible', pb: 0.5 }}>
+            <DataTable columns={warehouseEffCols} rows={data.warehouseCostEfficiency} maxHeight={190} tableMinWidth={560} compact />
           </Box>
         </Paper>
 
@@ -518,7 +524,10 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
   const { useMock } = useMockData()
   const [subTab, setSubTab] = useState<SubTab>('platform')
   const [isLive, setIsLive] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const [platformLoading, setPlatformLoading] = useState(true)
+  const [costLoading, setCostLoading] = useState(false)
+  const [platformLoaded, setPlatformLoaded] = useState(false)
+  const [costLoaded, setCostLoaded] = useState(false)
 
   const [costData, setCostData] = useState<CostData>({
     summary: EMPTY_COST_SUMMARY,
@@ -544,7 +553,10 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
   useEffect(() => {
     let alive = true
     setIsLive(false)
-    setLoading(true)
+    setPlatformLoading(true)
+    setCostLoading(false)
+    setPlatformLoaded(false)
+    setCostLoaded(false)
 
     if (useMock) {
       setCostData({
@@ -566,7 +578,9 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
         storageGrowth:    MOCK_SF_STORAGE_GROWTH,
         alert:            MOCK_SF_ALERT,
       })
-      setLoading(false)
+      setPlatformLoaded(true)
+      setCostLoaded(true)
+      setPlatformLoading(false)
       return () => { alive = false }
     }
 
@@ -583,25 +597,59 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
     })
 
     Promise.allSettled([
+      snowflakeService.getPlatformSummary(),   // 0
+      snowflakeService.getWarehouseHeatmap(),  // 1
+      snowflakeService.getTopSlowQueries(),    // 2
+      snowflakeService.getQueryVolumeTrend(),  // 3
+      snowflakeService.getTaskReliability(),   // 4
+      snowflakeService.getLoginFailures(),     // 5
+      snowflakeService.getStorageGrowth(),     // 6
+    ]).then((results) => {
+      if (!alive) return
+
+      const [platformSummary, heatmap, topSlowQueries, queryVolumeTrend, taskReliability, loginFailures, storageGrowth] = results
+
+      const valueOr = <T,>(result: PromiseSettledResult<T>, fallback: T): T =>
+        result.status === 'fulfilled' ? result.value : fallback
+
+      const successCount = results.filter(r => r.status === 'fulfilled').length
+      setPlatformData({
+        summary:          valueOr(platformSummary,  EMPTY_PLATFORM_SUMMARY),
+        heatmap:          valueOr(heatmap,          []),
+        queryVolumeTrend: valueOr(queryVolumeTrend, []),
+        topSlowQueries:   valueOr(topSlowQueries,   []),
+        taskReliability:  valueOr(taskReliability,  []),
+        loginFailures:    valueOr(loginFailures,    []),
+        storageGrowth:    valueOr(storageGrowth,    []),
+        alert: successCount > 0
+          ? 'Live Snowflake metrics loaded from database queries.'
+          : 'Unable to load live Snowflake data. Check server query errors.',
+      })
+      setPlatformLoaded(true)
+      setPlatformLoading(false)
+      if (successCount > 0) setIsLive(true)
+    })
+    return () => { alive = false }
+  }, [useMock])
+
+  useEffect(() => {
+    if (useMock || subTab !== 'cost' || costLoaded || costLoading) return
+
+    let alive = true
+    setCostLoading(true)
+
+    Promise.allSettled([
       snowflakeService.getCostSummary(),       // 0
       snowflakeService.getCostByPipeline(),    // 1
       snowflakeService.getCostScatter(),       // 2
       snowflakeService.getWarehouseCostEfficiency(), // 3
       snowflakeService.getCostByDuration(),    // 4
       snowflakeService.getTopCostlyJobs(),     // 5
-      snowflakeService.getPlatformSummary(),   // 6
-      snowflakeService.getWarehouseHeatmap(),  // 7
-      snowflakeService.getTopSlowQueries(),    // 8
-      snowflakeService.getQueryVolumeTrend(),  // 9
-      snowflakeService.getTaskReliability(),   // 10
-      snowflakeService.getLoginFailures(),     // 11
-      snowflakeService.getStorageGrowth(),     // 12
+      snowflakeService.getStorageGrowth(),     // 6
     ]).then((results) => {
       if (!alive) return
 
-      const [summary, byPipeline, scatter, warehouseCostEfficiency, byDuration, topCostlyJobs,
-             platformSummary, heatmap, topSlowQueries,
-             queryVolumeTrend, taskReliability, loginFailures, storageGrowth] = results
+      const [summary, byPipeline, scatter, warehouseCostEfficiency, byDuration, topCostlyJobs, storageGrowth] = results
 
       const valueOr = <T,>(result: PromiseSettledResult<T>, fallback: T): T =>
         result.status === 'fulfilled' ? result.value : fallback
@@ -617,28 +665,20 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
       })
 
       const successCount = results.filter(r => r.status === 'fulfilled').length
-      setPlatformData({
-        summary:          valueOr(platformSummary,  EMPTY_PLATFORM_SUMMARY),
-        heatmap:          valueOr(heatmap,          []),
-        queryVolumeTrend: valueOr(queryVolumeTrend, []),
-        topSlowQueries:   valueOr(topSlowQueries,   []),
-        taskReliability:  valueOr(taskReliability,  []),
-        loginFailures:    valueOr(loginFailures,    []),
-        storageGrowth:    valueOr(storageGrowth,    []),
-        alert: successCount > 0
-          ? 'Live Snowflake metrics loaded from database queries.'
-          : 'Unable to load live Snowflake data. Check server query errors.',
-      })
-      setIsLive(successCount > 0)
-      setLoading(false)
+      setCostLoaded(true)
+      setCostLoading(false)
+      if (successCount > 0) setIsLive(true)
     })
+
     return () => { alive = false }
-  }, [useMock])
+  }, [useMock, subTab, costLoaded, costLoading])
 
   const SUB_TABS: { key: SubTab; label: string; icon: React.ReactElement; accent: string }[] = [
     { key: 'platform', label: 'Platform Intelligence', icon: <QueryStatsIcon />,  accent: '#6a1b9a' },
     { key: 'cost',     label: 'Cost & Efficiency',     icon: <AttachMoneyIcon />, accent: '#1976d2' },
   ]
+
+  const loading = subTab === 'platform' ? platformLoading : costLoading
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
@@ -712,7 +752,9 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
           <Box sx={{ minHeight: 420, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.5, color: '#78909c' }}>
               <CircularProgress size={26} sx={{ color: '#29b6f6' }} />
-              <Typography sx={{ fontSize: '12px', fontWeight: 600 }}>Loading Snowflake dashboard...</Typography>
+              <Typography sx={{ fontSize: '12px', fontWeight: 600 }}>
+                {subTab === 'platform' ? 'Loading Platform Intelligence...' : 'Loading Cost & Efficiency...'}
+              </Typography>
             </Box>
           </Box>
         ) : (
