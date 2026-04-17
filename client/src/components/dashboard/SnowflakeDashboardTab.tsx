@@ -5,7 +5,7 @@
  *   2. Cost & Efficiency Overview
  */
 import React, { useState, useEffect } from 'react'
-import { Box, Typography, Paper, Chip, Tooltip, Button, CircularProgress, Slider } from '@mui/material'
+import { Box, Typography, Paper, Chip, Tooltip, Button, CircularProgress } from '@mui/material'
 import AcUnitIcon from '@mui/icons-material/AcUnit'
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney'
 import QueryStatsIcon from '@mui/icons-material/QueryStats'
@@ -53,8 +53,6 @@ const ERROR_COLOR: Record<string, string> = {
   ERROR:      '#e53935',
   SLOW:       '#fb8c00',
 }
-
-const ENABLE_SF_DAYS_FILTER = String(import.meta.env.VITE_ENABLE_SF_DAYS_FILTER ?? 'false').toLowerCase() === 'true'
 
 // ── Treemap (simple CSS grid based) ───────────────────────
 
@@ -563,8 +561,6 @@ type SubTab = 'cost' | 'platform'
 export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void }> = ({ onOpenAgent }) => {
   const { useMock } = useMockData()
   const [subTab, setSubTab] = useState<SubTab>('platform')
-  const [days, setDays] = useState(3)
-  const daysParam = ENABLE_SF_DAYS_FILTER ? days : undefined
   const [isLive, setIsLive] = useState(false)
   const [platformLoading, setPlatformLoading] = useState(true)
   const [costLoading, setCostLoading] = useState(false)
@@ -636,13 +632,13 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
     })
 
     Promise.allSettled([
-      snowflakeService.getPlatformSummary(daysParam),   // 0
-      snowflakeService.getWarehouseHeatmap(daysParam),  // 1
-      snowflakeService.getTopSlowQueries(daysParam),    // 2
-      snowflakeService.getQueryVolumeTrend(daysParam),  // 3
-      snowflakeService.getTaskReliability(daysParam),   // 4
-      snowflakeService.getLoginFailures(daysParam),     // 5
-      snowflakeService.getStorageGrowth(daysParam),     // 6
+      snowflakeService.getPlatformSummary(),   // 0
+      snowflakeService.getWarehouseHeatmap(),  // 1
+      snowflakeService.getTopSlowQueries(),    // 2
+      snowflakeService.getQueryVolumeTrend(),  // 3
+      snowflakeService.getTaskReliability(),   // 4
+      snowflakeService.getLoginFailures(),     // 5
+      snowflakeService.getStorageGrowth(),     // 6
     ]).then((results) => {
       if (!alive) return
 
@@ -668,7 +664,7 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
       if (successCount > 0) setIsLive(true)
     })
     return () => { alive = false }
-  }, [useMock, daysParam])
+  }, [useMock])
 
   useEffect(() => {
     if (useMock || subTab !== 'cost' || costLoaded || costLoading) return
@@ -677,13 +673,13 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
     setCostLoading(true)
 
     Promise.allSettled([
-      snowflakeService.getCostSummary(daysParam),       // 0
-      snowflakeService.getCostByPipeline(daysParam),    // 1
-      snowflakeService.getCostScatter(daysParam),       // 2
-      snowflakeService.getWarehouseCostEfficiency(daysParam), // 3
-      snowflakeService.getCostByDuration(daysParam),    // 4
-      snowflakeService.getTopCostlyJobs(daysParam),     // 5
-      snowflakeService.getStorageGrowth(daysParam),     // 6
+      snowflakeService.getCostSummary(),       // 0
+      snowflakeService.getCostByPipeline(),    // 1
+      snowflakeService.getCostScatter(),       // 2
+      snowflakeService.getWarehouseCostEfficiency(), // 3
+      snowflakeService.getCostByDuration(),    // 4
+      snowflakeService.getTopCostlyJobs(),     // 5
+      snowflakeService.getStorageGrowth(),     // 6
     ]).then((results) => {
       if (!alive) return
 
@@ -709,7 +705,7 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
     })
 
     return () => { alive = false }
-  }, [useMock, subTab, costLoaded, costLoading, daysParam])
+  }, [useMock, subTab, costLoaded, costLoading])
 
   const SUB_TABS: { key: SubTab; label: string; icon: React.ReactElement; accent: string }[] = [
     { key: 'platform', label: 'Platform Intelligence', icon: <QueryStatsIcon />,  accent: '#6a1b9a' },
@@ -738,47 +734,25 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
               : <Chip label="LIVE (NO DATA)" size="small" sx={{ fontSize: '9px', height: 16, backgroundColor: '#ffebee', color: '#c62828', fontWeight: 700 }} />
             }
           </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, flexWrap: 'wrap' }}>
-            <Typography sx={{ fontSize: '11px', color: '#607d8b', whiteSpace: 'nowrap' }}>
-              Last {days}d
-            </Typography>
-            <Slider
-              value={days}
-              min={1}
-              max={7}
-              step={1}
-              onChange={(_e, v) => setDays(v as number)}
+          {onOpenAgent && (
+            <Button
               size="small"
+              variant="contained"
+              startIcon={<Box component="img" src={AGENTS.snowflake.icon} alt="Snowflake agent icon" sx={{ width: 14, height: 14, borderRadius: '50%', objectFit: 'contain', display: 'block' }} />}
+              onClick={() => onOpenAgent('snowflake')}
               sx={{
-                color: '#29b6f6',
-                width: 128,
-                '& .MuiSlider-thumb': { width: 12, height: 12 },
-                '& .MuiSlider-rail': { opacity: 0.28 },
+                backgroundColor: '#0277bd',
+                textTransform: 'none',
+                fontSize: '11px',
+                fontWeight: 700,
+                height: 26,
+                px: 1.5,
+                '&:hover': { backgroundColor: '#0277bd', filter: 'brightness(0.9)' },
               }}
-            />
-            <Typography sx={{ fontSize: '10px', color: '#90a4ae', minWidth: 18, textAlign: 'right' }}>
-              7d
-            </Typography>
-            {onOpenAgent && (
-              <Button
-                size="small"
-                variant="contained"
-                startIcon={<Box component="img" src={AGENTS.snowflake.icon} alt="Snowflake agent icon" sx={{ width: 14, height: 14, borderRadius: '50%', objectFit: 'contain', display: 'block' }} />}
-                onClick={() => onOpenAgent('snowflake')}
-                sx={{
-                  backgroundColor: '#0277bd',
-                  textTransform: 'none',
-                  fontSize: '11px',
-                  fontWeight: 700,
-                  height: 26,
-                  px: 1.5,
-                  '&:hover': { backgroundColor: '#0277bd', filter: 'brightness(0.9)' },
-                }}
-              >
-                Ask Snowflake Agent
-              </Button>
-            )}
-          </Box>
+            >
+              Ask Snowflake Agent
+            </Button>
+          )}
         </Box>
 
         {/* Sub-tabs */}

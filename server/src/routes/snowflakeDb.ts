@@ -6,15 +6,6 @@ import { getPgPool } from '../db';
 
 const router = Router();
 
-const DEFAULT_DAYS = 3;
-const MAX_DAYS = 7;
-
-function getIntervalDays(req: Request): number {
-  const raw = Number(req.query.days);
-  if (!Number.isFinite(raw)) return DEFAULT_DAYS;
-  return Math.min(MAX_DAYS, Math.max(1, Math.floor(raw)));
-}
-
 async function safeQuery(sql: string, fallback: any = null): Promise<any> {
   try {
     const pool = getPgPool();
@@ -27,8 +18,7 @@ async function safeQuery(sql: string, fallback: any = null): Promise<any> {
 }
 
 // ─── GET /api/snowflake/cost-summary ──────────────────────
-router.get('/cost-summary', async (req: Request, res: Response) => {
-  const days = getIntervalDays(req);
+router.get('/cost-summary', async (_req: Request, res: Response) => {
   const rows = await safeQuery(`
     WITH cost_today_cte AS (
       SELECT ROUND(COALESCE(SUM(NULLIF(usage_in_currency::text, '')::numeric), 0)::numeric, 2) AS cost_today
@@ -46,7 +36,7 @@ router.get('/cost-summary', async (req: Request, res: Response) => {
       FROM (
         SELECT usage_date, SUM(NULLIF(usage_in_currency::text, '')::numeric) AS daily_cost
         FROM edoops.sf_usage_in_currency_daily
-        WHERE NULLIF(usage_date::text, '')::date >= CURRENT_DATE - INTERVAL '${days} day'
+        WHERE NULLIF(usage_date::text, '')::date >= CURRENT_DATE - INTERVAL '30 day'
         GROUP BY usage_date
       ) d
     ),
@@ -58,7 +48,7 @@ router.get('/cost-summary', async (req: Request, res: Response) => {
         + COALESCE(NULLIF(marketplace_capacity_drawdown_balance::text, '')::numeric, 0)
       )::numeric, 2) AS remaining_balance
       FROM edoops.sf_remaining_balance_daily
-      WHERE usage_date = (
+      WHERE date = (
         SELECT MAX(date) FROM edoops.sf_remaining_balance_daily
       )
     ),
@@ -72,12 +62,12 @@ router.get('/cost-summary', async (req: Request, res: Response) => {
           )
         ) AS wasted_credits
         FROM edoops.sf_warehouse_metering_history
-        WHERE NULLIF(start_time::text, '')::timestamp >= CURRENT_DATE - INTERVAL '${days} day'
+        WHERE NULLIF(start_time::text, '')::timestamp >= CURRENT_DATE - INTERVAL '7 day'
       ),
       rate_cte AS (
         SELECT COALESCE(AVG(NULLIF(effective_rate::text, '')::numeric), 0) AS avg_rate
         FROM edoops.sf_rate_sheet_daily
-        WHERE NULLIF(date::text, '')::date >= CURRENT_DATE - INTERVAL '${days} day'
+        WHERE NULLIF(date::text, '')::date >= CURRENT_DATE - INTERVAL '7 day'
       )
       SELECT ROUND((wasted.wasted_credits * rate_cte.avg_rate)::numeric, 2) AS optimization_opportunity_currency_7d
       FROM wasted
@@ -130,15 +120,14 @@ router.get('/cost-summary', async (req: Request, res: Response) => {
 });
 
 // ─── GET /api/snowflake/cost-by-pipeline ──────────────────
-router.get('/cost-by-pipeline', async (req: Request, res: Response) => {
-  const days = getIntervalDays(req);
+router.get('/cost-by-pipeline', async (_req: Request, res: Response) => {
   const COLORS = ['#1565c0','#f57c00','#2e7d32','#c62828','#6a1b9a','#00838f','#ef6c00','#558b2f'];
   const rows = await safeQuery(`
     SELECT
       service_type AS name,
       ROUND(COALESCE(SUM(NULLIF(usage_in_currency::text, '')::numeric), 0)::numeric, 2) AS cost
     FROM edoops.sf_usage_in_currency_daily
-    WHERE NULLIF(usage_date::text, '')::date >= CURRENT_DATE - INTERVAL '${days} day'
+    WHERE NULLIF(usage_date::text, '')::date >= CURRENT_DATE - INTERVAL '30 day'
     GROUP BY service_type
     ORDER BY cost DESC
     LIMIT 10
@@ -151,8 +140,7 @@ router.get('/cost-by-pipeline', async (req: Request, res: Response) => {
 });
 
 // ─── GET /api/snowflake/cost-scatter ──────────────────────
-router.get('/cost-scatter', async (req: Request, res: Response) => {
-  const days = getIntervalDays(req);
+router.get('/cost-scatter', async (_req: Request, res: Response) => {
   const rows = await safeQuery(`
     WITH q AS (
       SELECT
@@ -160,7 +148,7 @@ router.get('/cost-scatter', async (req: Request, res: Response) => {
         COUNT(*) AS query_count,
         ROUND(AVG(NULLIF(total_elapsed_time::text, '')::numeric)::numeric, 2) AS avg_runtime_ms
       FROM edoops.sf_query_history
-      WHERE NULLIF(start_time::text, '')::timestamp >= CURRENT_DATE - INTERVAL '${days} day'
+      WHERE NULLIF(start_time::text, '')::timestamp >= CURRENT_DATE - INTERVAL '30 day'
         AND warehouse_name IS NOT NULL
       GROUP BY warehouse_name
     ),
@@ -169,7 +157,7 @@ router.get('/cost-scatter', async (req: Request, res: Response) => {
         warehouse_name,
         SUM(NULLIF(credits_used::text, '')::numeric) AS total_credits
       FROM edoops.sf_warehouse_metering_history
-      WHERE NULLIF(start_time::text, '')::timestamp >= CURRENT_DATE - INTERVAL '${days} day'
+      WHERE NULLIF(start_time::text, '')::timestamp >= CURRENT_DATE - INTERVAL '30 day'
         AND warehouse_name IS NOT NULL
       GROUP BY warehouse_name
     )
@@ -198,8 +186,7 @@ router.get('/cost-scatter', async (req: Request, res: Response) => {
 });
 
 // ─── GET /api/snowflake/warehouse-cost-efficiency ────────
-router.get('/warehouse-cost-efficiency', async (req: Request, res: Response) => {
-  const days = getIntervalDays(req);
+router.get('/warehouse-cost-efficiency', async (_req: Request, res: Response) => {
   const rows = await safeQuery(`
     WITH q AS (
       SELECT
@@ -207,7 +194,7 @@ router.get('/warehouse-cost-efficiency', async (req: Request, res: Response) => 
         COUNT(*) AS query_count,
         ROUND(AVG(NULLIF(total_elapsed_time::text, '')::numeric)::numeric, 2) AS avg_runtime_ms
       FROM edoops.sf_query_history
-      WHERE NULLIF(start_time::text, '')::timestamp >= CURRENT_DATE - INTERVAL '${days} day'
+      WHERE NULLIF(start_time::text, '')::timestamp >= CURRENT_DATE - INTERVAL '30 day'
         AND warehouse_name IS NOT NULL
       GROUP BY warehouse_name
     ),
@@ -216,7 +203,7 @@ router.get('/warehouse-cost-efficiency', async (req: Request, res: Response) => 
         warehouse_name,
         SUM(NULLIF(credits_used::text, '')::numeric) AS total_credits
       FROM edoops.sf_warehouse_metering_history
-      WHERE NULLIF(start_time::text, '')::timestamp >= CURRENT_DATE - INTERVAL '${days} day'
+      WHERE NULLIF(start_time::text, '')::timestamp >= CURRENT_DATE - INTERVAL '30 day'
         AND warehouse_name IS NOT NULL
       GROUP BY warehouse_name
     )
@@ -254,14 +241,13 @@ router.get('/warehouse-cost-efficiency', async (req: Request, res: Response) => 
 });
 
 // ─── GET /api/snowflake/cost-by-duration ──────────────────
-router.get('/cost-by-duration', async (req: Request, res: Response) => {
-  const days = getIntervalDays(req);
+router.get('/cost-by-duration', async (_req: Request, res: Response) => {
   const rows = await safeQuery(`
     SELECT
       TO_CHAR(NULLIF(usage_date::text, '')::date, 'YYYY-MM-DD') AS bucket,
       ROUND(COALESCE(SUM(NULLIF(usage_in_currency::text, '')::numeric), 0)::numeric, 2) AS cost
     FROM edoops.sf_usage_in_currency_daily
-    WHERE NULLIF(usage_date::text, '')::date >= CURRENT_DATE - INTERVAL '${days} day'
+    WHERE NULLIF(usage_date::text, '')::date >= CURRENT_DATE - INTERVAL '30 day'
     GROUP BY NULLIF(usage_date::text, '')::date
     ORDER BY NULLIF(usage_date::text, '')::date
   `, []);
@@ -272,8 +258,7 @@ router.get('/cost-by-duration', async (req: Request, res: Response) => {
 });
 
 // ─── GET /api/snowflake/top-costly-jobs ───────────────────
-router.get('/top-costly-jobs', async (req: Request, res: Response) => {
-  const days = getIntervalDays(req);
+router.get('/top-costly-jobs', async (_req: Request, res: Response) => {
   const rows = await safeQuery(`
     WITH query_patterns AS (
       SELECT
@@ -283,7 +268,7 @@ router.get('/top-costly-jobs', async (req: Request, res: Response) => {
         ROUND(AVG(NULLIF(total_elapsed_time::text, '')::numeric)::numeric, 2) AS avg_runtime_ms,
         ROUND((SUM(COALESCE(NULLIF(bytes_scanned::text, '')::numeric, 0)) / 1024 / 1024 / 1024 / 1024)::numeric, 2) AS scanned_tb
       FROM edoops.sf_query_history
-      WHERE NULLIF(start_time::text, '')::timestamp >= CURRENT_DATE - INTERVAL '${days} day'
+      WHERE NULLIF(start_time::text, '')::timestamp >= CURRENT_DATE - INTERVAL '30 day'
       GROUP BY COALESCE(query_hash::text, MD5(COALESCE(query_text::text, ''))), warehouse_name
     ),
     warehouse_cost AS (
@@ -291,7 +276,7 @@ router.get('/top-costly-jobs', async (req: Request, res: Response) => {
         warehouse_name,
         SUM(NULLIF(credits_used::text, '')::numeric) AS total_credits
       FROM edoops.sf_warehouse_metering_history
-      WHERE NULLIF(start_time::text, '')::timestamp >= CURRENT_DATE - INTERVAL '${days} day'
+      WHERE NULLIF(start_time::text, '')::timestamp >= CURRENT_DATE - INTERVAL '30 day'
       GROUP BY warehouse_name
     )
     SELECT
@@ -313,8 +298,7 @@ router.get('/top-costly-jobs', async (req: Request, res: Response) => {
 });
 
 // ─── GET /api/snowflake/platform-summary ──────────────────
-router.get('/platform-summary', async (req: Request, res: Response) => {
-  const days = getIntervalDays(req);
+router.get('/platform-summary', async (_req: Request, res: Response) => {
   const [qRows, tRows, wRows, loginRows] = await Promise.all([
     safeQuery(`
       SELECT
@@ -326,24 +310,24 @@ router.get('/platform-summary', async (req: Request, res: Response) => {
         , 1) AS query_success_pct,
         ROUND(AVG(NULLIF(total_elapsed_time::text, '')::numeric), 0) AS avg_query_time_ms
       FROM edoops.sf_query_history
-      WHERE NULLIF(start_time::text, '')::timestamp >= CURRENT_TIMESTAMP - INTERVAL '${days} day'
+      WHERE NULLIF(start_time::text, '')::timestamp >= CURRENT_TIMESTAMP - INTERVAL '1 day'
     `, [{}]),
     safeQuery(`
       SELECT COUNT(*) FILTER (WHERE state ILIKE 'FAILED%') AS task_failures
       FROM edoops.sf_task_history
-      WHERE NULLIF(scheduled_time::text, '')::timestamp >= CURRENT_TIMESTAMP - INTERVAL '${days} day'
+      WHERE NULLIF(scheduled_time::text, '')::timestamp >= CURRENT_TIMESTAMP - INTERVAL '1 day'
     `, [{}]),
     safeQuery(`
       SELECT
         ROUND(100.0 * COUNT(*) FILTER (WHERE COALESCE(NULLIF(credits_used::text, '')::numeric, 0) > 0) / NULLIF(COUNT(*), 0), 1) AS warehouse_util_pct,
         ROUND(COALESCE(SUM(NULLIF(credits_used::text, '')::numeric), 0)::numeric, 2) AS warehouse_credits_used
       FROM edoops.sf_warehouse_metering_history
-      WHERE NULLIF(start_time::text, '')::timestamp >= CURRENT_TIMESTAMP - INTERVAL '${days} day'
+      WHERE NULLIF(start_time::text, '')::timestamp >= CURRENT_TIMESTAMP - INTERVAL '1 day'
     `, [{}]),
     safeQuery(`
       SELECT COUNT(*) AS failed_logins
       FROM edoops.sf_login_history
-      WHERE NULLIF(event_timestamp::text, '')::timestamp >= CURRENT_TIMESTAMP - INTERVAL '${days} day'
+      WHERE NULLIF(event_timestamp::text, '')::timestamp >= CURRENT_TIMESTAMP - INTERVAL '1 day'
         AND is_success = 'NO'
     `, [{}]),
   ]);
@@ -365,15 +349,14 @@ router.get('/platform-summary', async (req: Request, res: Response) => {
 });
 
 // ─── GET /api/snowflake/warehouse-heatmap ─────────────────
-router.get('/warehouse-heatmap', async (req: Request, res: Response) => {
-  const days = getIntervalDays(req);
+router.get('/warehouse-heatmap', async (_req: Request, res: Response) => {
   const rows = await safeQuery(`
     SELECT
       warehouse_name,
       EXTRACT(HOUR FROM NULLIF(start_time::text, '')::timestamp) AS hour,
       ROUND(SUM(NULLIF(credits_used::text, '')::numeric), 2) AS util_pct
     FROM edoops.sf_warehouse_metering_history
-      WHERE NULLIF(start_time::text, '')::timestamp >= CURRENT_TIMESTAMP - INTERVAL '${days} day'
+      WHERE NULLIF(start_time::text, '')::timestamp >= CURRENT_TIMESTAMP - INTERVAL '7 day'
     GROUP BY warehouse_name, hour
     ORDER BY warehouse_name, hour
   `, []);
@@ -396,14 +379,13 @@ router.get('/warehouse-heatmap', async (req: Request, res: Response) => {
 });
 
 // ─── GET /api/snowflake/hourly-queries ────────────────────
-router.get('/hourly-queries', async (req: Request, res: Response) => {
-  const days = getIntervalDays(req);
+router.get('/hourly-queries', async (_req: Request, res: Response) => {
   const rows = await safeQuery(`
     SELECT
       DATE_PART('hour', NULLIF(start_time::text, '')::timestamp) AS hour,
       COUNT(*)                       AS queries
     FROM edoops.sf_query_history
-    WHERE NULLIF(start_time::text, '')::timestamp >= CURRENT_TIMESTAMP - INTERVAL '${days} day'
+    WHERE NULLIF(start_time::text, '')::timestamp >= CURRENT_TIMESTAMP - INTERVAL '1 day'
     GROUP BY hour
     ORDER BY hour
   `, []);
@@ -414,8 +396,7 @@ router.get('/hourly-queries', async (req: Request, res: Response) => {
 });
 
 // ─── GET /api/snowflake/top-slow-queries ──────────────────
-router.get('/top-slow-queries', async (req: Request, res: Response) => {
-  const days = getIntervalDays(req);
+router.get('/top-slow-queries', async (_req: Request, res: Response) => {
   const rows = await safeQuery(`
     WITH q AS (
       SELECT
@@ -426,7 +407,7 @@ router.get('/top-slow-queries', async (req: Request, res: Response) => {
         COUNT(*) FILTER (WHERE execution_status NOT ILIKE 'SUCCESS%') AS error_count,
         MAX(error_message) AS latest_error_message
       FROM edoops.sf_query_history
-      WHERE NULLIF(start_time::text, '')::timestamp >= CURRENT_TIMESTAMP - INTERVAL '${days} day'
+      WHERE NULLIF(start_time::text, '')::timestamp >= CURRENT_TIMESTAMP - INTERVAL '30 day'
       GROUP BY COALESCE(query_hash::text, MD5(COALESCE(query_text::text, '')))
     )
     SELECT
@@ -453,15 +434,14 @@ router.get('/top-slow-queries', async (req: Request, res: Response) => {
 });
 
 // ─── GET /api/snowflake/query-volume-trend ────────────────
-router.get('/query-volume-trend', async (req: Request, res: Response) => {
-  const days = getIntervalDays(req);
+router.get('/query-volume-trend', async (_req: Request, res: Response) => {
   const rows = await safeQuery(`
     SELECT
       TO_CHAR(DATE_TRUNC('day', NULLIF(start_time::text, '')::timestamp), 'MM/DD') AS date,
       COUNT(*)                                          AS queries,
       ROUND(AVG(NULLIF(total_elapsed_time::text, '')::numeric), 0) AS avg_time_ms
     FROM edoops.sf_query_history
-    WHERE NULLIF(start_time::text, '')::timestamp >= CURRENT_DATE - INTERVAL '${days} day'
+    WHERE NULLIF(start_time::text, '')::timestamp >= CURRENT_DATE - INTERVAL '14 day'
     GROUP BY DATE_TRUNC('day', NULLIF(start_time::text, '')::timestamp)
     ORDER BY DATE_TRUNC('day', NULLIF(start_time::text, '')::timestamp)
   `, []);
@@ -473,8 +453,7 @@ router.get('/query-volume-trend', async (req: Request, res: Response) => {
 });
 
 // ─── GET /api/snowflake/task-reliability ──────────────────
-router.get('/task-reliability', async (req: Request, res: Response) => {
-  const days = getIntervalDays(req);
+router.get('/task-reliability', async (_req: Request, res: Response) => {
   const rows = await safeQuery(`
     SELECT
       TO_CHAR(DATE_TRUNC('day', NULLIF(scheduled_time::text, '')::timestamp), 'MM/DD') AS date,
@@ -482,7 +461,7 @@ router.get('/task-reliability', async (req: Request, res: Response) => {
       COUNT(*) FILTER (WHERE state ILIKE 'SUCCEEDED%')      AS succeeded,
       COUNT(*) FILTER (WHERE state ILIKE 'FAILED%')         AS failed
     FROM edoops.sf_task_history
-    WHERE NULLIF(scheduled_time::text, '')::timestamp >= CURRENT_DATE - INTERVAL '${days} day'
+    WHERE NULLIF(scheduled_time::text, '')::timestamp >= CURRENT_DATE - INTERVAL '14 day'
     GROUP BY DATE_TRUNC('day', NULLIF(scheduled_time::text, '')::timestamp)
     ORDER BY DATE_TRUNC('day', NULLIF(scheduled_time::text, '')::timestamp)
   `, []);
@@ -495,14 +474,13 @@ router.get('/task-reliability', async (req: Request, res: Response) => {
 });
 
 // ─── GET /api/snowflake/login-failures ────────────────────
-router.get('/login-failures', async (req: Request, res: Response) => {
-  const days = getIntervalDays(req);
+router.get('/login-failures', async (_req: Request, res: Response) => {
   const rows = await safeQuery(`
     SELECT
       TO_CHAR(DATE_TRUNC('day', NULLIF(event_timestamp::text, '')::timestamp), 'MM/DD') AS date,
       COUNT(*) AS failed_logins
     FROM edoops.sf_login_history
-    WHERE NULLIF(event_timestamp::text, '')::timestamp >= CURRENT_DATE - INTERVAL '${days} day'
+    WHERE NULLIF(event_timestamp::text, '')::timestamp >= CURRENT_DATE - INTERVAL '14 day'
       AND is_success = 'NO'
     GROUP BY DATE_TRUNC('day', NULLIF(event_timestamp::text, '')::timestamp)
     ORDER BY DATE_TRUNC('day', NULLIF(event_timestamp::text, '')::timestamp)
@@ -514,14 +492,13 @@ router.get('/login-failures', async (req: Request, res: Response) => {
 });
 
 // ─── GET /api/snowflake/storage-growth ────────────────────
-router.get('/storage-growth', async (req: Request, res: Response) => {
-  const days = getIntervalDays(req);
+router.get('/storage-growth', async (_req: Request, res: Response) => {
   const rows = await safeQuery(`
     SELECT
       TO_CHAR(NULLIF(usage_date::text, '')::date, 'MM/DD') AS date,
       ROUND((COALESCE(SUM(NULLIF(average_stage_bytes::text, '')::numeric), 0) / 1024 / 1024 / 1024 / 1024)::numeric, 2) AS storage_tb
     FROM edoops.sf_stage_storage_usage_history
-    WHERE NULLIF(usage_date::text, '')::date >= CURRENT_DATE - INTERVAL '${days} day'
+    WHERE NULLIF(usage_date::text, '')::date >= CURRENT_DATE - INTERVAL '30 day'
     GROUP BY NULLIF(usage_date::text, '')::date
     ORDER BY NULLIF(usage_date::text, '')::date
   `, []);
