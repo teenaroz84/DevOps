@@ -508,7 +508,7 @@ const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void
           <Button
             size="small"
             variant="contained"
-            startIcon={<Box component="img" src={AGENTS.dmf.icon} alt="DMF agent icon" sx={{ width: '20%', height: '20%', borderRadius: '50%', objectFit: 'contain', display: 'block' }} />}
+            startIcon={<Box component="img" src={AGENTS.dmf.icon} alt="DMF agent icon" sx={{ width: 13, height: 13, borderRadius: '50%', objectFit: 'contain', display: 'block' }} />}
             onClick={() => onOpenAgent('dmf')}
             sx={{
               backgroundColor: '#0288d1',

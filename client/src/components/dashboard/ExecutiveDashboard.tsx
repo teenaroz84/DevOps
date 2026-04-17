@@ -905,7 +905,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onChatCl
           onClick={onChatClick}
           variant="contained"
           size="small"
-          startIcon={<Box component="img" src={AGENTS.knowledge.icon} alt="Knowledge agent icon" sx={{ width: '20%', height: '20%', borderRadius: '50%', objectFit: 'contain', display: 'block' }} />}
+          startIcon={<Box component="img" src={AGENTS.knowledge.icon} alt="Knowledge agent icon" sx={{ width: 18, height: 18, borderRadius: '50%', objectFit: 'contain', display: 'block' }} />}
           sx={{
             backgroundColor: AGENTS.knowledge.color,
             textTransform: 'none',
