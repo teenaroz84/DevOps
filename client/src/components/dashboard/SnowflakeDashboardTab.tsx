@@ -641,7 +641,7 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
             <Button
               size="small"
               variant="contained"
-              startIcon={<Box component="img" src={AGENTS.snowflake.icon} alt="Snowflake agent icon" sx={{ width: 14, height: 14, borderRadius: '50%' }} />}
+              startIcon={<Box component="img" src={AGENTS.snowflake.icon} alt="Snowflake agent icon" sx={{ width: 14, height: 14, borderRadius: '50%', objectFit: 'contain', display: 'block' }} />}
               onClick={() => onOpenAgent('snowflake')}
               sx={{
                 backgroundColor: '#0277bd',

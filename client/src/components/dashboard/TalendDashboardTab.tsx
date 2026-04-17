@@ -339,7 +339,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
             <Button
               size="small"
               variant="contained"
-              startIcon={<Box component="img" src={AGENTS.talend.icon} alt="Talend agent icon" sx={{ width: 14, height: 14, borderRadius: '50%' }} />}
+              startIcon={<Box component="img" src={AGENTS.talend.icon} alt="Talend agent icon" sx={{ width: 14, height: 14, borderRadius: '50%', objectFit: 'contain', display: 'block' }} />}
               onClick={() => onOpenAgent('talend')}
               sx={{
                 backgroundColor: '#e65100',

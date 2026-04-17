@@ -170,7 +170,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
       component="img"
       src={agent.icon}
       alt={`${agent.name} icon`}
-      sx={{ width: size, height: size, borderRadius: size > 18 ? 2 : '50%', objectFit: 'cover', flexShrink: 0 }}
+      sx={{ width: size, height: size, borderRadius: size > 18 ? 2 : '50%', objectFit: 'contain', display: 'block', flexShrink: 0 }}
     />
   )
   const [input, setInput] = useState('')

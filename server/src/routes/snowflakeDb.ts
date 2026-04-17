@@ -247,9 +247,9 @@ router.get('/cost-by-duration', async (_req: Request, res: Response) => {
       TO_CHAR(NULLIF(usage_date::text, '')::date, 'YYYY-MM-DD') AS bucket,
       ROUND(COALESCE(SUM(NULLIF(usage_in_currency::text, '')::numeric), 0)::numeric, 2) AS cost
     FROM edoops.sf_usage_in_currency_daily
-    WHERE usage_date >= CURRENT_DATE - INTERVAL '30 day'
-    GROUP BY usage_date
-    ORDER BY usage_date
+    WHERE NULLIF(usage_date::text, '')::date >= CURRENT_DATE - INTERVAL '30 day'
+    GROUP BY NULLIF(usage_date::text, '')::date
+    ORDER BY NULLIF(usage_date::text, '')::date
   `, []);
   res.json((rows ?? []).map((r: any) => ({
     bucket: r.BUCKET ?? r.bucket,
@@ -268,7 +268,7 @@ router.get('/top-costly-jobs', async (_req: Request, res: Response) => {
         ROUND(AVG(NULLIF(total_elapsed_time::text, '')::numeric)::numeric, 2) AS avg_runtime_ms,
         ROUND((SUM(COALESCE(NULLIF(bytes_scanned::text, '')::numeric, 0)) / 1024 / 1024 / 1024 / 1024)::numeric, 2) AS scanned_tb
       FROM edoops.sf_query_history
-      WHERE start_time >= CURRENT_DATE - INTERVAL '30 day'
+      WHERE NULLIF(start_time::text, '')::timestamp >= CURRENT_DATE - INTERVAL '30 day'
       GROUP BY COALESCE(query_hash::text, MD5(COALESCE(query_text::text, ''))), warehouse_name
     ),
     warehouse_cost AS (
@@ -276,7 +276,7 @@ router.get('/top-costly-jobs', async (_req: Request, res: Response) => {
         warehouse_name,
         SUM(NULLIF(credits_used::text, '')::numeric) AS total_credits
       FROM edoops.sf_warehouse_metering_history
-      WHERE start_time >= CURRENT_DATE - INTERVAL '30 day'
+      WHERE NULLIF(start_time::text, '')::timestamp >= CURRENT_DATE - INTERVAL '30 day'
       GROUP BY warehouse_name
     )
     SELECT
@@ -310,24 +310,24 @@ router.get('/platform-summary', async (_req: Request, res: Response) => {
         , 1) AS query_success_pct,
         ROUND(AVG(NULLIF(total_elapsed_time::text, '')::numeric), 0) AS avg_query_time_ms
       FROM edoops.sf_query_history
-      WHERE start_time >= CURRENT_TIMESTAMP - INTERVAL '1 day'
+      WHERE NULLIF(start_time::text, '')::timestamp >= CURRENT_TIMESTAMP - INTERVAL '1 day'
     `, [{}]),
     safeQuery(`
       SELECT COUNT(*) FILTER (WHERE state ILIKE 'FAILED%') AS task_failures
       FROM edoops.sf_task_history
-      WHERE scheduled_time >= CURRENT_TIMESTAMP - INTERVAL '1 day'
+      WHERE NULLIF(scheduled_time::text, '')::timestamp >= CURRENT_TIMESTAMP - INTERVAL '1 day'
     `, [{}]),
     safeQuery(`
       SELECT
         ROUND(100.0 * COUNT(*) FILTER (WHERE COALESCE(NULLIF(credits_used::text, '')::numeric, 0) > 0) / NULLIF(COUNT(*), 0), 1) AS warehouse_util_pct,
         ROUND(COALESCE(SUM(NULLIF(credits_used::text, '')::numeric), 0)::numeric, 2) AS warehouse_credits_used
       FROM edoops.sf_warehouse_metering_history
-      WHERE start_time >= CURRENT_TIMESTAMP - INTERVAL '1 day'
+      WHERE NULLIF(start_time::text, '')::timestamp >= CURRENT_TIMESTAMP - INTERVAL '1 day'
     `, [{}]),
     safeQuery(`
       SELECT COUNT(*) AS failed_logins
       FROM edoops.sf_login_history
-      WHERE event_timestamp >= CURRENT_TIMESTAMP - INTERVAL '1 day'
+      WHERE NULLIF(event_timestamp::text, '')::timestamp >= CURRENT_TIMESTAMP - INTERVAL '1 day'
         AND is_success = 'NO'
     `, [{}]),
   ]);
@@ -353,10 +353,10 @@ router.get('/warehouse-heatmap', async (_req: Request, res: Response) => {
   const rows = await safeQuery(`
     SELECT
       warehouse_name,
-      EXTRACT(HOUR FROM start_time)        AS hour,
+      EXTRACT(HOUR FROM NULLIF(start_time::text, '')::timestamp) AS hour,
       ROUND(SUM(NULLIF(credits_used::text, '')::numeric), 2) AS util_pct
     FROM edoops.sf_warehouse_metering_history
-      WHERE start_time >= CURRENT_TIMESTAMP - INTERVAL '7 day'
+      WHERE NULLIF(start_time::text, '')::timestamp >= CURRENT_TIMESTAMP - INTERVAL '7 day'
     GROUP BY warehouse_name, hour
     ORDER BY warehouse_name, hour
   `, []);
@@ -382,10 +382,10 @@ router.get('/warehouse-heatmap', async (_req: Request, res: Response) => {
 router.get('/hourly-queries', async (_req: Request, res: Response) => {
   const rows = await safeQuery(`
     SELECT
-      DATE_PART('hour', start_time) AS hour,
+      DATE_PART('hour', NULLIF(start_time::text, '')::timestamp) AS hour,
       COUNT(*)                       AS queries
     FROM edoops.sf_query_history
-    WHERE start_time >= CURRENT_TIMESTAMP - INTERVAL '1 day'
+    WHERE NULLIF(start_time::text, '')::timestamp >= CURRENT_TIMESTAMP - INTERVAL '1 day'
     GROUP BY hour
     ORDER BY hour
   `, []);
@@ -403,7 +403,7 @@ router.get('/top-slow-queries', async (_req: Request, res: Response) => {
         COALESCE(query_hash::text, MD5(COALESCE(query_text::text, ''))) AS query_pattern,
         MAX(NULLIF(start_time::text, '')::timestamp) AS last_run,
         ROUND(AVG(NULLIF(total_elapsed_time::text, '')::numeric), 2) AS avg_elapsed_ms,
-        ROUND(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY NULLIF(total_elapsed_time::text, '')::numeric), 2) AS p95_elapsed_ms,
+        ROUND((PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY NULLIF(total_elapsed_time::text, '')::numeric))::numeric, 2) AS p95_elapsed_ms,
         COUNT(*) FILTER (WHERE execution_status NOT ILIKE 'SUCCESS%') AS error_count,
         MAX(error_message) AS latest_error_message
       FROM edoops.sf_query_history
@@ -441,9 +441,9 @@ router.get('/query-volume-trend', async (_req: Request, res: Response) => {
       COUNT(*)                                          AS queries,
       ROUND(AVG(NULLIF(total_elapsed_time::text, '')::numeric), 0) AS avg_time_ms
     FROM edoops.sf_query_history
-    WHERE start_time >= CURRENT_DATE - INTERVAL '14 day'
-    GROUP BY DATE_TRUNC('day', start_time)
-    ORDER BY DATE_TRUNC('day', start_time)
+    WHERE NULLIF(start_time::text, '')::timestamp >= CURRENT_DATE - INTERVAL '14 day'
+    GROUP BY DATE_TRUNC('day', NULLIF(start_time::text, '')::timestamp)
+    ORDER BY DATE_TRUNC('day', NULLIF(start_time::text, '')::timestamp)
   `, []);
   res.json((rows ?? []).map((r: any) => ({
     date:        r.DATE        ?? r.date        ?? '',
@@ -461,9 +461,9 @@ router.get('/task-reliability', async (_req: Request, res: Response) => {
       COUNT(*) FILTER (WHERE state ILIKE 'SUCCEEDED%')      AS succeeded,
       COUNT(*) FILTER (WHERE state ILIKE 'FAILED%')         AS failed
     FROM edoops.sf_task_history
-    WHERE scheduled_time >= CURRENT_DATE - INTERVAL '14 day'
-    GROUP BY DATE_TRUNC('day', scheduled_time)
-    ORDER BY DATE_TRUNC('day', scheduled_time)
+    WHERE NULLIF(scheduled_time::text, '')::timestamp >= CURRENT_DATE - INTERVAL '14 day'
+    GROUP BY DATE_TRUNC('day', NULLIF(scheduled_time::text, '')::timestamp)
+    ORDER BY DATE_TRUNC('day', NULLIF(scheduled_time::text, '')::timestamp)
   `, []);
   res.json((rows ?? []).map((r: any) => ({
     date:      r.DATE      ?? r.date      ?? '',
@@ -480,10 +480,10 @@ router.get('/login-failures', async (_req: Request, res: Response) => {
       TO_CHAR(DATE_TRUNC('day', NULLIF(event_timestamp::text, '')::timestamp), 'MM/DD') AS date,
       COUNT(*) AS failed_logins
     FROM edoops.sf_login_history
-    WHERE event_timestamp >= CURRENT_DATE - INTERVAL '14 day'
+    WHERE NULLIF(event_timestamp::text, '')::timestamp >= CURRENT_DATE - INTERVAL '14 day'
       AND is_success = 'NO'
-    GROUP BY DATE_TRUNC('day', event_timestamp)
-    ORDER BY DATE_TRUNC('day', event_timestamp)
+    GROUP BY DATE_TRUNC('day', NULLIF(event_timestamp::text, '')::timestamp)
+    ORDER BY DATE_TRUNC('day', NULLIF(event_timestamp::text, '')::timestamp)
   `, []);
   res.json((rows ?? []).map((r: any) => ({
     date:          r.DATE          ?? r.date          ?? '',
@@ -498,9 +498,9 @@ router.get('/storage-growth', async (_req: Request, res: Response) => {
       TO_CHAR(NULLIF(usage_date::text, '')::date, 'MM/DD') AS date,
       ROUND((COALESCE(SUM(NULLIF(average_stage_bytes::text, '')::numeric), 0) / 1024 / 1024 / 1024 / 1024)::numeric, 2) AS storage_tb
     FROM edoops.sf_stage_storage_usage_history
-    WHERE usage_date >= CURRENT_DATE - INTERVAL '30 day'
-    GROUP BY usage_date
-    ORDER BY usage_date
+    WHERE NULLIF(usage_date::text, '')::date >= CURRENT_DATE - INTERVAL '30 day'
+    GROUP BY NULLIF(usage_date::text, '')::date
+    ORDER BY NULLIF(usage_date::text, '')::date
   `, []);
   res.json((rows ?? []).map((r: any) => ({
     date:       r.DATE       ?? r.date       ?? '',
