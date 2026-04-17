@@ -86,9 +86,9 @@ router.get('/cost-summary', async (req: Request, res: Response) => {
         + COALESCE(NULLIF(marketplace_capacity_drawdown_balance::text, '')::numeric, 0)
       )::numeric, 2) AS remaining_balance
       FROM edoops.sf_remaining_balance_daily
-      WHERE usage_date = (
-        SELECT MAX(usage_date) FROM edoops.sf_remaining_balance_daily
-        WHERE usage_date <= ${refDate}
+      WHERE date = (
+        SELECT MAX(date) FROM edoops.sf_remaining_balance_daily
+        WHERE date <= ${refDate}
       )
     ),
     opp_cte AS (
@@ -107,8 +107,8 @@ router.get('/cost-summary', async (req: Request, res: Response) => {
       rate_cte AS (
         SELECT COALESCE(AVG(NULLIF(effective_rate::text, '')::numeric), 0) AS avg_rate
         FROM edoops.sf_rate_sheet_daily
-        WHERE NULLIF(usage_date::text, '')::date >= ${lookback7Date}
-          AND NULLIF(usage_date::text, '')::date <= ${refDate}
+        WHERE NULLIF(date::text, '')::date >= ${lookback7Date}
+          AND NULLIF(date::text, '')::date <= ${refDate}
       )
       SELECT ROUND((wasted.wasted_credits * rate_cte.avg_rate)::numeric, 2) AS optimization_opportunity_currency_7d
       FROM wasted
@@ -418,15 +418,28 @@ router.get('/warehouse-heatmap', async (req: Request, res: Response) => {
   const refTs = sqlRefTimestamp(req);
   const lookbackTs = sqlSinceTimestamp(req, 7);
   const rows = await safeQuery(`
-    SELECT
-      warehouse_name,
-      EXTRACT(HOUR FROM NULLIF(start_time::text, '')::timestamp) AS hour,
-      ROUND(SUM(NULLIF(credits_used::text, '')::numeric), 2) AS util_pct
-    FROM edoops.sf_warehouse_metering_history
+    WITH raw AS (
+      SELECT
+        warehouse_name,
+        EXTRACT(HOUR FROM NULLIF(start_time::text, '')::timestamp) AS hour,
+        COALESCE(SUM(NULLIF(credits_used::text, '')::numeric), 0) AS credits_used
+      FROM edoops.sf_warehouse_metering_history
       WHERE NULLIF(start_time::text, '')::timestamp >= ${lookbackTs}
         AND NULLIF(start_time::text, '')::timestamp < (${refTs} + INTERVAL '1 day')
-    GROUP BY warehouse_name, hour
-    ORDER BY warehouse_name, hour
+      GROUP BY warehouse_name, hour
+    ),
+    maxv AS (
+      SELECT GREATEST(MAX(credits_used), 0.000001) AS max_credits
+      FROM raw
+    )
+    SELECT
+      raw.warehouse_name,
+      raw.hour,
+      ROUND((raw.credits_used / maxv.max_credits) * 100, 2) AS util_pct,
+      ROUND(raw.credits_used, 2) AS credits_used
+    FROM raw
+    CROSS JOIN maxv
+    ORDER BY raw.warehouse_name, raw.hour
   `, []);
 
   // Build { row, cells[] } structure expected by HeatmapGrid

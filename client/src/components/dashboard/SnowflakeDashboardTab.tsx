@@ -589,8 +589,7 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
   const [platformLoading, setPlatformLoading] = useState(true)
   const [costLoading, setCostLoading] = useState(false)
   const asOfDate = asOfOption === 'sample' ? '2026-03-12' : undefined
-   const queryParams = { days, asOf: asOfDate }
-
+   const queryParams = asOfDate ? { asOf: asOfDate } : undefined
   const [costData, setCostData] = useState<CostData>({
     summary: EMPTY_COST_SUMMARY,
     byPipeline: [],
@@ -808,7 +807,7 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
 
         {!useMock && (
           <Box sx={{ py: 1.25, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
-            <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 220, flex: 1 }}>
+            {/* <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 220, flex: 1 }}>
               <Typography sx={{ fontSize: '10px', color: '#607d8b', fontWeight: 700, textTransform: 'uppercase', mb: 0.4 }}>
                 Lookback Window
               </Typography>
@@ -822,7 +821,7 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
                 valueLabelDisplay="auto"
                 sx={{ mt: 1, maxWidth: 380 }}
               />
-            </Box>
+            </Box> */}
 
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
               <Typography sx={{ fontSize: '10px', color: '#607d8b', fontWeight: 700, textTransform: 'uppercase' }}>
