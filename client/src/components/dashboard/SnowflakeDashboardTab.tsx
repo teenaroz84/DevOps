@@ -5,7 +5,7 @@
  *   2. Cost & Efficiency Overview
  */
 import React, { useState, useEffect } from 'react'
-import { Box, Typography, Paper, Chip, Tooltip, Button } from '@mui/material'
+import { Box, Typography, Paper, Chip, Tooltip, Button, CircularProgress } from '@mui/material'
 import AcUnitIcon from '@mui/icons-material/AcUnit'
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney'
 import QueryStatsIcon from '@mui/icons-material/QueryStats'
@@ -97,32 +97,49 @@ const Treemap: React.FC<{ items: typeof MOCK_SF_COST_BY_PIPELINE }> = ({ items }
 
 // ── Scatter plot (SVG) ────────────────────────────────────
 
-const BUCKETS = ['<30m', '30–45m', '45–60m', '60–75m', '>120m']
+const BUCKETS = ['<30m', '30-60m', '60-90m', '90-120m', '>120m']
 
 const ScatterPlot: React.FC<{ items: typeof MOCK_SF_COST_SCATTER }> = ({ items }) => {
   const W = 260, H = 140, PL = 36, PR = 8, PT = 8, PB = 28
-  const minCost = 11, maxCost = 25
+  const costs = items.map(item => Number(item.cost) || 0)
+  const minCost = costs.length > 0 ? Math.min(...costs) : 0
+  const maxCost = costs.length > 0 ? Math.max(...costs) : 1
+  const paddedMin = Math.max(0, minCost - (maxCost - minCost || 1) * 0.1)
+  const paddedMax = maxCost + (maxCost - minCost || 1) * 0.15
   const xStep = (W - PL - PR) / (BUCKETS.length - 1)
-  const yScale = (c: number) => PT + (H - PT - PB) * (1 - (c - minCost) / (maxCost - minCost))
+  const yScale = (c: number) => {
+    const range = Math.max(1, paddedMax - paddedMin)
+    return PT + (H - PT - PB) * (1 - (c - paddedMin) / range)
+  }
   const DOT_COLORS = ['#e53935', '#f57c00', '#fdd835', '#43a047', '#1e88e5', '#8e24aa', '#00acc1', '#795548']
+  const yTicks = Array.from({ length: 4 }, (_, index) => {
+    const ratio = index / 3
+    return paddedMin + (paddedMax - paddedMin) * ratio
+  }).reverse()
 
   return (
     <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ overflow: 'visible' }}>
-      {[12, 13, 22, 23].map(v => (
+      {yTicks.map(v => (
         <line key={v} x1={PL} x2={W - PR} y1={yScale(v)} y2={yScale(v)} stroke="#e0e0e0" strokeWidth={0.5} />
       ))}
-      {[12, 13, 22, 23].map(v => (
-        <text key={`yl${v}`} x={PL - 3} y={yScale(v) + 3} textAnchor="end" fontSize={7} fill="#999">{v}s</text>
+      {yTicks.map(v => (
+        <text key={`yl${v}`} x={PL - 3} y={yScale(v) + 3} textAnchor="end" fontSize={7} fill="#999">{v.toFixed(v < 10 ? 2 : 1)}</text>
       ))}
       {BUCKETS.map((b, i) => (
         <text key={b} x={PL + i * xStep} y={H - PB + 12} textAnchor="middle" fontSize={7} fill="#999">{b}</text>
       ))}
       {items.map((d, i) => {
-        const xi = BUCKETS.indexOf(d.bucket.replace('30-45m', '30–45m').replace('45-60m', '45–60m').replace('60-75m', '60–75m'))
+        const normalizedBucket = String(d.bucket).replace(/–/g, '-').trim()
+        const xi = BUCKETS.indexOf(normalizedBucket)
         const x = PL + (xi < 0 ? 0 : xi) * xStep + (Math.sin(i * 2.3) * 6)
         const y = yScale(d.cost)
-        const r = Math.max(3, Math.min(8, d.runs / 8))
-        return <circle key={i} cx={x} cy={y} r={r} fill={DOT_COLORS[i % DOT_COLORS.length]} opacity={0.75} />
+        const r = Math.max(2.5, Math.min(5.5, Math.sqrt(Math.max(1, d.runs)) / 8))
+        return (
+          <g key={i}>
+            <circle cx={x} cy={y} r={r} fill={DOT_COLORS[i % DOT_COLORS.length]} opacity={0.75} style={{ cursor: 'pointer' }} />
+            <title>{`${d.name}\nCredits: ${d.cost.toFixed(2)}\nQuery Count: ${d.runs.toLocaleString()}`}</title>
+          </g>
+        )
       })}
     </svg>
   )
@@ -202,6 +219,7 @@ const EMPTY_PLATFORM_SUMMARY: PlatformSummaryShape = {
 
 const CostEfficiencyScreen: React.FC<{ data: CostData }> = ({ data }) => {
   const s = data.summary
+  const rowPanelHeight = 430
 
   const runtimeMin = (ms: number) => `${Math.round(ms / 60000)}m`
   const efficiencyIcon = (v: 'good' | 'warn' | 'bad') => {
@@ -290,7 +308,7 @@ const CostEfficiencyScreen: React.FC<{ data: CostData }> = ({ data }) => {
 
         <Paper elevation={0} sx={{ p: 2, minWidth: 0, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #6a1b9a', borderRadius: 2 }}>
           <Typography sx={{ fontSize: '12px', fontWeight: 600, mb: 1, color: '#1a2535' }}>Daily Cost Trend</Typography>
-          <Box sx={{ height: 180, width: '100%', minWidth: 0, overflow: 'hidden' }}>
+          <Box sx={{ height: 206, width: '100%', minWidth: 0, overflow: 'visible', pb: 1 }}>
             <ComposedBarLineChart
               data={data.byDuration}
               xKey="bucket"
@@ -303,22 +321,22 @@ const CostEfficiencyScreen: React.FC<{ data: CostData }> = ({ data }) => {
 
       {/* Row 2: Warehouse Cost Efficiency + Top Costly Queries/Jobs */}
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' }, gap: 2, alignItems: 'stretch', '& > *': { minWidth: 0 } }}>
-        <Paper elevation={0} sx={{ p: 2, minWidth: 0, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #f57c00', borderRadius: 2 }}>
+        <Paper elevation={0} sx={{ p: 2, minWidth: 0, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #f57c00', borderRadius: 2, height: rowPanelHeight, display: 'flex', flexDirection: 'column' }}>
           <Typography sx={{ fontSize: '12px', fontWeight: 600, mb: 1, color: '#1a2535' }}>Warehouse Cost Efficiency</Typography>
-          <Box sx={{ height: 180, minWidth: 0, overflow: 'hidden' }}>
+          <Box sx={{ height: 180, minWidth: 0, overflow: 'hidden', flexShrink: 0 }}>
             <ScatterPlot items={data.scatter} />
           </Box>
-          <Box sx={{ mt: 1, width: '100%', minWidth: 0, overflowX: 'auto', border: '1px solid #e8ecf1', borderRadius: 1 }}>
-            <DataTable columns={warehouseEffCols} rows={data.warehouseCostEfficiency} />
+          <Box sx={{ mt: 1, width: '100%', minWidth: 0, minHeight: 0, flex: 1, overflow: 'hidden' }}>
+            <DataTable columns={warehouseEffCols} rows={data.warehouseCostEfficiency} maxHeight={190} compact />
           </Box>
         </Paper>
 
-        <Paper elevation={0} sx={{ minWidth: 0, border: '1px solid #e8ecf1', borderTop: '3px solid #c62828', borderRadius: 2, overflow: 'hidden' }}>
+        <Paper elevation={0} sx={{ minWidth: 0, border: '1px solid #e8ecf1', borderTop: '3px solid #c62828', borderRadius: 2, overflow: 'hidden', height: rowPanelHeight, display: 'flex', flexDirection: 'column' }}>
           <Box sx={{ px: 2, py: 1.5, backgroundColor: '#fafafa', borderBottom: '1px solid #e8ecf1' }}>
             <Typography sx={{ fontSize: '13px', fontWeight: 700, color: '#1a2535' }}>Top Costly Queries / Jobs</Typography>
           </Box>
-          <Box sx={{ width: '100%', minWidth: 0, overflowX: 'auto' }}>
-            <DataTable columns={costCols} rows={data.topCostlyJobs} />
+          <Box sx={{ width: '100%', minWidth: 0, minHeight: 0, flex: 1, overflow: 'hidden', p: 2, pt: 1.5 }}>
+            <DataTable columns={costCols} rows={data.topCostlyJobs} maxHeight={320} compact />
           </Box>
         </Paper>
       </Box>
@@ -348,6 +366,7 @@ const CostEfficiencyScreen: React.FC<{ data: CostData }> = ({ data }) => {
 
 const PlatformIntelligenceScreen: React.FC<{ data: PlatformData }> = ({ data }) => {
   const s = data.summary
+  const rowPanelHeight = 430
 
   const heatRows   = data.heatmap.map(r => r.row)
   const heatCols   = data.heatmap[0]?.cells.map(c => c.col) ?? []
@@ -424,17 +443,17 @@ const PlatformIntelligenceScreen: React.FC<{ data: PlatformData }> = ({ data }) 
 
       {/* Row 2: Top Slow Queries + Task Reliability */}
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1.5fr 1fr' }, gap: 2, alignItems: 'stretch', '& > *': { minWidth: 0 } }}>
-        <Paper elevation={0} sx={{ minWidth: 0, border: '1px solid #e8ecf1', borderTop: '3px solid #e53935', borderRadius: 2, overflow: 'hidden' }}>
+        <Paper elevation={0} sx={{ minWidth: 0, border: '1px solid #e8ecf1', borderTop: '3px solid #e53935', borderRadius: 2, overflow: 'hidden', height: rowPanelHeight, display: 'flex', flexDirection: 'column' }}>
           <Box sx={{ px: 2, py: 1.5, backgroundColor: '#fafafa', borderBottom: '1px solid #e8ecf1' }}>
             <Typography sx={{ fontSize: '13px', fontWeight: 700, color: '#1a2535' }}>Top Slow Queries</Typography>
           </Box>
-          <Box sx={{ width: '100%', minWidth: 0, overflowX: 'auto' }}>
-            <DataTable columns={queryCols} rows={data.topSlowQueries} />
+          <Box sx={{ width: '100%', minWidth: 0, minHeight: 0, flex: 1, overflow: 'hidden', p: 2, pt: 1.5 }}>
+            <DataTable columns={queryCols} rows={data.topSlowQueries} maxHeight={320} compact />
           </Box>
         </Paper>
 
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, height: '100%' }}>
-          <Paper elevation={0} sx={{ p: 2, minWidth: 0, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #43a047', borderRadius: 2, height: '100%', display: 'flex', flexDirection: 'column' }}>
+          <Paper elevation={0} sx={{ p: 2, minWidth: 0, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #43a047', borderRadius: 2, height: rowPanelHeight, display: 'flex', flexDirection: 'column' }}>
             <Typography sx={{ fontSize: '12px', fontWeight: 600, mb: 1, color: '#1a2535' }}>Task Reliability</Typography>
             <Box sx={{ flex: 1, minHeight: 220, width: '100%', minWidth: 0, overflow: 'hidden' }}>
               <ComposedBarLineChart
@@ -499,6 +518,7 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
   const { useMock } = useMockData()
   const [subTab, setSubTab] = useState<SubTab>('platform')
   const [isLive, setIsLive] = useState(false)
+  const [loading, setLoading] = useState(true)
 
   const [costData, setCostData] = useState<CostData>({
     summary: EMPTY_COST_SUMMARY,
@@ -524,6 +544,7 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
   useEffect(() => {
     let alive = true
     setIsLive(false)
+    setLoading(true)
 
     if (useMock) {
       setCostData({
@@ -545,6 +566,7 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
         storageGrowth:    MOCK_SF_STORAGE_GROWTH,
         alert:            MOCK_SF_ALERT,
       })
+      setLoading(false)
       return () => { alive = false }
     }
 
@@ -608,6 +630,7 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
           : 'Unable to load live Snowflake data. Check server query errors.',
       })
       setIsLive(successCount > 0)
+      setLoading(false)
     })
     return () => { alive = false }
   }, [useMock])
@@ -685,8 +708,19 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
 
       {/* Content */}
       <Box sx={{ p: 2, minWidth: 0, overflowX: 'hidden' }}>
+        {loading ? (
+          <Box sx={{ minHeight: 420, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.5, color: '#78909c' }}>
+              <CircularProgress size={26} sx={{ color: '#29b6f6' }} />
+              <Typography sx={{ fontSize: '12px', fontWeight: 600 }}>Loading Snowflake dashboard...</Typography>
+            </Box>
+          </Box>
+        ) : (
+          <>
         {subTab === 'platform' && <PlatformIntelligenceScreen data={platformData} />}
         {subTab === 'cost'     && <CostEfficiencyScreen data={costData} />}
+          </>
+        )}
       </Box>
     </Box>
   )
