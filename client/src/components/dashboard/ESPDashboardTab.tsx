@@ -10,7 +10,6 @@ import PeopleIcon from '@mui/icons-material/People'
 import AppsIcon from '@mui/icons-material/Apps'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 
-import SmartToyIcon from '@mui/icons-material/SmartToy'
 import {
   WidgetShell, StatCardGrid, MetricBarList, DataTable, TrendLineChart, DonutChart,
 } from '../widgets'
@@ -18,6 +17,7 @@ import type { ColumnDef } from '../widgets'
 import { espService } from '../../services'
 import { useMockData } from '../../context/MockDataContext'
 import { MOCK_ESP_PLATFORM_SUMMARY, getMockAppData } from '../../services/espMockData'
+import { AGENTS } from '../../config/agentConfig'
 
 // ─── Types ────────────────────────────────────────────────
 interface NameCount { name: string; count: number }
@@ -627,7 +627,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
               <Button
                 size="small"
                 variant="contained"
-                startIcon={<SmartToyIcon sx={{ fontSize: 14 }} />}
+                startIcon={<Box component="img" src={AGENTS.esp.icon} alt="ESP agent icon" sx={{ width: 14, height: 14, borderRadius: '50%' }} />}
                 onClick={() => onOpenAgent('esp')}
                 sx={{
                   backgroundColor: '#2e7d32',

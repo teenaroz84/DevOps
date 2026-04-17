@@ -20,6 +20,8 @@ export interface AgentConfig {
   subtitle: string
   /** MUI-compatible hex colour used for the panel accent */
   color: string
+  /** Path to the agent icon asset */
+  icon: string
   /** POST endpoint for non-streaming requests */
   endpoint: string
   /** POST endpoint for SSE streaming */
@@ -48,6 +50,7 @@ export const AGENTS: Record<string, AgentConfig> = {
     name: 'TDT DataOps Knowledge Assistant',
     subtitle: 'Cross-platform · Documentation & Standards',
     color: '#1976d2',
+    icon: '/agent-icons/KnowledgeAssist.png',
     endpoint: '/api/v1/chat',
     streamEndpoint: '/api/v1/chat/stream',
     placeholder: 'Ask about DMF, ESP, Talend, ingestion standards…',
@@ -65,6 +68,7 @@ export const AGENTS: Record<string, AgentConfig> = {
     name: 'TDT ESP Scheduling Agent',
     subtitle: 'Enterprise Scheduler Platform · Job Intelligence',
     color: '#2e7d32',
+    icon: '/agent-icons/ESPAgent.png',
     endpoint: '/api/esp/chat',
     streamEndpoint: '/api/esp/chat/stream',
     placeholder: 'Ask about ESP jobs, schedules, failures…',
@@ -82,6 +86,7 @@ export const AGENTS: Record<string, AgentConfig> = {
     name: 'TDT DMF Pipeline Agent',
     subtitle: 'Data Management Framework · Pipeline Intelligence',
     color: '#1565c0',
+    icon: '/agent-icons/DMFAgent.png',
     endpoint: '/api/dmf/chat',
     streamEndpoint: '/api/dmf/chat/stream',
     placeholder: 'Ask about DMF pipelines, run status, failures…',
@@ -99,6 +104,7 @@ export const AGENTS: Record<string, AgentConfig> = {
     name: 'TDT ServiceNow Incident Agent',
     subtitle: 'ITSM · Incidents & Problem Management',
     color: '#5c6bc0',
+    icon: '/agent-icons/ServiceNowAgent.png',
     endpoint: '/api/snow/chat',
     streamEndpoint: '/api/snow/chat/stream',
     placeholder: 'Ask about incidents, tickets, problems…',
@@ -116,6 +122,7 @@ export const AGENTS: Record<string, AgentConfig> = {
     name: 'TDT Talend Integration Agent',
     subtitle: 'Data Integration · Job Monitoring',
     color: '#e65100',
+    icon: '/agent-icons/TalendLogAgent.png',
     endpoint: '/api/talend/chat',
     streamEndpoint: '/api/talend/chat/stream',
     placeholder: 'Ask about Talend jobs, errors, pipelines…',
@@ -133,6 +140,7 @@ export const AGENTS: Record<string, AgentConfig> = {
     name: 'TDT Snowflake Analytics Agent',
     subtitle: 'Cloud Data Platform · Cost & Query Intelligence',
     color: '#0277bd',
+    icon: '/agent-icons/SnowflakeAgent.png',
     endpoint: '/api/snow/chat',
     streamEndpoint: '/api/snow/chat/stream',
     placeholder: 'Ask about Snowflake costs, queries, usage…',

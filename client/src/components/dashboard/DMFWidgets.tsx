@@ -16,7 +16,6 @@ import FilterListIcon from '@mui/icons-material/FilterList'
 import AccountTreeIcon from '@mui/icons-material/AccountTree'
 import AnalyticsIcon from '@mui/icons-material/Analytics'
 import TrendingUpIcon from '@mui/icons-material/TrendingUp'
-import SmartToyIcon from '@mui/icons-material/SmartToy'
 import {
   StatCardGrid,
   DonutChart,
@@ -33,6 +32,7 @@ import {
   MOCK_DMF_STATUS_TREND, MOCK_DMF_ROWS_TREND, MOCK_DMF_JOBS_TREND, MOCK_DMF_STEP_FAILURE_TREND,
   MOCK_DMF_ANALYTICS, MOCK_DMF_LINEAGE_META, MOCK_DMF_LINEAGE_JOBS, MOCK_DMF_LINEAGE_COUNTS,
 } from '../../services/dmfMockData'
+import { AGENTS } from '../../config/agentConfig'
 
 
 
@@ -508,7 +508,7 @@ const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void
           <Button
             size="small"
             variant="contained"
-            startIcon={<SmartToyIcon sx={{ fontSize: 13 }} />}
+            startIcon={<Box component="img" src={AGENTS.dmf.icon} alt="DMF agent icon" sx={{ width: 13, height: 13, borderRadius: '50%' }} />}
             onClick={() => onOpenAgent('dmf')}
             sx={{
               backgroundColor: '#0288d1',

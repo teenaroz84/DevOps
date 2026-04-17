@@ -9,7 +9,6 @@ import {
   Switch,
 } from '@mui/material'
 import DashboardIcon from '@mui/icons-material/Dashboard'
-import SmartToyIcon from '@mui/icons-material/SmartToy'
 import TuneIcon from '@mui/icons-material/Tune'
 import AnalyticsIcon from '@mui/icons-material/Analytics'
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
@@ -155,7 +154,7 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuChange
               {renderMenuButton(
                 item.menuId,
                 item.label,
-                <SmartToyIcon sx={{ fontSize: '20px', flexShrink: 0 }} />,
+                <Box component="img" src={agent.icon} alt={`${agent.name} icon`} sx={{ width: 20, height: 20, borderRadius: 1, flexShrink: 0 }} />,
                 agent.color,
               )}
             </React.Fragment>

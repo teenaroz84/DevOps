@@ -5,10 +5,10 @@ import SearchIcon from '@mui/icons-material/Search'
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline'
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
 import ListAltIcon from '@mui/icons-material/ListAlt'
-import SmartToyIcon from '@mui/icons-material/SmartToy'
 import { WidgetShell, StatCardGrid, DonutChart, DataTable, ColumnDef, ComposedBarLineChart } from '../widgets'
 import { talendService } from '../../services'
 import { useMockData } from '../../context/MockDataContext'
+import { AGENTS } from '../../config/agentConfig'
 import {
   MOCK_TALEND_SUMMARY,
   MOCK_TALEND_LEVEL_COUNTS,
@@ -339,7 +339,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
             <Button
               size="small"
               variant="contained"
-              startIcon={<SmartToyIcon sx={{ fontSize: 14 }} />}
+              startIcon={<Box component="img" src={AGENTS.talend.icon} alt="Talend agent icon" sx={{ width: 14, height: 14, borderRadius: '50%' }} />}
               onClick={() => onOpenAgent('talend')}
               sx={{
                 backgroundColor: '#e65100',

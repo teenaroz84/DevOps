@@ -6,7 +6,6 @@ import CloudIcon from '@mui/icons-material/Cloud'
 import AccountTreeIcon from '@mui/icons-material/AccountTree'
 import DashboardIcon from '@mui/icons-material/Dashboard'
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
-import SmartToyIcon from '@mui/icons-material/SmartToy'
 import TuneIcon from '@mui/icons-material/Tune'
 import AcUnitIcon from '@mui/icons-material/AcUnit'
 import {
@@ -906,7 +905,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onChatCl
           onClick={onChatClick}
           variant="contained"
           size="small"
-          startIcon={<SmartToyIcon />}
+          startIcon={<Box component="img" src={AGENTS.knowledge.icon} alt="Knowledge agent icon" sx={{ width: 18, height: 18, borderRadius: '50%' }} />}
           sx={{
             backgroundColor: AGENTS.knowledge.color,
             textTransform: 'none',

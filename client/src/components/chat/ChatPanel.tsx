@@ -20,7 +20,6 @@ import {
 import SendIcon from '@mui/icons-material/Send'
 import CloseIcon from '@mui/icons-material/Close'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
-import SmartToyIcon from '@mui/icons-material/SmartToy'
 import FileDownloadIcon from '@mui/icons-material/FileDownload'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import PersonIcon from '@mui/icons-material/Person'
@@ -166,6 +165,14 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
   const MAX_PANEL_HEIGHT = Number.MAX_SAFE_INTEGER
   // Resolved config — fall back to global knowledge agent
   const agent: AgentConfig = agentConfig ?? AGENTS.knowledge
+  const renderAgentIcon = (size: number) => (
+    <Box
+      component="img"
+      src={agent.icon}
+      alt={`${agent.name} icon`}
+      sx={{ width: size, height: size, borderRadius: size > 18 ? 2 : '50%', objectFit: 'cover', flexShrink: 0 }}
+    />
+  )
   const [input, setInput] = useState('')
   const [expanded, setExpanded] = useState(false)
   const [showQuickActions, setShowQuickActions] = useState(true)
@@ -834,7 +841,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
             }}
           >
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-              <SmartToyIcon />
+              {renderAgentIcon(22)}
               <Box>
                 <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
                   {agent.name}
@@ -1009,7 +1016,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
                 {isSessionLoading && (
                   <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 0.75 }}>
                     <Box sx={{ width: 26, height: 26, borderRadius: '50%', backgroundColor: '#1976d2', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      <SmartToyIcon sx={{ fontSize: 14, color: '#fff' }} />
+                      {renderAgentIcon(18)}
                     </Box>
                     <Paper sx={{ p: 1.5, backgroundColor: '#f0f4f8', boxShadow: 'none', borderRadius: '16px 16px 16px 4px', border: '1px solid transparent' }}>
                       <TypingDots />
@@ -1219,7 +1226,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <SmartToyIcon sx={{ flexShrink: 0 }} />
+          {renderAgentIcon(20)}
           <Box>
             <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
               {agent.name}
@@ -1280,7 +1287,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
           <Box key={idx} sx={{ display: 'flex', alignItems: 'flex-end', gap: 0.75, justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
             {msg.role === 'agent' && (
               <Box sx={{ width: 26, height: 26, borderRadius: '50%', backgroundColor: agent.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, mb: 0.5 }}>
-                <SmartToyIcon sx={{ fontSize: 14, color: '#fff' }} />
+                {renderAgentIcon(18)}
               </Box>
             )}
             <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: expanded ? '88%' : '80%' }}>
@@ -1437,7 +1444,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
         {isSessionLoading && (
           <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 0.75 }}>
             <Box sx={{ width: 26, height: 26, borderRadius: '50%', backgroundColor: agent.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <SmartToyIcon sx={{ fontSize: 14, color: '#fff' }} />
+              {renderAgentIcon(18)}
             </Box>
             <Paper sx={{ p: 1.5, backgroundColor: '#f0f4f8', boxShadow: 'none', borderRadius: '16px 16px 16px 4px', border: '1px solid transparent' }}>
               <TypingDots />

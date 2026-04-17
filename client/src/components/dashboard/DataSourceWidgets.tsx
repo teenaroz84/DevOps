@@ -8,12 +8,12 @@ import AttachMoneyIcon from '@mui/icons-material/AttachMoney'
 import TrendingUpIcon from '@mui/icons-material/TrendingUp'
 import PipelineIcon from '@mui/icons-material/AccountTree'
 import BuildCircleIcon from '@mui/icons-material/BuildCircle'
-import SmartToyIcon from '@mui/icons-material/SmartToy'
 import { DrillDownModal, DrillDownData } from './DrillDownModal'
 import { WidgetShell, StatCardGrid, MetricBarList, DataTable, ColumnDef } from '../widgets'
 import { cloudwatchService, servicenowService, snowflakeService, postgresService, espService } from '../../services'
 import { DonutChart } from '../widgets'
 import { useMockData } from '../../context/MockDataContext'
+import { AGENTS } from '../../config/agentConfig'
 import {
   MOCK_SERVICENOW_TICKETS,
   MOCK_SERVICENOW_INCIDENTS,
@@ -1146,7 +1146,7 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
             <Button
               size="small"
               variant="contained"
-              startIcon={<SmartToyIcon sx={{ fontSize: 14 }} />}
+              startIcon={<Box component="img" src={AGENTS.servicenow.icon} alt="ServiceNow agent icon" sx={{ width: 14, height: 14, borderRadius: '50%' }} />}
               onClick={() => onOpenAgent('servicenow')}
               sx={{
                 backgroundColor: '#5c6bc0',

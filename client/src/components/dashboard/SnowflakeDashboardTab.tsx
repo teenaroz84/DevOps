@@ -12,7 +12,6 @@ import QueryStatsIcon from '@mui/icons-material/QueryStats'
 import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import CancelIcon from '@mui/icons-material/Cancel'
-import SmartToyIcon from '@mui/icons-material/SmartToy'
 import {
   StatCardGrid,
   HeatmapGrid,
@@ -39,6 +38,7 @@ import {
 } from '../../services/snowflakeMockData'
 import { snowflakeService } from '../../services/snowflakeService'
 import { useMockData } from '../../context/MockDataContext'
+import { AGENTS } from '../../config/agentConfig'
 
 // ── Helpers ────────────────────────────────────────────────
 
@@ -641,7 +641,7 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
             <Button
               size="small"
               variant="contained"
-              startIcon={<SmartToyIcon sx={{ fontSize: 13 }} />}
+              startIcon={<Box component="img" src={AGENTS.snowflake.icon} alt="Snowflake agent icon" sx={{ width: 14, height: 14, borderRadius: '50%' }} />}
               onClick={() => onOpenAgent('snowflake')}
               sx={{
                 backgroundColor: '#0277bd',
