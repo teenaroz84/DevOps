@@ -160,6 +160,7 @@ function buildSessionItem(
     [partitionKey]: getPartitionKeyValue(sessionId, agentId, !!sortKey),
     // Keep canonical fields for backward compatibility and easy querying.
     session_id: sessionId,
+    chat_session_id: sessionId,
     agent_id: agentId,
     messages: JSON.stringify(messages),
     updated_at: new Date().toISOString(),
@@ -455,7 +456,7 @@ router.get('/agent/:agentId', async (req: Request, res: Response) => {
       }));
 
       for (const raw of (result.Items || []) as Array<Record<string, unknown>>) {
-        const sessionId = String(raw.session_id ?? '');
+        const sessionId = String(raw.chat_session_id ?? raw.session_id ?? '');
         if (!sessionId) continue;
 
         let parsedMessages: unknown[] = [];

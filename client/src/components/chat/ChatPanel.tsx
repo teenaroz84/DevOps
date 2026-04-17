@@ -214,16 +214,6 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
       setSessionLoading(true)
       setSessionListLoading(true)
 
-      if (!fullScreen) {
-        const starter = buildSessionSummary(createSessionId(), [WELCOME_MESSAGE])
-        setChatSessions([starter])
-        setActiveSessionId(starter.sessionId)
-        setSessionLoading(false)
-        setSessionListLoading(false)
-        isInitializing.current = false
-        return
-      }
-
       try {
         const remoteSessions = await chatService.listSessions(agent.id)
         if (!alive) return
@@ -255,15 +245,11 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
     return () => {
       alive = false
     }
-  }, [agent.id, WELCOME_MESSAGE, fullScreen])
+  }, [agent.id, WELCOME_MESSAGE])
 
   useEffect(() => {
     let alive = true
     if (!activeSessionId) return
-    if (!fullScreen) {
-      isInitializing.current = false
-      return
-    }
     const doLoad = async () => {
       setSessionLoading(true)
       try {
@@ -290,7 +276,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
     }
     doLoad()
     return () => { alive = false }
-  }, [activeSessionId, agent.id, WELCOME_MESSAGE, fullScreen])
+  }, [activeSessionId, agent.id, WELCOME_MESSAGE])
 
   const [loading, setLoading] = useState(false)
   const [loadingSessionId, setLoadingSessionId] = useState<string | null>(null)
@@ -472,9 +458,8 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
     setResizing(true)
   }
 
-  // Persist only to DynamoDB for full-screen sessions
+  // Persist sessions to DynamoDB for both popup and full-screen modes.
   useEffect(() => {
-    if (!fullScreen) return
     // Skip DynamoDB sync while the initial load is still in flight or agent is switching
     if (!sessionLoading && !isInitializing.current && activeSessionId) {
       chatService.saveSession(agent.id, messages, activeSessionId)
@@ -485,19 +470,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
         return [summary, ...others]
       })
     }
-  }, [messages, agent.id, sessionLoading, activeSessionId, fullScreen])
-
-  useEffect(() => {
-    if (fullScreen || isOpen) return
-    const starter = buildSessionSummary(createSessionId(), [WELCOME_MESSAGE])
-    isInitializing.current = false
-    setChatSessions([starter])
-    setActiveSessionId(starter.sessionId)
-    setMessages([WELCOME_MESSAGE])
-    setInput('')
-    setLoading(false)
-    setLoadingSessionId(null)
-  }, [fullScreen, isOpen, WELCOME_MESSAGE])
+  }, [messages, agent.id, sessionLoading, activeSessionId])
 
   const HEALTH_CHECK_QUERY = '__health_check__'
 
@@ -596,7 +569,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
 
   const resetToMainMenu = () => {
     if (!activeSessionId) return
-    if (fullScreen) chatService.clearSession(agent.id, activeSessionId)
+    chatService.clearSession(agent.id, activeSessionId)
     isInitializing.current = false
     setMessages([WELCOME_MESSAGE])
     setInput('')
@@ -617,13 +590,10 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
     setInput('')
     setLoading(false)
     setLoadingSessionId(null)
-    // Persist immediately — do not rely on the save effect which may be blocked
-    // by sessionLoading=true from a concurrent load. This guarantees the new
-    // session is in DynamoDB with browser_session_id before the user navigates away.
-    if (fullScreen) {
-      chatService.saveSession(agent.id, [WELCOME_MESSAGE], nextSessionId)
-    }
-  }, [WELCOME_MESSAGE, agent.id, fullScreen])
+    // Persist immediately — do not rely only on the save effect which may be blocked
+    // by sessionLoading=true from a concurrent load.
+    chatService.saveSession(agent.id, [WELCOME_MESSAGE], nextSessionId)
+  }, [WELCOME_MESSAGE, agent.id])
 
   const switchToSession = useCallback((sessionId: string) => {
     isInitializing.current = true
@@ -635,7 +605,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
 
   const deleteChatSession = useCallback((sessionId: string) => {
     const remaining = chatSessions.filter((session) => session.sessionId !== sessionId)
-    if (fullScreen) chatService.clearSession(agent.id, sessionId)
+    chatService.clearSession(agent.id, sessionId)
 
     if (remaining.length === 0) {
       const starter = buildSessionSummary(createSessionId(), [WELCOME_MESSAGE])
@@ -659,7 +629,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
       setLoading(false)
       setLoadingSessionId(null)
     }
-  }, [agent.id, activeSessionId, chatSessions, WELCOME_MESSAGE, fullScreen])
+  }, [agent.id, activeSessionId, chatSessions, WELCOME_MESSAGE])
 
   const scrollSessionsToEnd = useCallback(() => {
     const node = sessionsListRef.current
