@@ -54,6 +54,8 @@ const ERROR_COLOR: Record<string, string> = {
   SLOW:       '#fb8c00',
 }
 
+const ENABLE_SF_DAYS_FILTER = String(import.meta.env.VITE_ENABLE_SF_DAYS_FILTER ?? 'false').toLowerCase() === 'true'
+
 // ── Treemap (simple CSS grid based) ───────────────────────
 
 const Treemap: React.FC<{ items: typeof MOCK_SF_COST_BY_PIPELINE }> = ({ items }) => {
@@ -562,6 +564,7 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
   const { useMock } = useMockData()
   const [subTab, setSubTab] = useState<SubTab>('platform')
   const [days, setDays] = useState(3)
+  const daysParam = ENABLE_SF_DAYS_FILTER ? days : undefined
   const [isLive, setIsLive] = useState(false)
   const [platformLoading, setPlatformLoading] = useState(true)
   const [costLoading, setCostLoading] = useState(false)
@@ -633,13 +636,13 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
     })
 
     Promise.allSettled([
-      snowflakeService.getPlatformSummary(days),   // 0
-      snowflakeService.getWarehouseHeatmap(days),  // 1
-      snowflakeService.getTopSlowQueries(days),    // 2
-      snowflakeService.getQueryVolumeTrend(days),  // 3
-      snowflakeService.getTaskReliability(days),   // 4
-      snowflakeService.getLoginFailures(days),     // 5
-      snowflakeService.getStorageGrowth(days),     // 6
+      snowflakeService.getPlatformSummary(daysParam),   // 0
+      snowflakeService.getWarehouseHeatmap(daysParam),  // 1
+      snowflakeService.getTopSlowQueries(daysParam),    // 2
+      snowflakeService.getQueryVolumeTrend(daysParam),  // 3
+      snowflakeService.getTaskReliability(daysParam),   // 4
+      snowflakeService.getLoginFailures(daysParam),     // 5
+      snowflakeService.getStorageGrowth(daysParam),     // 6
     ]).then((results) => {
       if (!alive) return
 
@@ -665,7 +668,7 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
       if (successCount > 0) setIsLive(true)
     })
     return () => { alive = false }
-  }, [useMock, days])
+  }, [useMock, daysParam])
 
   useEffect(() => {
     if (useMock || subTab !== 'cost' || costLoaded || costLoading) return
@@ -674,13 +677,13 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
     setCostLoading(true)
 
     Promise.allSettled([
-      snowflakeService.getCostSummary(days),       // 0
-      snowflakeService.getCostByPipeline(days),    // 1
-      snowflakeService.getCostScatter(days),       // 2
-      snowflakeService.getWarehouseCostEfficiency(days), // 3
-      snowflakeService.getCostByDuration(days),    // 4
-      snowflakeService.getTopCostlyJobs(days),     // 5
-      snowflakeService.getStorageGrowth(days),     // 6
+      snowflakeService.getCostSummary(daysParam),       // 0
+      snowflakeService.getCostByPipeline(daysParam),    // 1
+      snowflakeService.getCostScatter(daysParam),       // 2
+      snowflakeService.getWarehouseCostEfficiency(daysParam), // 3
+      snowflakeService.getCostByDuration(daysParam),    // 4
+      snowflakeService.getTopCostlyJobs(daysParam),     // 5
+      snowflakeService.getStorageGrowth(daysParam),     // 6
     ]).then((results) => {
       if (!alive) return
 
@@ -706,7 +709,7 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
     })
 
     return () => { alive = false }
-  }, [useMock, subTab, costLoaded, costLoading, days])
+  }, [useMock, subTab, costLoaded, costLoading, daysParam])
 
   const SUB_TABS: { key: SubTab; label: string; icon: React.ReactElement; accent: string }[] = [
     { key: 'platform', label: 'Platform Intelligence', icon: <QueryStatsIcon />,  accent: '#6a1b9a' },

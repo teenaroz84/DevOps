@@ -59,7 +59,7 @@ router.get('/cost-summary', async (req: Request, res: Response) => {
       )::numeric, 2) AS remaining_balance
       FROM edoops.sf_remaining_balance_daily
       WHERE usage_date = (
-        SELECT MAX(usage_date) FROM edoops.sf_remaining_balance_daily
+        SELECT MAX(date) FROM edoops.sf_remaining_balance_daily
       )
     ),
     opp_cte AS (
@@ -77,7 +77,7 @@ router.get('/cost-summary', async (req: Request, res: Response) => {
       rate_cte AS (
         SELECT COALESCE(AVG(NULLIF(effective_rate::text, '')::numeric), 0) AS avg_rate
         FROM edoops.sf_rate_sheet_daily
-        WHERE NULLIF(usage_date::text, '')::date >= CURRENT_DATE - INTERVAL '${days} day'
+        WHERE NULLIF(date::text, '')::date >= CURRENT_DATE - INTERVAL '${days} day'
       )
       SELECT ROUND((wasted.wasted_credits * rate_cte.avg_rate)::numeric, 2) AS optimization_opportunity_currency_7d
       FROM wasted

@@ -3,11 +3,12 @@
  */
 import { apiClient } from './apiClient'
 
-const withDays = (path: string, days = 3) => `${path}?days=${days}`
+const withDays = (path: string, days?: number) =>
+  typeof days === 'number' ? `${path}?days=${days}` : path
 
 export const snowflakeService = {
   // Backward-compatible shape used by ExecutiveDashboard.
-  getCost: async (days = 3) => {
+  getCost: async (days?: number) => {
     const summary = await apiClient.get(withDays('/api/snowflake/cost-summary', days))
     const total = Number(summary?.monthly_cost ?? summary?.cost_mtd ?? 0)
     const budget = Number(summary?.budget ?? 0)
@@ -20,18 +21,18 @@ export const snowflakeService = {
       ...summary,
     }
   },
-  getCostSummary:    (days = 3) => apiClient.get(withDays('/api/snowflake/cost-summary', days)),
-  getCostByPipeline: (days = 3) => apiClient.get(withDays('/api/snowflake/cost-by-pipeline', days)),
-  getCostScatter:    (days = 3) => apiClient.get(withDays('/api/snowflake/cost-scatter', days)),
-  getWarehouseCostEfficiency: (days = 3) => apiClient.get(withDays('/api/snowflake/warehouse-cost-efficiency', days)),
-  getCostByDuration: (days = 3) => apiClient.get(withDays('/api/snowflake/cost-by-duration', days)),
-  getTopCostlyJobs:  (days = 3) => apiClient.get(withDays('/api/snowflake/top-costly-jobs', days)),
-  getPlatformSummary:(days = 3) => apiClient.get(withDays('/api/snowflake/platform-summary', days)),
-  getWarehouseHeatmap:(days = 3) => apiClient.get(withDays('/api/snowflake/warehouse-heatmap', days)),
-  getHourlyQueries:  (days = 3) => apiClient.get(withDays('/api/snowflake/hourly-queries', days)),
-  getTopSlowQueries: (days = 3) => apiClient.get(withDays('/api/snowflake/top-slow-queries', days)),
-  getQueryVolumeTrend:(days = 3) => apiClient.get(withDays('/api/snowflake/query-volume-trend', days)),
-  getTaskReliability: (days = 3) => apiClient.get(withDays('/api/snowflake/task-reliability', days)),
-  getLoginFailures:   (days = 3) => apiClient.get(withDays('/api/snowflake/login-failures', days)),
-  getStorageGrowth:   (days = 3) => apiClient.get(withDays('/api/snowflake/storage-growth', days)),
+  getCostSummary:    (days?: number) => apiClient.get(withDays('/api/snowflake/cost-summary', days)),
+  getCostByPipeline: (days?: number) => apiClient.get(withDays('/api/snowflake/cost-by-pipeline', days)),
+  getCostScatter:    (days?: number) => apiClient.get(withDays('/api/snowflake/cost-scatter', days)),
+  getWarehouseCostEfficiency: (days?: number) => apiClient.get(withDays('/api/snowflake/warehouse-cost-efficiency', days)),
+  getCostByDuration: (days?: number) => apiClient.get(withDays('/api/snowflake/cost-by-duration', days)),
+  getTopCostlyJobs:  (days?: number) => apiClient.get(withDays('/api/snowflake/top-costly-jobs', days)),
+  getPlatformSummary:(days?: number) => apiClient.get(withDays('/api/snowflake/platform-summary', days)),
+  getWarehouseHeatmap:(days?: number) => apiClient.get(withDays('/api/snowflake/warehouse-heatmap', days)),
+  getHourlyQueries:  (days?: number) => apiClient.get(withDays('/api/snowflake/hourly-queries', days)),
+  getTopSlowQueries: (days?: number) => apiClient.get(withDays('/api/snowflake/top-slow-queries', days)),
+  getQueryVolumeTrend:(days?: number) => apiClient.get(withDays('/api/snowflake/query-volume-trend', days)),
+  getTaskReliability: (days?: number) => apiClient.get(withDays('/api/snowflake/task-reliability', days)),
+  getLoginFailures:   (days?: number) => apiClient.get(withDays('/api/snowflake/login-failures', days)),
+  getStorageGrowth:   (days?: number) => apiClient.get(withDays('/api/snowflake/storage-growth', days)),
 }
