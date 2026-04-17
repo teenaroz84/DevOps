@@ -441,7 +441,7 @@ router.get('/agent/:agentId', async (req: Request, res: Response) => {
 
   try {
     let cursor: Record<string, unknown> | undefined;
-    const sessions: SessionSummary[] = [];
+    const sessionsById = new Map<string, SessionSummary>();
 
     for (let page = 0; page < 25; page += 1) {
       const result = await getClient().send(new ScanCommand({
@@ -465,14 +465,18 @@ router.get('/agent/:agentId', async (req: Request, res: Response) => {
           parsedMessages = [];
         }
 
-        sessions.push(buildSessionSummary(sessionId, parsedMessages, String(raw.updated_at ?? '')));
+        const summary = buildSessionSummary(sessionId, parsedMessages, String(raw.updated_at ?? ''));
+        const existing = sessionsById.get(sessionId);
+        if (!existing || summary.updatedAt > existing.updatedAt) {
+          sessionsById.set(sessionId, summary);
+        }
       }
 
       if (!result.LastEvaluatedKey) break;
       cursor = result.LastEvaluatedKey as Record<string, unknown>;
     }
 
-    sessions.sort((a, b) => b.updatedAt - a.updatedAt);
+    const sessions = Array.from(sessionsById.values()).sort((a, b) => b.updatedAt - a.updatedAt);
     res.json({ sessions });
   } catch (err: any) {
     console.warn('[sessions] LIST failed, returning empty session list:', err.message);

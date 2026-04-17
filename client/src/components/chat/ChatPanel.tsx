@@ -35,6 +35,7 @@ import KeyboardDoubleArrowRightIcon from '@mui/icons-material/KeyboardDoubleArro
 import { chatService } from '../../services'
 import { AGENTS } from '../../config/agentConfig'
 import type { AgentConfig } from '../../config/agentConfig'
+import { SESSION_ID } from '../../services/session'
 // import { sessionStore } from '../../services/sessionStore'
 import { FormattedMessage } from './FormattedMessage'
 
@@ -141,6 +142,61 @@ function formatSessionTime(timestamp: number): string {
   return new Date(timestamp).toLocaleDateString()
 }
 
+function getSessionListStorageKey(agentId: string): string {
+  return `chat_sessions_${SESSION_ID}_${agentId}`
+}
+
+function getSessionHistoryStorageKey(agentId: string, sessionId: string): string {
+  return `chat_history_${SESSION_ID}_${agentId}_${sessionId}`
+}
+
+function readStoredSessions(agentId: string): ChatSessionSummary[] {
+  try {
+    const raw = localStorage.getItem(getSessionListStorageKey(agentId))
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((item: any) => item?.sessionId)
+  } catch {
+    return []
+  }
+}
+
+function writeStoredSessions(agentId: string, sessions: ChatSessionSummary[]): void {
+  try {
+    localStorage.setItem(getSessionListStorageKey(agentId), JSON.stringify(sessions))
+  } catch {
+    // best-effort cache
+  }
+}
+
+function readStoredHistory(agentId: string, sessionId: string): Message[] {
+  try {
+    const raw = localStorage.getItem(getSessionHistoryStorageKey(agentId, sessionId))
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed as Message[] : []
+  } catch {
+    return []
+  }
+}
+
+function writeStoredHistory(agentId: string, sessionId: string, messages: Message[]): void {
+  try {
+    localStorage.setItem(getSessionHistoryStorageKey(agentId, sessionId), JSON.stringify(messages))
+  } catch {
+    // best-effort cache
+  }
+}
+
+function removeStoredHistory(agentId: string, sessionId: string): void {
+  try {
+    localStorage.removeItem(getSessionHistoryStorageKey(agentId, sessionId))
+  } catch {
+    // best-effort cache
+  }
+}
+
 interface ChatPanelProps {
   isOpen: boolean
   onClose: () => void
@@ -192,15 +248,6 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
   // ── Session state ────────────────────────────────────────────────────────
   // Start with localStorage for instant paint, then hydrate from DynamoDB.
   const [messages, setMessages] = useState<Message[]>(() => {
-    // try {
-    //   const saved = localStorage.getItem(`chat_history_${agent.id}`)
-    //   if (saved) {
-    //     const parsed = JSON.parse(saved) as Message[]
-    //     return [WELCOME_MESSAGE, ...parsed.slice(1)]
-    //   }
-    // } catch {
-    //   // corrupted data — fall through
-    // }
     return [WELCOME_MESSAGE]
   })
   const [sessionLoading, setSessionLoading] = useState(false)
@@ -219,11 +266,20 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
           type: m.type as Message['type'],
         })) as Message[]
         setMessages([welcome, ...typed.slice(1)])
+        writeStoredHistory(agentId, sessionId, [welcome, ...typed.slice(1)])
       } else {
-        setMessages([welcome])
+        const cached = readStoredHistory(agentId, sessionId)
+        if (cached.length > 0) {
+          setMessages([welcome, ...cached.slice(1)])
+        } else {
+          setMessages([welcome])
+        }
       }
     } catch {
-      // DynamoDB unreachable — keep current messages
+      const cached = readStoredHistory(agentId, sessionId)
+      if (cached.length > 0) {
+        setMessages([welcome, ...cached.slice(1)])
+      }
     } finally {
       setSessionLoading(false)
       isInitializing.current = false
@@ -239,26 +295,45 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
       setMessages([WELCOME_MESSAGE])
       setSessionLoading(true)
       setSessionListLoading(true)
+      const cachedSessions = readStoredSessions(agent.id)
 
       try {
         const remoteSessions = await chatService.listSessions(agent.id)
         if (!alive) return
 
-        if (remoteSessions.length > 0) {
-          const ordered = [...remoteSessions].sort((a, b) => b.updatedAt - a.updatedAt)
+        const combined = [...remoteSessions, ...cachedSessions]
+          .reduce((acc, session) => {
+            const existing = acc.get(session.sessionId)
+            if (!existing || session.updatedAt > existing.updatedAt) {
+              acc.set(session.sessionId, session)
+            }
+            return acc
+          }, new Map<string, ChatSessionSummary>())
+
+        if (combined.size > 0) {
+          const ordered = [...combined.values()].sort((a, b) => b.updatedAt - a.updatedAt)
+          writeStoredSessions(agent.id, ordered)
           setChatSessions(ordered)
           setActiveSessionId(ordered[0].sessionId)
           return
         }
 
         const starter = buildSessionSummary(createSessionId(), [WELCOME_MESSAGE])
+        writeStoredSessions(agent.id, [starter])
         setChatSessions([starter])
         setActiveSessionId(starter.sessionId)
       } catch {
         if (!alive) return
-        const starter = buildSessionSummary(createSessionId(), [WELCOME_MESSAGE])
-        setChatSessions([starter])
-        setActiveSessionId(starter.sessionId)
+        if (cachedSessions.length > 0) {
+          const ordered = [...cachedSessions].sort((a, b) => b.updatedAt - a.updatedAt)
+          setChatSessions(ordered)
+          setActiveSessionId(ordered[0].sessionId)
+        } else {
+          const starter = buildSessionSummary(createSessionId(), [WELCOME_MESSAGE])
+          writeStoredSessions(agent.id, [starter])
+          setChatSessions([starter])
+          setActiveSessionId(starter.sessionId)
+        }
       } finally {
         if (alive) {
           setSessionLoading(false)
@@ -468,11 +543,14 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
     // Skip DynamoDB sync while the initial load is still in flight or agent is switching
     if (!sessionLoading && !isInitializing.current && activeSessionId) {
       chatService.saveSession(agent.id, messages, activeSessionId)
+      writeStoredHistory(agent.id, activeSessionId, messages)
 
       const summary = buildSessionSummary(activeSessionId, messages)
       setChatSessions(prev => {
         const others = prev.filter(item => item.sessionId !== activeSessionId)
-        return [summary, ...others]
+        const next = [summary, ...others]
+        writeStoredSessions(agent.id, next)
+        return next
       })
     }
   }, [messages, agent.id, sessionLoading, activeSessionId])
@@ -578,16 +656,26 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
     isInitializing.current = false
     setMessages([WELCOME_MESSAGE])
     setInput('')
-    setChatSessions(prev => [buildSessionSummary(activeSessionId, [WELCOME_MESSAGE]), ...prev.filter(item => item.sessionId !== activeSessionId)])
+    writeStoredHistory(agent.id, activeSessionId, [WELCOME_MESSAGE])
+    setChatSessions(prev => {
+      const next = [buildSessionSummary(activeSessionId, [WELCOME_MESSAGE]), ...prev.filter(item => item.sessionId !== activeSessionId)]
+      writeStoredSessions(agent.id, next)
+      return next
+    })
   }
 
   const createNewChat = useCallback(() => {
     const nextSessionId = createSessionId()
     const nextSummary = buildSessionSummary(nextSessionId, [WELCOME_MESSAGE])
     isInitializing.current = false
-    setChatSessions(prev => [nextSummary, ...prev])
+    setChatSessions(prev => {
+      const next = [nextSummary, ...prev]
+      writeStoredSessions(agent.id, next)
+      return next
+    })
     setActiveSessionId(nextSessionId)
     setMessages([WELCOME_MESSAGE])
+    writeStoredHistory(agent.id, nextSessionId, [WELCOME_MESSAGE])
     setInput('')
     setLoading(false)
     setLoadingSessionId(null)
@@ -604,13 +692,16 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
   const deleteChatSession = useCallback((sessionId: string) => {
     const remaining = chatSessions.filter((session) => session.sessionId !== sessionId)
     chatService.clearSession(agent.id, sessionId)
+    removeStoredHistory(agent.id, sessionId)
 
     if (remaining.length === 0) {
       const starter = buildSessionSummary(createSessionId(), [WELCOME_MESSAGE])
       isInitializing.current = false
       setChatSessions([starter])
+      writeStoredSessions(agent.id, [starter])
       setActiveSessionId(starter.sessionId)
       setMessages([WELCOME_MESSAGE])
+      writeStoredHistory(agent.id, starter.sessionId, [WELCOME_MESSAGE])
       setInput('')
       setLoading(false)
       setLoadingSessionId(null)
@@ -618,6 +709,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
     }
 
     setChatSessions(remaining)
+    writeStoredSessions(agent.id, remaining)
 
     if (activeSessionId === sessionId) {
       isInitializing.current = true
