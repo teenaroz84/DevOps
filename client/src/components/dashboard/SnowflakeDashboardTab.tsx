@@ -417,12 +417,24 @@ const PlatformIntelligenceScreen: React.FC<{ data: PlatformData }> = ({ data }) 
   const heatValues = data.heatmap.map(r => r.cells.map(c => c.value))
 
   const utilColor = (v: number) => {
-    if (v > 85) return '#e53935'
-    if (v > 70) return '#fb8c00'
-    if (v > 55) return '#fdd835'
-    if (v > 35) return '#9ccc65'
-    return '#42a5f5'
+    if (v >= 90) return '#d50000'
+    if (v >= 80) return '#ff6d00'
+    if (v >= 70) return '#ffd600'
+    if (v >= 60) return '#aeea00'
+    if (v >= 50) return '#00c853'
+    if (v >= 40) return '#00b8d4'
+    if (v >= 30) return '#2979ff'
+    if (v >= 20) return '#7c4dff'
+    return '#b388ff'
   }
+
+  const heatLegend = [
+    { label: '90-100%', color: '#d50000' },
+    { label: '70-89%', color: '#ffd600' },
+    { label: '50-69%', color: '#00c853' },
+    { label: '30-49%', color: '#2979ff' },
+    { label: '0-29%', color: '#b388ff' },
+  ]
 
   const queryCols: ColumnDef[] = [
     { key: 'pipeline',   header: 'Pipeline',      width: 180 },
@@ -470,6 +482,16 @@ const PlatformIntelligenceScreen: React.FC<{ data: PlatformData }> = ({ data }) 
             rowLabels={heatRows}
             showLegend={false}
           />
+          <Box sx={{ mt: 1.25, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            {heatLegend.map((item) => (
+              <Box key={item.label} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <Box sx={{ width: 11, height: 11, borderRadius: '3px', backgroundColor: item.color }} />
+                <Typography sx={{ fontSize: '10px', color: '#607d8b', fontWeight: 600 }}>
+                  {item.label}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
         </Paper>
 
         <Paper elevation={0} sx={{ p: 2, minWidth: 0, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #42a5f5', borderRadius: 2 }}>
@@ -567,7 +589,7 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
   const [platformLoading, setPlatformLoading] = useState(true)
   const [costLoading, setCostLoading] = useState(false)
   const asOfDate = asOfOption === 'sample' ? '2026-03-12' : undefined
-  const queryParams = { days, asOf: asOfDate }
+   const queryParams = { days, asOf: asOfDate }
 
   const [costData, setCostData] = useState<CostData>({
     summary: EMPTY_COST_SUMMARY,
