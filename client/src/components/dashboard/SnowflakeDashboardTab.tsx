@@ -5,7 +5,7 @@
  *   2. Cost & Efficiency Overview
  */
 import React, { useState, useEffect } from 'react'
-import { Box, Typography, Paper, Chip, Tooltip, Button, CircularProgress } from '@mui/material'
+import { Box, Typography, Paper, Chip, Tooltip, Button, CircularProgress, Slider } from '@mui/material'
 import AcUnitIcon from '@mui/icons-material/AcUnit'
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney'
 import QueryStatsIcon from '@mui/icons-material/QueryStats'
@@ -561,10 +561,13 @@ type SubTab = 'cost' | 'platform'
 export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void }> = ({ onOpenAgent }) => {
   const { useMock } = useMockData()
   const [subTab, setSubTab] = useState<SubTab>('platform')
+  const [days, setDays] = useState(30)
+  const [asOfOption, setAsOfOption] = useState<'sample' | 'current'>('sample')
   const [isLive, setIsLive] = useState(false)
   const [platformLoading, setPlatformLoading] = useState(true)
   const [costLoading, setCostLoading] = useState(false)
-  const [costLoaded, setCostLoaded] = useState(false)
+  const asOfDate = asOfOption === 'sample' ? '2026-03-12' : undefined
+  const queryParams = { days, asOf: asOfDate }
 
   const [costData, setCostData] = useState<CostData>({
     summary: EMPTY_COST_SUMMARY,
@@ -592,7 +595,6 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
     setIsLive(false)
     setPlatformLoading(true)
     setCostLoading(false)
-    setCostLoaded(false)
 
     if (useMock) {
       setCostData({
@@ -614,7 +616,6 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
         storageGrowth:    MOCK_SF_STORAGE_GROWTH,
         alert:            MOCK_SF_ALERT,
       })
-      setCostLoaded(true)
       setPlatformLoading(false)
       return () => { alive = false }
     }
@@ -632,13 +633,13 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
     })
 
     Promise.allSettled([
-      snowflakeService.getPlatformSummary(),   // 0
-      snowflakeService.getWarehouseHeatmap(),  // 1
-      snowflakeService.getTopSlowQueries(),    // 2
-      snowflakeService.getQueryVolumeTrend(),  // 3
-      snowflakeService.getTaskReliability(),   // 4
-      snowflakeService.getLoginFailures(),     // 5
-      snowflakeService.getStorageGrowth(),     // 6
+      snowflakeService.getPlatformSummary(queryParams),   // 0
+      snowflakeService.getWarehouseHeatmap(queryParams),  // 1
+      snowflakeService.getTopSlowQueries(queryParams),    // 2
+      snowflakeService.getQueryVolumeTrend(queryParams),  // 3
+      snowflakeService.getTaskReliability(queryParams),   // 4
+      snowflakeService.getLoginFailures(queryParams),     // 5
+      snowflakeService.getStorageGrowth(queryParams),     // 6
     ]).then((results) => {
       if (!alive) return
 
@@ -664,22 +665,22 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
       if (successCount > 0) setIsLive(true)
     })
     return () => { alive = false }
-  }, [useMock])
+  }, [useMock, days, asOfDate])
 
   useEffect(() => {
-    if (useMock || subTab !== 'cost' || costLoaded || costLoading) return
+    if (useMock || subTab !== 'cost') return
 
     let alive = true
     setCostLoading(true)
 
     Promise.allSettled([
-      snowflakeService.getCostSummary(),       // 0
-      snowflakeService.getCostByPipeline(),    // 1
-      snowflakeService.getCostScatter(),       // 2
-      snowflakeService.getWarehouseCostEfficiency(), // 3
-      snowflakeService.getCostByDuration(),    // 4
-      snowflakeService.getTopCostlyJobs(),     // 5
-      snowflakeService.getStorageGrowth(),     // 6
+      snowflakeService.getCostSummary(queryParams),       // 0
+      snowflakeService.getCostByPipeline(queryParams),    // 1
+      snowflakeService.getCostScatter(queryParams),       // 2
+      snowflakeService.getWarehouseCostEfficiency(queryParams), // 3
+      snowflakeService.getCostByDuration(queryParams),    // 4
+      snowflakeService.getTopCostlyJobs(queryParams),     // 5
+      snowflakeService.getStorageGrowth(queryParams),     // 6
     ]).then((results) => {
       if (!alive) return
 
@@ -700,15 +701,16 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
         })
 
         const successCount = results.filter(r => r.status === 'fulfilled').length
-        setCostLoaded(true)
         if (successCount > 0) setIsLive(true)
       } finally {
-        setCostLoading(false)
+        if (alive) setCostLoading(false)
       }
     })
 
-    return () => { alive = false }
-  }, [useMock, subTab, costLoaded])
+    return () => {
+      alive = false
+    }
+  }, [useMock, subTab, days, asOfDate])
 
   const SUB_TABS: { key: SubTab; label: string; icon: React.ReactElement; accent: string }[] = [
     { key: 'platform', label: 'Platform Intelligence', icon: <QueryStatsIcon />,  accent: '#6a1b9a' },
@@ -781,6 +783,58 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
             </Box>
           ))}
         </Box>
+
+        {!useMock && (
+          <Box sx={{ py: 1.25, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 220, flex: 1 }}>
+              <Typography sx={{ fontSize: '10px', color: '#607d8b', fontWeight: 700, textTransform: 'uppercase', mb: 0.4 }}>
+                Lookback Window
+              </Typography>
+              <Slider
+                min={1}
+                max={90}
+                step={1}
+                marks={[{ value: 1, label: '1d' }, { value: 7, label: '7d' }, { value: 30, label: '30d' }, { value: 60, label: '60d' }, { value: 90, label: '90d' }]}
+                value={days}
+                onChange={(_, value) => setDays(Number(value))}
+                valueLabelDisplay="auto"
+                sx={{ mt: 1, maxWidth: 380 }}
+              />
+            </Box>
+
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+              <Typography sx={{ fontSize: '10px', color: '#607d8b', fontWeight: 700, textTransform: 'uppercase' }}>
+                Reference Date
+              </Typography>
+              <Chip
+                size="small"
+                label="Mar 12, 2026"
+                onClick={() => setAsOfOption('sample')}
+                sx={{
+                  fontSize: '10px',
+                  height: 22,
+                  fontWeight: 700,
+                  backgroundColor: asOfOption === 'sample' ? '#e3f2fd' : '#f4f7fb',
+                  color: asOfOption === 'sample' ? '#0d47a1' : '#607d8b',
+                  border: asOfOption === 'sample' ? '1px solid #90caf9' : '1px solid #e0e7ef',
+                }}
+              />
+              <Chip
+                size="small"
+                label="Current Date"
+                onClick={() => setAsOfOption('current')}
+                sx={{
+                  fontSize: '10px',
+                  height: 22,
+                  fontWeight: 700,
+                  backgroundColor: asOfOption === 'current' ? '#e8f5e9' : '#f4f7fb',
+                  color: asOfOption === 'current' ? '#1b5e20' : '#607d8b',
+                  border: asOfOption === 'current' ? '1px solid #a5d6a7' : '1px solid #e0e7ef',
+                }}
+              />
+            </Box>
+          </Box>
+        )}
       </Paper>
 
       {/* Content */}
