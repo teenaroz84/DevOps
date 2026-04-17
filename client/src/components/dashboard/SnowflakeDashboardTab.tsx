@@ -683,29 +683,32 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
     ]).then((results) => {
       if (!alive) return
 
-      const [summary, byPipeline, scatter, warehouseCostEfficiency, byDuration, topCostlyJobs, storageGrowth] = results
+      try {
+        const [summary, byPipeline, scatter, warehouseCostEfficiency, byDuration, topCostlyJobs, storageGrowth] = results
 
-      const valueOr = <T,>(result: PromiseSettledResult<T>, fallback: T): T =>
-        result.status === 'fulfilled' ? result.value : fallback
+        const valueOr = <T,>(result: PromiseSettledResult<T>, fallback: T): T =>
+          result.status === 'fulfilled' ? result.value : fallback
 
-      setCostData({
-        summary:       valueOr(summary,       EMPTY_COST_SUMMARY),
-        byPipeline:    valueOr(byPipeline,    []),
-        scatter:       valueOr(scatter,       []),
-        warehouseCostEfficiency: valueOr(warehouseCostEfficiency, []),
-        byDuration:    valueOr(byDuration,    []),
-        topCostlyJobs: valueOr(topCostlyJobs, []),
-        storageGrowth: valueOr(storageGrowth, []),
-      })
+        setCostData({
+          summary:       valueOr(summary,       EMPTY_COST_SUMMARY),
+          byPipeline:    valueOr(byPipeline,    []),
+          scatter:       valueOr(scatter,       []),
+          warehouseCostEfficiency: valueOr(warehouseCostEfficiency, []),
+          byDuration:    valueOr(byDuration,    []),
+          topCostlyJobs: valueOr(topCostlyJobs, []),
+          storageGrowth: valueOr(storageGrowth, []),
+        })
 
-      const successCount = results.filter(r => r.status === 'fulfilled').length
-      setCostLoaded(true)
-      setCostLoading(false)
-      if (successCount > 0) setIsLive(true)
+        const successCount = results.filter(r => r.status === 'fulfilled').length
+        setCostLoaded(true)
+        if (successCount > 0) setIsLive(true)
+      } finally {
+        setCostLoading(false)
+      }
     })
 
     return () => { alive = false }
-  }, [useMock, subTab, costLoaded, costLoading])
+  }, [useMock, subTab, costLoaded])
 
   const SUB_TABS: { key: SubTab; label: string; icon: React.ReactElement; accent: string }[] = [
     { key: 'platform', label: 'Platform Intelligence', icon: <QueryStatsIcon />,  accent: '#6a1b9a' },
