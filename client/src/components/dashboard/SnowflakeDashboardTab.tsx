@@ -817,8 +817,8 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
         </Box>
 
         {/* Sub-tabs and controls */}
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
-          <Box sx={{ display: 'flex', gap: 0 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
+          <Box sx={{ display: 'flex', gap: 0, flex: 1, minWidth: 0, overflowX: 'auto', overflowY: 'hidden', scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' } }}>
             {SUB_TABS.map(t => (
               <Box
                 key={t.key}
@@ -827,6 +827,8 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
                   display: 'flex', alignItems: 'center', gap: 0.75,
                   px: 2, py: 1,
                   cursor: 'pointer',
+                  flexShrink: 0,
+                  whiteSpace: 'nowrap',
                   borderBottom: subTab === t.key ? `3px solid ${t.accent}` : '3px solid transparent',
                   color: subTab === t.key ? t.accent : '#78909c',
                   '&:hover': { color: t.accent },
@@ -842,52 +844,27 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
           </Box>
 
           {!useMock && (
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1, flexWrap: 'wrap', py: 0.5 }}>
-              <Typography sx={{ fontSize: '11px', color: asOfOption === 'sample' ? '#90a4ae' : '#777', whiteSpace: 'nowrap' }}>{sliderLabel}</Typography>
-              <Slider
-                min={0}
-                max={30}
-                step={1}
-                value={sliderValue}
-                onChange={handleLookbackChange}
-                valueLabelDisplay="auto"
-                sx={{
-                  color: TRUIST.purple,
-                  width: 160,
-                  '& .MuiSlider-thumb': { width: 12, height: 12 },
-                  '& .MuiSlider-rail': { opacity: 0.3 },
-                }}
-              />
-              <Typography sx={{ fontSize: '10px', color: '#bbb', whiteSpace: 'nowrap' }}>30d</Typography>
-              <Typography sx={{ fontSize: '10px', color: '#607d8b', fontWeight: 700, textTransform: 'uppercase', ml: 0.5 }}>
-                Reference Date
-              </Typography>
-              <Chip
-                size="small"
-                label="Mar 12, 2026"
-                onClick={handleSelectSampleDate}
-                sx={{
-                  fontSize: '10px',
-                  height: 22,
-                  fontWeight: 700,
-                  backgroundColor: asOfOption === 'sample' ? '#e3f2fd' : '#f4f7fb',
-                  color: asOfOption === 'sample' ? TRUIST.purple : TRUIST.dusk,
-                  border: asOfOption === 'sample' ? `1px solid ${TRUIST.dawn}` : `1px solid ${TRUIST.lightGray}`,
-                }}
-              />
-              <Chip
-                size="small"
-                label="Current Date"
-                onClick={handleSelectCurrentDate}
-                sx={{
-                  fontSize: '10px',
-                  height: 22,
-                  fontWeight: 700,
-                  backgroundColor: asOfOption === 'current' ? TRUIST.mist : '#f4f7fb',
-                  color: asOfOption === 'current' ? TRUIST.charcoal : TRUIST.dusk,
-                  border: asOfOption === 'current' ? `1px solid ${TRUIST.sky}` : `1px solid ${TRUIST.lightGray}`,
-                }}
-              />
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1.5, flexWrap: 'nowrap', py: 0.5, flexShrink: 0, minWidth: { xs: '100%', md: 'auto' } }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0, minWidth: { xs: 0, md: 220 } }}>
+                <Typography sx={{ fontSize: '11px', color: asOfOption === 'sample' ? '#90a4ae' : '#777', whiteSpace: 'nowrap', flexShrink: 0 }}>{sliderLabel}</Typography>
+                <Slider
+                  min={0}
+                  max={30}
+                  step={1}
+                  value={sliderValue}
+                  onChange={handleLookbackChange}
+                  valueLabelDisplay="auto"
+                  sx={{
+                    color: TRUIST.purple,
+                    width: { xs: 120, md: 140, lg: 170 },
+                    flexShrink: 0,
+                    '& .MuiSlider-thumb': { width: 12, height: 12 },
+                    '& .MuiSlider-rail': { opacity: 0.3 },
+                  }}
+                />
+                <Typography sx={{ fontSize: '10px', color: '#bbb', whiteSpace: 'nowrap', flexShrink: 0 }}>30d</Typography>
+              </Box>
+
               {onOpenAgent && (
                 <Button
                   size="small"
@@ -902,6 +879,9 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
                     height: 26,
                     px: 1.5,
                     color: TRUIST.white,
+                    flexShrink: 0,
+                    whiteSpace: 'nowrap',
+                    alignSelf: 'center',
                     '&:hover': { backgroundColor: TRUIST.dusk },
                   }}
                 >
@@ -911,6 +891,40 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
             </Box>
           )}
         </Box>
+
+        {!useMock && (
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1, flexWrap: 'wrap', py: 0.5 }}>
+            <Typography sx={{ fontSize: '10px', color: '#607d8b', fontWeight: 700, textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+              Reference Date
+            </Typography>
+            <Chip
+              size="small"
+              label="Mar 12, 2026"
+              onClick={handleSelectSampleDate}
+              sx={{
+                fontSize: '10px',
+                height: 22,
+                fontWeight: 700,
+                backgroundColor: asOfOption === 'sample' ? '#e3f2fd' : '#f4f7fb',
+                color: asOfOption === 'sample' ? TRUIST.purple : TRUIST.dusk,
+                border: asOfOption === 'sample' ? `1px solid ${TRUIST.dawn}` : `1px solid ${TRUIST.lightGray}`,
+              }}
+            />
+            <Chip
+              size="small"
+              label="Current Date"
+              onClick={handleSelectCurrentDate}
+              sx={{
+                fontSize: '10px',
+                height: 22,
+                fontWeight: 700,
+                backgroundColor: asOfOption === 'current' ? TRUIST.mist : '#f4f7fb',
+                color: asOfOption === 'current' ? TRUIST.charcoal : TRUIST.dusk,
+                border: asOfOption === 'current' ? `1px solid ${TRUIST.sky}` : `1px solid ${TRUIST.lightGray}`,
+              }}
+            />
+          </Box>
+        )}
 
       </Paper>
 
