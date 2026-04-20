@@ -632,13 +632,13 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
   const { useMock } = useMockData()
   const [subTab, setSubTab] = useState<SubTab>('platform')
   const [days, setDays] = useState(30)
+  const [sliderDays, setSliderDays] = useState(30)
   const [asOfOption, setAsOfOption] = useState<'sample' | 'current'>('sample')
   const [isLive, setIsLive] = useState(false)
   const [platformLoading, setPlatformLoading] = useState(true)
   const [costLoading, setCostLoading] = useState(false)
   const todayIsoDate = toIsoDate(new Date())
   const selectedAsOfDate = asOfOption === 'sample' ? SAMPLE_AS_OF_DATE : shiftIsoDate(todayIsoDate, days)
-  const selectedDateLabel = formatDisplayDate(selectedAsOfDate)
   const queryParams = { asOf: selectedAsOfDate }
   const [costData, setCostData] = useState<CostData>({
     summary: EMPTY_COST_SUMMARY,
@@ -660,6 +660,10 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
     storageGrowth: [],
     alert: 'Loading live Snowflake data...',
   })
+
+  useEffect(() => {
+    setSliderDays(days)
+  }, [days])
 
   useEffect(() => {
     let alive = true
@@ -789,22 +793,32 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
   ]
 
   const loading = subTab === 'platform' ? platformLoading : costLoading
-  const sliderValue = asOfOption === 'sample' ? 0 : days
-  const sliderLabel = asOfOption === 'sample' ? 'Sample Date' : selectedDateLabel
+  const previewAsOfDate = asOfOption === 'sample' ? SAMPLE_AS_OF_DATE : shiftIsoDate(todayIsoDate, sliderDays)
+  const sliderValue = asOfOption === 'sample' ? 0 : sliderDays
+  const sliderLabel = asOfOption === 'sample' ? 'Sample Date' : formatDisplayDate(previewAsOfDate)
   const costDayLabel =  'Cost Today' 
   const queriesDayLabel =  'Queries Today' 
 
   const handleLookbackChange = (_: Event, value: number | number[]) => {
     const nextDays = Number(Array.isArray(value) ? value[0] : value)
+    setSliderDays(nextDays)
+    setAsOfOption('current')
+  }
+
+  const handleLookbackCommit = (_: Event | React.SyntheticEvent, value: number | number[]) => {
+    const nextDays = Number(Array.isArray(value) ? value[0] : value)
+    setSliderDays(nextDays)
     setDays(nextDays)
     setAsOfOption('current')
   }
 
   const handleSelectSampleDate = () => {
+    setSliderDays(0)
     setAsOfOption('sample')
   }
 
   const handleSelectCurrentDate = () => {
+    setSliderDays(0)
     setDays(0)
     setAsOfOption('current')
   }
@@ -888,6 +902,7 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
                   step={1}
                   value={sliderValue}
                   onChange={handleLookbackChange}
+                  onChangeCommitted={handleLookbackCommit}
                   valueLabelDisplay="auto"
                   sx={{
                     color: TRUIST.purple,
