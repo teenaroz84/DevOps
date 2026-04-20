@@ -42,6 +42,20 @@ import { AGENTS } from '../../config/agentConfig'
 
 // ── Helpers ────────────────────────────────────────────────
 
+const TRUIST = {
+  purple: '#2E1A47',
+  white: '#FFFFFF',
+  dusk: '#7C6992',
+  sky: '#B0E0E2',
+  darkGray: '#787878',
+  charcoal: '#34343B',
+  dawn: '#AFABC9',
+  lightGray: '#C9C9C9',
+  midGray: '#A8A8A8',
+  shell: '#F6F4F8',
+  mist: '#EEF7F8',
+} as const
+
 const fmtK = (n: number) => `$${(n / 1000).toFixed(1)}k`
 const fmtDollar = (n?: number) => n != null ? `$${n.toLocaleString()}` : '—'
 
@@ -180,7 +194,7 @@ const ScatterPlot: React.FC<{ items: typeof MOCK_SF_COST_SCATTER }> = ({ items }
         const r = Math.max(2.5, Math.min(5.5, Math.sqrt(Math.max(1, d.runs)) / 8))
         return (
           <g key={i}>
-            <circle cx={x} cy={y} r={r} fill={DOT_COLORS[i % DOT_COLORS.length]} opacity={0.75} style={{ cursor: 'pointer' }} />
+            <circle cx={x} cy={y} r={r} fill={DOT_COLORS[i % DOT_COLORS.length]} opacity={0.82} style={{ cursor: 'pointer' }} />
             <title>{`${d.name}\nCredits: ${d.cost.toFixed(2)}\nQuery Count: ${d.runs.toLocaleString()}`}</title>
           </g>
         )
@@ -343,14 +357,14 @@ const CostEfficiencyScreen: React.FC<{ data: CostData }> = ({ data }) => {
 
       {/* Row 1: Cost by Service Type + Daily Cost Trend */}
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' }, gap: 2, alignItems: 'stretch', '& > *': { minWidth: 0 } }}>
-        <Paper elevation={0} sx={{ p: 2, minWidth: 0, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #1976d2', borderRadius: 2 }}>
+        <Paper elevation={0} sx={{ p: 2, minWidth: 0, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: `3px solid ${TRUIST.purple}`, borderRadius: 2 }}>
           <Typography sx={{ fontSize: '12px', fontWeight: 600, mb: 1, color: '#1a2535' }}>Cost by Service Type</Typography>
           <Box sx={{ height: 180, minWidth: 0, overflow: 'hidden' }}>
             <Treemap items={data.byPipeline} />
           </Box>
         </Paper>
 
-        <Paper elevation={0} sx={{ p: 2, minWidth: 0, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #6a1b9a', borderRadius: 2 }}>
+        <Paper elevation={0} sx={{ p: 2, minWidth: 0, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: `3px solid ${TRUIST.dusk}`, borderRadius: 2 }}>
           <Typography sx={{ fontSize: '12px', fontWeight: 600, mb: 1, color: '#1a2535' }}>Daily Cost Trend</Typography>
           <Box sx={{ height: 206, width: '100%', minWidth: 0, overflow: 'visible', pb: 1 }}>
             <ComposedBarLineChart
@@ -365,7 +379,7 @@ const CostEfficiencyScreen: React.FC<{ data: CostData }> = ({ data }) => {
 
       {/* Row 2: Warehouse Cost Efficiency + Top Costly Queries/Jobs */}
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' }, gap: 2, alignItems: 'stretch', '& > *': { minWidth: 0 } }}>
-        <Paper elevation={0} sx={{ p: 2, minWidth: 0, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #f57c00', borderRadius: 2, height: rowPanelHeight, display: 'flex', flexDirection: 'column' }}>
+        <Paper elevation={0} sx={{ p: 2, minWidth: 0, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: `3px solid ${TRUIST.sky}`, borderRadius: 2, height: rowPanelHeight, display: 'flex', flexDirection: 'column' }}>
           <Typography sx={{ fontSize: '12px', fontWeight: 600, mb: 1, color: '#1a2535' }}>Warehouse Cost Efficiency</Typography>
           <Box sx={{ height: 180, minWidth: 0, overflow: 'hidden', flexShrink: 0 }}>
             <ScatterPlot items={data.scatter} />
@@ -375,7 +389,7 @@ const CostEfficiencyScreen: React.FC<{ data: CostData }> = ({ data }) => {
           </Box>
         </Paper>
 
-        <Paper elevation={0} sx={{ minWidth: 0, border: '1px solid #e8ecf1', borderTop: '3px solid #c62828', borderRadius: 2, overflow: 'hidden', height: rowPanelHeight, display: 'flex', flexDirection: 'column' }}>
+        <Paper elevation={0} sx={{ minWidth: 0, border: '1px solid #e8ecf1', borderTop: `3px solid ${TRUIST.charcoal}`, borderRadius: 2, overflow: 'hidden', height: rowPanelHeight, display: 'flex', flexDirection: 'column' }}>
           <Box sx={{ px: 2, py: 1.5, backgroundColor: '#fafafa', borderBottom: '1px solid #e8ecf1' }}>
             <Typography sx={{ fontSize: '13px', fontWeight: 700, color: '#1a2535' }}>Top Costly Queries / Jobs</Typography>
           </Box>
@@ -386,7 +400,7 @@ const CostEfficiencyScreen: React.FC<{ data: CostData }> = ({ data }) => {
       </Box>
 
       {/* Row 3: Stage Storage Trend */}
-      <Paper elevation={0} sx={{ p: 2, minWidth: 0, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #00838f', borderRadius: 2 }}>
+      <Paper elevation={0} sx={{ p: 2, minWidth: 0, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: `3px solid ${TRUIST.darkGray}`, borderRadius: 2 }}>
         <Typography sx={{ fontSize: '12px', fontWeight: 600, mb: 1, color: '#1a2535' }}>Stage Storage Trend</Typography>
         <Box sx={{ height: 160, width: '100%', minWidth: 0, overflow: 'hidden' }}>
           {data.storageGrowth.length > 0 ? (
@@ -471,7 +485,7 @@ const PlatformIntelligenceScreen: React.FC<{ data: PlatformData }> = ({ data }) 
 
       {/* Row 1: Warehouse Heatmap + Query Volume & Performance */}
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '2fr 1fr' }, gap: 2, alignItems: 'stretch', '& > *': { minWidth: 0 } }}>
-        <Paper elevation={0} sx={{ p: 2, minWidth: 0, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #1976d2', borderRadius: 2 }}>
+        <Paper elevation={0} sx={{ p: 2, minWidth: 0, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: `3px solid ${TRUIST.purple}`, borderRadius: 2 }}>
           <Typography sx={{ fontSize: '12px', fontWeight: 600, mb: 1, color: '#1a2535' }}>Warehouse Usage Heatmap</Typography>
           <HeatmapGrid
             rows={heatRows}
@@ -494,7 +508,7 @@ const PlatformIntelligenceScreen: React.FC<{ data: PlatformData }> = ({ data }) 
           </Box>
         </Paper>
 
-        <Paper elevation={0} sx={{ p: 2, minWidth: 0, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #42a5f5', borderRadius: 2 }}>
+        <Paper elevation={0} sx={{ p: 2, minWidth: 0, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: `3px solid ${TRUIST.sky}`, borderRadius: 2 }}>
           <Typography sx={{ fontSize: '12px', fontWeight: 600, mb: 1, color: '#1a2535' }}>Query Volume & Performance</Typography>
           <Box sx={{ height: 180, width: '100%', minWidth: 0, overflow: 'hidden' }}>
             <ComposedBarLineChart
@@ -509,7 +523,7 @@ const PlatformIntelligenceScreen: React.FC<{ data: PlatformData }> = ({ data }) 
 
       {/* Row 2: Top Slow Queries + Task Reliability */}
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1.5fr 1fr' }, gap: 2, alignItems: 'stretch', '& > *': { minWidth: 0 } }}>
-        <Paper elevation={0} sx={{ minWidth: 0, border: '1px solid #e8ecf1', borderTop: '3px solid #e53935', borderRadius: 2, overflow: 'hidden', height: rowPanelHeight, display: 'flex', flexDirection: 'column' }}>
+        <Paper elevation={0} sx={{ minWidth: 0, border: '1px solid #e8ecf1', borderTop: `3px solid ${TRUIST.charcoal}`, borderRadius: 2, overflow: 'hidden', height: rowPanelHeight, display: 'flex', flexDirection: 'column' }}>
           <Box sx={{ px: 2, py: 1.5, backgroundColor: '#fafafa', borderBottom: '1px solid #e8ecf1' }}>
             <Typography sx={{ fontSize: '13px', fontWeight: 700, color: '#1a2535' }}>Top Slow Queries</Typography>
           </Box>
@@ -519,7 +533,7 @@ const PlatformIntelligenceScreen: React.FC<{ data: PlatformData }> = ({ data }) 
         </Paper>
 
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, height: '100%' }}>
-          <Paper elevation={0} sx={{ p: 2, minWidth: 0, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #43a047', borderRadius: 2, height: rowPanelHeight, display: 'flex', flexDirection: 'column' }}>
+          <Paper elevation={0} sx={{ p: 2, minWidth: 0, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: `3px solid ${TRUIST.dusk}`, borderRadius: 2, height: rowPanelHeight, display: 'flex', flexDirection: 'column' }}>
             <Typography sx={{ fontSize: '12px', fontWeight: 600, mb: 1, color: '#1a2535' }}>Task Reliability</Typography>
             <Box sx={{ flex: 1, minHeight: 220, width: '100%', minWidth: 0, overflow: 'hidden' }}>
               <ComposedBarLineChart
@@ -538,7 +552,7 @@ const PlatformIntelligenceScreen: React.FC<{ data: PlatformData }> = ({ data }) 
 
       {/* Row 3: Login Failures + Storage Growth */}
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' }, gap: 2, alignItems: 'stretch', '& > *': { minWidth: 0 } }}>
-        <Paper elevation={0} sx={{ p: 2, minWidth: 0, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #f57c00', borderRadius: 2 }}>
+        <Paper elevation={0} sx={{ p: 2, minWidth: 0, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: `3px solid ${TRUIST.sky}`, borderRadius: 2 }}>
           <Typography sx={{ fontSize: '12px', fontWeight: 600, mb: 1, color: '#1a2535' }}>Login Failures Trend</Typography>
           <Box sx={{ height: 160, width: '100%', minWidth: 0, overflow: 'hidden' }}>
             {data.loginFailures.length > 0 ? (
@@ -555,7 +569,7 @@ const PlatformIntelligenceScreen: React.FC<{ data: PlatformData }> = ({ data }) 
           </Box>
         </Paper>
 
-        <Paper elevation={0} sx={{ p: 2, minWidth: 0, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #00838f', borderRadius: 2 }}>
+        <Paper elevation={0} sx={{ p: 2, minWidth: 0, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: `3px solid ${TRUIST.darkGray}`, borderRadius: 2 }}>
           <Typography sx={{ fontSize: '12px', fontWeight: 600, mb: 1, color: '#1a2535' }}>Storage Growth Trend</Typography>
           <Box sx={{ height: 160, width: '100%', minWidth: 0, overflow: 'hidden' }}>
             {data.storageGrowth.length > 0 ? (
@@ -589,7 +603,7 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
   const [platformLoading, setPlatformLoading] = useState(true)
   const [costLoading, setCostLoading] = useState(false)
   const asOfDate = asOfOption === 'sample' ? '2026-03-12' : undefined
-   const queryParams = asOfDate ? { asOf: asOfDate } : undefined
+  const queryParams = asOfDate ? { asOf: asOfDate } : { days }
   const [costData, setCostData] = useState<CostData>({
     summary: EMPTY_COST_SUMMARY,
     byPipeline: [],
@@ -734,11 +748,31 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
   }, [useMock, subTab, days, asOfDate])
 
   const SUB_TABS: { key: SubTab; label: string; icon: React.ReactElement; accent: string }[] = [
-    { key: 'platform', label: 'Platform Intelligence', icon: <QueryStatsIcon />,  accent: '#6a1b9a' },
-    { key: 'cost',     label: 'Cost & Efficiency',     icon: <AttachMoneyIcon />, accent: '#1976d2' },
+    { key: 'platform', label: 'Platform Intelligence', icon: <QueryStatsIcon />,  accent: TRUIST.purple },
+    { key: 'cost',     label: 'Cost & Efficiency',     icon: <AttachMoneyIcon />, accent: TRUIST.dusk },
   ]
 
   const loading = subTab === 'platform' ? platformLoading : costLoading
+  const sliderValue = asOfOption === 'sample' ? 0 : days
+  const sliderLabel = asOfOption === 'sample' ? 'Sample Date' : `Last ${days}d`
+
+  const handleLookbackChange = (_: Event, value: number | number[]) => {
+    const nextDays = Number(Array.isArray(value) ? value[0] : value)
+    if (nextDays <= 0) {
+      setAsOfOption('sample')
+      return
+    }
+    setDays(nextDays)
+    setAsOfOption('current')
+  }
+
+  const handleSelectSampleDate = () => {
+    setAsOfOption('sample')
+  }
+
+  const handleSelectCurrentDate = () => {
+    setAsOfOption('current')
+  }
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
@@ -747,33 +781,34 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
         elevation={0}
         sx={{ borderRadius: 0, borderBottom: '1px solid #e8ecf1', px: 2, pt: 1.5, pb: 0, backgroundColor: '#fff', position: 'sticky', top: 0, zIndex: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.07)' }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, mb: 1, flexWrap: 'wrap' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <AcUnitIcon sx={{ color: '#29b6f6', fontSize: 20 }} />
+            <AcUnitIcon sx={{ color: TRUIST.purple, fontSize: 20 }} />
             <Typography sx={{ fontWeight: 700, fontSize: '14px', color: '#1a2535' }}>
               Snowflake Analytics
             </Typography>
             {useMock
-              ? <Chip label="MOCK DATA" size="small" sx={{ fontSize: '9px', height: 16, backgroundColor: '#fff3e0', color: '#e65100', fontWeight: 700 }} />
+              ? <Chip label="MOCK DATA" size="small" sx={{ fontSize: '9px', height: 16, backgroundColor: TRUIST.shell, color: TRUIST.dusk, fontWeight: 700, border: `1px solid ${TRUIST.dawn}` }} />
               : isLive
-              ? <Chip label="LIVE" size="small" sx={{ fontSize: '9px', height: 16, backgroundColor: '#e8f5e9', color: '#2e7d32', fontWeight: 700 }} />
-              : <Chip label="LIVE (NO DATA)" size="small" sx={{ fontSize: '9px', height: 16, backgroundColor: '#ffebee', color: '#c62828', fontWeight: 700 }} />
+              ? <Chip label="LIVE" size="small" sx={{ fontSize: '9px', height: 16, backgroundColor: TRUIST.mist, color: TRUIST.purple, fontWeight: 700, border: `1px solid ${TRUIST.sky}` }} />
+              : <Chip label="LIVE (NO DATA)" size="small" sx={{ fontSize: '9px', height: 16, backgroundColor: '#efedf4', color: TRUIST.charcoal, fontWeight: 700, border: `1px solid ${TRUIST.lightGray}` }} />
             }
           </Box>
-          {onOpenAgent && (
+          {useMock && onOpenAgent && (
             <Button
               size="small"
               variant="contained"
               startIcon={<Box component="img" src={AGENTS.snowflake.icon} alt="Snowflake agent icon" sx={{ width: 14, height: 14, borderRadius: '50%', objectFit: 'contain', display: 'block' }} />}
               onClick={() => onOpenAgent('snowflake')}
               sx={{
-                backgroundColor: '#0277bd',
+                backgroundColor: TRUIST.purple,
                 textTransform: 'none',
                 fontSize: '11px',
                 fontWeight: 700,
                 height: 26,
                 px: 1.5,
-                '&:hover': { backgroundColor: '#0277bd', filter: 'brightness(0.9)' },
+                color: TRUIST.white,
+                '&:hover': { backgroundColor: TRUIST.dusk },
               }}
             >
               Ask Snowflake Agent
@@ -781,81 +816,102 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
           )}
         </Box>
 
-        {/* Sub-tabs */}
-        <Box sx={{ display: 'flex', gap: 0 }}>
-          {SUB_TABS.map(t => (
-            <Box
-              key={t.key}
-              onClick={() => setSubTab(t.key)}
-              sx={{
-                display: 'flex', alignItems: 'center', gap: 0.75,
-                px: 2, py: 1,
-                cursor: 'pointer',
-                borderBottom: subTab === t.key ? `3px solid ${t.accent}` : '3px solid transparent',
-                color: subTab === t.key ? t.accent : '#78909c',
-                '&:hover': { color: t.accent },
-                transition: 'all 0.15s',
-              }}
-            >
-              {React.cloneElement(t.icon, { sx: { fontSize: 15 } })}
-              <Typography sx={{ fontSize: '12px', fontWeight: subTab === t.key ? 700 : 400 }}>
-                {t.label}
-              </Typography>
-            </Box>
-          ))}
-        </Box>
+        {/* Sub-tabs and controls */}
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
+          <Box sx={{ display: 'flex', gap: 0 }}>
+            {SUB_TABS.map(t => (
+              <Box
+                key={t.key}
+                onClick={() => setSubTab(t.key)}
+                sx={{
+                  display: 'flex', alignItems: 'center', gap: 0.75,
+                  px: 2, py: 1,
+                  cursor: 'pointer',
+                  borderBottom: subTab === t.key ? `3px solid ${t.accent}` : '3px solid transparent',
+                  color: subTab === t.key ? t.accent : '#78909c',
+                  '&:hover': { color: t.accent },
+                  transition: 'all 0.15s',
+                }}
+              >
+                {React.cloneElement(t.icon, { sx: { fontSize: 15 } })}
+                <Typography sx={{ fontSize: '12px', fontWeight: subTab === t.key ? 700 : 400 }}>
+                  {t.label}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
 
-        {!useMock && (
-          <Box sx={{ py: 1.25, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
-            {/* <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 220, flex: 1 }}>
-              <Typography sx={{ fontSize: '10px', color: '#607d8b', fontWeight: 700, textTransform: 'uppercase', mb: 0.4 }}>
-                Lookback Window
-              </Typography>
+          {!useMock && (
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1, flexWrap: 'wrap', py: 0.5 }}>
+              <Typography sx={{ fontSize: '11px', color: asOfOption === 'sample' ? '#90a4ae' : '#777', whiteSpace: 'nowrap' }}>{sliderLabel}</Typography>
               <Slider
-                min={1}
-                max={90}
+                min={0}
+                max={30}
                 step={1}
-                marks={[{ value: 1, label: '1d' }, { value: 7, label: '7d' }, { value: 30, label: '30d' }, { value: 60, label: '60d' }, { value: 90, label: '90d' }]}
-                value={days}
-                onChange={(_, value) => setDays(Number(value))}
+                value={sliderValue}
+                onChange={handleLookbackChange}
                 valueLabelDisplay="auto"
-                sx={{ mt: 1, maxWidth: 380 }}
+                sx={{
+                  color: TRUIST.purple,
+                  width: 160,
+                  '& .MuiSlider-thumb': { width: 12, height: 12 },
+                  '& .MuiSlider-rail': { opacity: 0.3 },
+                }}
               />
-            </Box> */}
-
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
-              <Typography sx={{ fontSize: '10px', color: '#607d8b', fontWeight: 700, textTransform: 'uppercase' }}>
+              <Typography sx={{ fontSize: '10px', color: '#bbb', whiteSpace: 'nowrap' }}>30d</Typography>
+              <Typography sx={{ fontSize: '10px', color: '#607d8b', fontWeight: 700, textTransform: 'uppercase', ml: 0.5 }}>
                 Reference Date
               </Typography>
               <Chip
                 size="small"
                 label="Mar 12, 2026"
-                onClick={() => setAsOfOption('sample')}
+                onClick={handleSelectSampleDate}
                 sx={{
                   fontSize: '10px',
                   height: 22,
                   fontWeight: 700,
                   backgroundColor: asOfOption === 'sample' ? '#e3f2fd' : '#f4f7fb',
-                  color: asOfOption === 'sample' ? '#0d47a1' : '#607d8b',
-                  border: asOfOption === 'sample' ? '1px solid #90caf9' : '1px solid #e0e7ef',
+                  color: asOfOption === 'sample' ? TRUIST.purple : TRUIST.dusk,
+                  border: asOfOption === 'sample' ? `1px solid ${TRUIST.dawn}` : `1px solid ${TRUIST.lightGray}`,
                 }}
               />
               <Chip
                 size="small"
                 label="Current Date"
-                onClick={() => setAsOfOption('current')}
+                onClick={handleSelectCurrentDate}
                 sx={{
                   fontSize: '10px',
                   height: 22,
                   fontWeight: 700,
-                  backgroundColor: asOfOption === 'current' ? '#e8f5e9' : '#f4f7fb',
-                  color: asOfOption === 'current' ? '#1b5e20' : '#607d8b',
-                  border: asOfOption === 'current' ? '1px solid #a5d6a7' : '1px solid #e0e7ef',
+                  backgroundColor: asOfOption === 'current' ? TRUIST.mist : '#f4f7fb',
+                  color: asOfOption === 'current' ? TRUIST.charcoal : TRUIST.dusk,
+                  border: asOfOption === 'current' ? `1px solid ${TRUIST.sky}` : `1px solid ${TRUIST.lightGray}`,
                 }}
               />
+              {onOpenAgent && (
+                <Button
+                  size="small"
+                  variant="contained"
+                  startIcon={<Box component="img" src={AGENTS.snowflake.icon} alt="Snowflake agent icon" sx={{ width: 14, height: 14, borderRadius: '50%', objectFit: 'contain', display: 'block' }} />}
+                  onClick={() => onOpenAgent('snowflake')}
+                  sx={{
+                    backgroundColor: TRUIST.purple,
+                    textTransform: 'none',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    height: 26,
+                    px: 1.5,
+                    color: TRUIST.white,
+                    '&:hover': { backgroundColor: TRUIST.dusk },
+                  }}
+                >
+                  Ask Snowflake Agent
+                </Button>
+              )}
             </Box>
-          </Box>
-        )}
+          )}
+        </Box>
+
       </Paper>
 
       {/* Content */}
@@ -863,7 +919,7 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
         {loading ? (
           <Box sx={{ minHeight: 420, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.5, color: '#78909c' }}>
-              <CircularProgress size={26} sx={{ color: '#29b6f6' }} />
+              <CircularProgress size={26} sx={{ color: TRUIST.purple }} />
               <Typography sx={{ fontSize: '12px', fontWeight: 600 }}>
                 {subTab === 'platform' ? 'Loading Platform Intelligence...' : 'Loading Cost & Efficiency...'}
               </Typography>

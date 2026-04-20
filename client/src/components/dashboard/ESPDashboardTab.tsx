@@ -18,6 +18,7 @@ import { espService } from '../../services'
 import { useMockData } from '../../context/MockDataContext'
 import { MOCK_ESP_PLATFORM_SUMMARY, getMockAppData } from '../../services/espMockData'
 import { AGENTS } from '../../config/agentConfig'
+import { APP_COLORS, TRUIST } from '../../theme/truistPalette'
 
 // ─── Types ────────────────────────────────────────────────
 interface NameCount { name: string; count: number }
@@ -630,13 +631,14 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                 startIcon={<Box component="img" src={AGENTS.esp.icon} alt="ESP agent icon" sx={{ width: 14, height: 14, borderRadius: '50%', objectFit: 'contain', display: 'block' }} />}
                 onClick={() => onOpenAgent('esp')}
                 sx={{
-                  backgroundColor: '#2e7d32',
+                  backgroundColor: APP_COLORS.primary,
                   textTransform: 'none',
                   fontSize: '11px',
                   fontWeight: 700,
                   height: 26,
                   px: 1.5,
-                  '&:hover': { backgroundColor: '#2e7d32', filter: 'brightness(0.9)' },
+                  color: TRUIST.white,
+                  '&:hover': { backgroundColor: TRUIST.dusk },
                 }}
               >
                 Ask ESP Agent

@@ -9,6 +9,7 @@ import { WidgetShell, StatCardGrid, DonutChart, DataTable, ColumnDef, ComposedBa
 import { talendService } from '../../services'
 import { useMockData } from '../../context/MockDataContext'
 import { AGENTS } from '../../config/agentConfig'
+import { APP_COLORS, TRUIST } from '../../theme/truistPalette'
 import {
   MOCK_TALEND_SUMMARY,
   MOCK_TALEND_LEVEL_COUNTS,
@@ -342,13 +343,14 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
               startIcon={<Box component="img" src={AGENTS.talend.icon} alt="Talend agent icon" sx={{ width: 14, height: 14, borderRadius: '50%', objectFit: 'contain', display: 'block' }} />}
               onClick={() => onOpenAgent('talend')}
               sx={{
-                backgroundColor: '#e65100',
+                backgroundColor: APP_COLORS.primary,
                 textTransform: 'none',
                 fontSize: '11px',
                 fontWeight: 700,
                 height: 28,
                 px: 1.5,
-                '&:hover': { backgroundColor: '#e65100', filter: 'brightness(0.9)' },
+                color: TRUIST.white,
+                '&:hover': { backgroundColor: TRUIST.dusk },
               }}
             >
               Ask Talend Agent

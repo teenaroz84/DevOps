@@ -33,6 +33,7 @@ import {
   MOCK_DMF_ANALYTICS, MOCK_DMF_LINEAGE_META, MOCK_DMF_LINEAGE_JOBS, MOCK_DMF_LINEAGE_COUNTS,
 } from '../../services/dmfMockData'
 import { AGENTS } from '../../config/agentConfig'
+import { APP_COLORS, TRUIST } from '../../theme/truistPalette'
 
 
 
@@ -511,13 +512,14 @@ const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void
             startIcon={<Box component="img" src={AGENTS.dmf.icon} alt="DMF agent icon" sx={{ width: 13, height: 13, borderRadius: '50%', objectFit: 'contain', display: 'block' }} />}
             onClick={() => onOpenAgent('dmf')}
             sx={{
-              backgroundColor: '#0288d1',
+              backgroundColor: APP_COLORS.primary,
               textTransform: 'none',
               fontSize: '11px',
               fontWeight: 700,
               height: 28,
               px: 1.5,
-              '&:hover': { backgroundColor: '#0277bd' },
+              color: TRUIST.white,
+              '&:hover': { backgroundColor: TRUIST.dusk },
             }}
           >
             Ask DMF Agent

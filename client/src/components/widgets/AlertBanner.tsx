@@ -14,6 +14,7 @@ import WarningIcon from '@mui/icons-material/Warning'
 import ErrorIcon from '@mui/icons-material/Error'
 import InfoIcon from '@mui/icons-material/Info'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
+import { STATUS_BADGE, TRUIST } from '../../theme/truistPalette'
 
 export type AlertSeverity = 'error' | 'warning' | 'info' | 'success'
 
@@ -26,28 +27,28 @@ interface AlertConfig {
 
 const ALERT_CONFIG: Record<AlertSeverity, AlertConfig> = {
   error: {
-    bg: '#fff5f5',
-    border: '#f44336',
-    accent: '#d32f2f',
-    icon: <ErrorIcon sx={{ fontSize: 18, color: '#d32f2f' }} />,
+    bg: STATUS_BADGE.error.bg,
+    border: STATUS_BADGE.error.dot,
+    accent: STATUS_BADGE.error.color,
+    icon: <ErrorIcon sx={{ fontSize: 18, color: STATUS_BADGE.error.color }} />,
   },
   warning: {
-    bg: '#fffbfa',
-    border: '#ff9800',
-    accent: '#e65100',
-    icon: <WarningIcon sx={{ fontSize: 18, color: '#ff9800' }} />,
+    bg: STATUS_BADGE.warning.bg,
+    border: STATUS_BADGE.warning.dot,
+    accent: STATUS_BADGE.warning.color,
+    icon: <WarningIcon sx={{ fontSize: 18, color: STATUS_BADGE.warning.color }} />,
   },
   info: {
-    bg: '#f3f8ff',
-    border: '#1976d2',
-    accent: '#1565c0',
-    icon: <InfoIcon sx={{ fontSize: 18, color: '#1976d2' }} />,
+    bg: STATUS_BADGE.info.bg,
+    border: STATUS_BADGE.info.dot,
+    accent: STATUS_BADGE.info.color,
+    icon: <InfoIcon sx={{ fontSize: 18, color: STATUS_BADGE.info.color }} />,
   },
   success: {
-    bg: '#f3fdf4',
-    border: '#43a047',
-    accent: '#2e7d32',
-    icon: <CheckCircleIcon sx={{ fontSize: 18, color: '#43a047' }} />,
+    bg: STATUS_BADGE.success.bg,
+    border: STATUS_BADGE.success.dot,
+    accent: STATUS_BADGE.success.color,
+    icon: <CheckCircleIcon sx={{ fontSize: 18, color: STATUS_BADGE.success.color }} />,
   },
 }
 
@@ -92,7 +93,7 @@ export const AlertBanner: React.FC<AlertBannerProps> = ({
           {title}
         </Typography>
         {message && (
-          <Typography sx={{ fontSize: '11px', color: '#666', lineHeight: 1.3 }}>
+          <Typography sx={{ fontSize: '11px', color: TRUIST.muted, lineHeight: 1.3 }}>
             {message}
           </Typography>
         )}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   Box,
   Drawer,
@@ -14,8 +14,13 @@ import AnalyticsIcon from '@mui/icons-material/Analytics'
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import DataObjectIcon from '@mui/icons-material/DataObject'
+import ExpandLessIcon from '@mui/icons-material/ExpandLess'
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import { useMockData } from '../../context/MockDataContext'
 import { AGENTS, FULLSCREEN_AGENT_MENUS, type FullscreenAgentMenuId } from '../../config/agentConfig'
+import { APP_COLORS, TRUIST } from '../../theme/truistPalette'
+
+const AGENTS_FOUNDRY_STORAGE_KEY = 'agents-foundry-expanded'
 
 interface NavigationProps {
   activeMenu: 'dashboard' | 'preferences' | 'executive' | 'quicksight-demo' | FullscreenAgentMenuId
@@ -24,14 +29,22 @@ interface NavigationProps {
 
 export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuChange }) => {
   const [isExpanded, setIsExpanded] = useState(true)
+  const [isAgentsFoundryExpanded, setIsAgentsFoundryExpanded] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return window.localStorage.getItem(AGENTS_FOUNDRY_STORAGE_KEY) === 'true'
+  })
   const drawerWidth = isExpanded ? 260 : 80
   const { useMock, toggleMock } = useMockData()
+
+  useEffect(() => {
+    window.localStorage.setItem(AGENTS_FOUNDRY_STORAGE_KEY, String(isAgentsFoundryExpanded))
+  }, [isAgentsFoundryExpanded])
 
   const renderMenuButton = (
     menu: 'dashboard' | 'preferences' | 'executive' | 'quicksight-demo' | FullscreenAgentMenuId,
     label: string,
     icon: React.ReactNode,
-    activeColor = '#1976d2',
+    activeColor: string = APP_COLORS.primary,
     hidden = false,
   ) => (
     <Tooltip title={!isExpanded ? label : ''} placement="right">
@@ -48,7 +61,7 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuChange
           margin: '8px 12px',
           borderRadius: 1,
           border: 'none',
-          backgroundColor: activeMenu === menu ? '#e3f2fd' : 'transparent',
+          backgroundColor: activeMenu === menu ? TRUIST.shell : 'transparent',
           color: activeMenu === menu ? activeColor : '#666',
           cursor: 'pointer',
           transition: 'all 0.3s ease',
@@ -86,8 +99,8 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuChange
         '& .MuiDrawer-paper': {
           width: drawerWidth,
           boxSizing: 'border-box',
-          backgroundColor: '#f5f5f5',
-          borderRight: '1px solid #e0e0e0',
+          backgroundColor: APP_COLORS.panelAlt,
+          borderRight: `1px solid ${APP_COLORS.border}`,
           transition: 'width 0.3s ease',
         },
       }}
@@ -110,7 +123,7 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuChange
             variant="h6"
             sx={{
               fontWeight: 700,
-              color: '#1976d2',
+              color: APP_COLORS.primary,
               display: 'flex',
               alignItems: 'center',
               gap: 1,
@@ -128,7 +141,7 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuChange
           size="small"
           sx={{
             marginLeft: 'auto',
-            color: '#1976d2',
+            color: APP_COLORS.primary,
             flexShrink: 0,
           }}
         >
@@ -140,14 +153,39 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuChange
       <Box sx={{ flex: 1, px: 1, py: 2 }}>
         {renderMenuButton('executive', 'Executive Dashboard', <AnalyticsIcon sx={{ fontSize: '20px', flexShrink: 0 }} />)}
 
-        {renderMenuButton('dashboard', 'Sample Dashboard', <DashboardIcon sx={{ fontSize: '20px', flexShrink: 0 }} />, '#1976d2', true)}
+        {renderMenuButton('dashboard', 'Sample Dashboard', <DashboardIcon sx={{ fontSize: '20px', flexShrink: 0 }} />, APP_COLORS.primary, true)}
 
         {isExpanded && (
-          <Typography sx={{ px: 3, pt: 1.5, pb: 0.5, fontSize: '10px', fontWeight: 700, color: '#90a4ae', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
-            Agents
-          </Typography>
+          <Box
+            component="button"
+            type="button"
+            onClick={() => setIsAgentsFoundryExpanded(!isAgentsFoundryExpanded)}
+            sx={{
+              width: 'calc(100% - 24px)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              margin: '8px 12px 0',
+              padding: '8px 12px',
+              border: 'none',
+              borderRadius: 1,
+              backgroundColor: 'transparent',
+              color: '#90a4ae',
+              cursor: 'pointer',
+              transition: 'all 0.3s ease',
+              '&:hover': {
+                backgroundColor: '#eceff1',
+                color: '#607d8b',
+              },
+            }}
+          >
+            <Typography sx={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+              Agents Foundry
+            </Typography>
+            {isAgentsFoundryExpanded ? <ExpandLessIcon sx={{ fontSize: 18 }} /> : <ExpandMoreIcon sx={{ fontSize: 18 }} />}
+          </Box>
         )}
-        {FULLSCREEN_AGENT_MENUS.map((item) => {
+        {isExpanded && isAgentsFoundryExpanded && FULLSCREEN_AGENT_MENUS.map((item) => {
           const agent = AGENTS[item.agentId]
           return (
             <React.Fragment key={item.menuId}>
@@ -161,9 +199,9 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuChange
           )
         })}
 
-        {renderMenuButton('quicksight-demo', 'QuickSight', <AnalyticsIcon sx={{ fontSize: '20px', flexShrink: 0 }} />, '#1976d2', true)}
+        {renderMenuButton('quicksight-demo', 'QuickSight', <AnalyticsIcon sx={{ fontSize: '20px', flexShrink: 0 }} />, APP_COLORS.primary, true)}
 
-        {renderMenuButton('preferences', 'Preferences', <TuneIcon sx={{ fontSize: '20px', flexShrink: 0 }} />, '#1976d2', true)}
+        {renderMenuButton('preferences', 'Preferences', <TuneIcon sx={{ fontSize: '20px', flexShrink: 0 }} />, APP_COLORS.primary, true)}
       </Box>
 
       {/* Mock Data Toggle */}
@@ -182,9 +220,9 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuChange
           onClick={toggleMock}
         >
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <DataObjectIcon sx={{ fontSize: 18, color: useMock ? '#f57c00' : '#9e9e9e' }} />
+            <DataObjectIcon sx={{ fontSize: 18, color: useMock ? TRUIST.purple : TRUIST.midGray }} />
             {isExpanded && (
-              <Typography sx={{ fontSize: 12, fontWeight: 600, color: useMock ? '#f57c00' : '#777' }}>
+              <Typography sx={{ fontSize: 12, fontWeight: 600, color: useMock ? TRUIST.purple : TRUIST.darkGray }}>
                 {useMock ? 'Mock Data' : 'Live Data'}
               </Typography>
             )}
@@ -196,8 +234,8 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuChange
               onClick={e => e.stopPropagation()}
               size="small"
               sx={{
-                '& .MuiSwitch-switchBase.Mui-checked': { color: '#f57c00' },
-                '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#f57c00' },
+                '& .MuiSwitch-switchBase.Mui-checked': { color: TRUIST.purple },
+                '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: TRUIST.purple },
               }}
             />
           )}

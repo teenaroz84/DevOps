@@ -10,6 +10,7 @@ import { ExecutiveDashboard, type SourceKey } from './components/dashboard/Execu
 import ExecutiveDashboardEnhanced from './components/dashboard/ExecutiveDashboardEnhanced'
 import { MockDataProvider } from './context/MockDataContext'
 import { AGENTS, FULLSCREEN_AGENT_MENUS, type FullscreenAgentMenuId } from './config/agentConfig'
+import { APP_COLORS } from './theme/truistPalette'
 
 // Default preferences
 const DEFAULT_PREFERENCES: WidgetPreferences = {
@@ -39,14 +40,18 @@ const DEFAULT_WIDGET_ORDER = [
 const theme = createTheme({
   palette: {
     primary: {
-      main: '#1976d2',
+      main: APP_COLORS.primary,
     },
     secondary: {
-      main: '#2e7d32',
+      main: APP_COLORS.secondary,
     },
     background: {
-      default: '#fafafa',
-      paper: '#fff',
+      default: APP_COLORS.background,
+      paper: APP_COLORS.panel,
+    },
+    text: {
+      primary: APP_COLORS.text,
+      secondary: APP_COLORS.subtext,
     },
   },
   typography: {
@@ -138,7 +143,7 @@ function App() {
         />
       ) : activeMenu === 'preferences' ? (
         // Preferences layout
-        <Box sx={{ display: 'flex', height: '100vh', backgroundColor: '#fafafa' }}>
+        <Box sx={{ display: 'flex', height: '100vh', backgroundColor: APP_COLORS.background }}>
           <Navigation activeMenu={activeMenu} onMenuChange={setActiveMenu} />
           <Box sx={{ flex: 1, overflow: 'auto' }}>
             <UserPreferences preferences={preferences} onPreferencesChange={setPreferences} />
@@ -146,7 +151,7 @@ function App() {
         </Box>
       ) : (
         // Dashboard layout with sidebar
-        <Box sx={{ display: 'flex', height: '100vh', backgroundColor: '#fafafa' }}>
+        <Box sx={{ display: 'flex', height: '100vh', backgroundColor: APP_COLORS.background }}>
           {/* Navigation Sidebar */}
           <Navigation activeMenu={activeMenu} onMenuChange={setActiveMenu} />
 
@@ -169,7 +174,7 @@ function App() {
               />
             )}
             {activeMenu === 'quicksight-demo' && (
-              <Box sx={{ flex: 1, overflow: 'auto', backgroundColor: '#fafafa' }}>
+              <Box sx={{ flex: 1, overflow: 'auto', backgroundColor: APP_COLORS.background }}>
                 <ExecutiveDashboardEnhanced />
               </Box>
             )}

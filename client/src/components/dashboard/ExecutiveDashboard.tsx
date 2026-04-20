@@ -29,6 +29,7 @@ import { MOCK_ESP_JOB_COUNTS } from '../../services/espMockData'
 import { useMockData } from '../../context/MockDataContext'
 import { SESSION_ID } from '../../services/session'
 import { AGENTS } from '../../config/agentConfig'
+import { TRUIST } from '../../theme/truistPalette'
 
 // ─── Source definitions ────────────────────────────────────
 export type SourceKey = 'overview' | 'dmf' | 'servicenow' | 'logs' | 'pipeline' | 'snowflake'
@@ -40,12 +41,12 @@ const SOURCES: {
   accent: string
   sub: string
 }[] = [
-  { key: 'overview',   label: 'Overview',        icon: <DashboardIcon />,    accent: '#1976d2', sub: 'Executive Summary'       },
-  { key: 'servicenow', label: 'ServiceNow',      icon: <SupportAgentIcon />, accent: '#c62828', sub: ''                    },
-  { key: 'pipeline',   label: 'ESP',             icon: <CloudIcon />,        accent: '#2e7d32', sub: '' },
-  { key: 'dmf',        label: 'DMF',             icon: <StorageIcon />,      accent: '#1565c0', sub: ''              },
-  { key: 'logs',       label: 'Talend',          icon: <AccountTreeIcon />,  accent: '#e65100', sub: ''        },
-  { key: 'snowflake',  label: 'Snowflake',       icon: <AcUnitIcon />,       accent: '#29b6f6', sub: '' },
+  { key: 'overview',   label: 'Overview',        icon: <DashboardIcon />,    accent: TRUIST.sky, sub: 'Executive Summary' },
+  { key: 'servicenow', label: 'ServiceNow',      icon: <SupportAgentIcon />, accent: TRUIST.dawn, sub: '' },
+  { key: 'pipeline',   label: 'ESP',             icon: <CloudIcon />,        accent: TRUIST.dusk, sub: '' },
+  { key: 'dmf',        label: 'DMF',             icon: <StorageIcon />,      accent: TRUIST.darkGray, sub: '' },
+  { key: 'logs',       label: 'Talend',          icon: <AccountTreeIcon />,  accent: TRUIST.dawn, sub: '' },
+  { key: 'snowflake',  label: 'Snowflake',       icon: <AcUnitIcon />,       accent: TRUIST.sky, sub: '' },
 ]
 
 // ─── Overview widget preferences ─────────────────────────────
@@ -209,8 +210,13 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
     return acc
   }, {})
   const SOURCE_COLORS: Record<string, string> = {
-    'DMF': '#1565c0', 'ESP': '#2e7d32', 'Snowflake': '#0277bd',
-    'ServiceNow': '#c62828', 'Database': '#546e7a', 'CloudWatch': '#e65100', 'Other': '#9e9e9e',
+    'DMF': TRUIST.darkGray,
+    'ESP': TRUIST.dusk,
+    'Snowflake': TRUIST.sky,
+    'ServiceNow': TRUIST.charcoal,
+    'Database': TRUIST.midGray,
+    'CloudWatch': TRUIST.purple,
+    'Other': TRUIST.lightGray,
   }
   const incidentAttributionItems = Object.entries(ticketsBySource)
     .sort(([, a], [, b]) => (b as number) - (a as number))

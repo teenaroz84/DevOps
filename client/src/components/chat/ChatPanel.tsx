@@ -1,3 +1,4 @@
+import { APP_COLORS, STATUS_BADGE, TRUIST } from '../../theme/truistPalette'
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import {
   Box,
@@ -165,6 +166,12 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
   const MAX_PANEL_HEIGHT = Number.MAX_SAFE_INTEGER
   // Resolved config — fall back to global knowledge agent
   const agent: AgentConfig = agentConfig ?? AGENTS.knowledge
+  const useDarkHeaderText = agent.id === 'snowflake'
+  const headerTextColor = useDarkHeaderText ? TRUIST.charcoal : TRUIST.white
+  const headerSubtextColor = useDarkHeaderText ? TRUIST.purple : 'rgba(255,255,255,0.82)'
+  const headerMutedTextColor = useDarkHeaderText ? TRUIST.darkGray : 'rgba(255,255,255,0.82)'
+  const headerActionBorder = useDarkHeaderText ? `1px solid ${TRUIST.charcoal}55` : '1px solid rgba(255,255,255,0.4)'
+  const headerActionHover = useDarkHeaderText ? 'rgba(52,52,59,0.08)' : 'rgba(255,255,255,0.15)'
   const renderAgentIcon = (size: number) => {
     const effectiveSize = Math.max(14, Math.round(size * 0.75))
 
@@ -723,7 +730,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
                   variant="contained"
                   startIcon={<AddIcon sx={{ fontSize: 14 }} />}
                   onClick={createNewChat}
-                  sx={{ textTransform: 'none', fontWeight: 600, borderRadius: 2, backgroundColor: '#1565c0', '&:hover': { backgroundColor: '#0d47a1' } }}
+                  sx={{ textTransform: 'none', fontWeight: 600, borderRadius: 2, backgroundColor: APP_COLORS.primary, '&:hover': { backgroundColor: TRUIST.dusk } }}
                 >
                   New Chat
                 </Button>
@@ -767,11 +774,11 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
                       p: 1.25,
                       borderRadius: 2,
                       boxShadow: 'none',
-                      border: active ? '1px solid #1e88e5' : '1px solid #dbe5f0',
-                      backgroundColor: active ? '#eaf4ff' : '#fff',
+                      border: active ? `1px solid ${TRUIST.dawn}` : '1px solid #dbe5f0',
+                      backgroundColor: active ? TRUIST.mist : '#fff',
                       cursor: 'pointer',
                       transition: 'all 0.15s ease',
-                      '&:hover': { borderColor: '#90caf9', transform: 'translateY(-1px)' },
+                      '&:hover': { borderColor: TRUIST.sky, transform: 'translateY(-1px)' },
                     }}
                   >
                     <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 0.5 }}>
@@ -784,7 +791,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
                           event.stopPropagation()
                           deleteChatSession(session.sessionId)
                         }}
-                        sx={{ mt: -0.6, mr: -0.6, color: '#90a4ae', '&:hover': { color: '#c62828', backgroundColor: '#ffebee' } }}
+                        sx={{ mt: -0.6, mr: -0.6, color: '#90a4ae', '&:hover': { color: TRUIST.charcoal, backgroundColor: '#EFEDF4' } }}
                         title="Delete chat session"
                       >
                         <DeleteOutlineIcon sx={{ fontSize: 16 }} />
@@ -810,8 +817,8 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
                   textTransform: 'none',
                   fontWeight: 600,
                   borderRadius: 2,
-                  borderColor: '#90caf9',
-                  color: '#1565c0',
+                  borderColor: TRUIST.dawn,
+                  color: APP_COLORS.primary,
                   '&:hover': { borderColor: '#64b5f6', backgroundColor: '#edf6ff' },
                 }}
               >
@@ -835,7 +842,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
           <Box
             sx={{
               backgroundColor: agent.color,
-              color: '#fff',
+              color: headerTextColor,
               p: 2.5,
               display: 'flex',
               alignItems: 'center',
@@ -848,10 +855,10 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
                 <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
                   {agent.name}
                 </Typography>
-                <Typography sx={{ fontSize: '11px', opacity: 0.8, lineHeight: 1 }}>
+                <Typography sx={{ fontSize: '11px', color: headerSubtextColor, lineHeight: 1 }}>
                   {agent.subtitle}
                 </Typography>
-                <Typography sx={{ fontSize: '10px', opacity: 0.82, lineHeight: 1.1, mt: 0.5 }}>
+                <Typography sx={{ fontSize: '10px', color: headerMutedTextColor, lineHeight: 1.1, mt: 0.5 }}>
                   {chatSessions.find(s => s.sessionId === activeSessionId)?.title ?? 'New Chat'}
                 </Typography>
               </Box>
@@ -862,10 +869,10 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
                   size="small"
                   onClick={resetToMainMenu}
                   sx={{
-                    color: '#fff',
+                    color: headerTextColor,
                     textTransform: 'none',
                     fontSize: '13px',
-                    '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' },
+                    '&:hover': { backgroundColor: headerActionHover },
                   }}
                 >
                   ↺ Clear
@@ -876,14 +883,14 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
                 startIcon={<ArrowBackIcon sx={{ fontSize: 16 }} />}
                 onClick={onClose}
                 sx={{
-                  color: '#fff',
+                  color: headerTextColor,
                   textTransform: 'none',
                   fontSize: '13px',
                   fontWeight: 600,
-                  border: '1px solid rgba(255,255,255,0.4)',
+                  border: headerActionBorder,
                   borderRadius: 1.5,
                   px: 1.5,
-                  '&:hover': { backgroundColor: 'rgba(255,255,255,0.15)', borderColor: '#fff' },
+                  '&:hover': { backgroundColor: headerActionHover, borderColor: useDarkHeaderText ? TRUIST.charcoal : '#fff' },
                 }}
               >
                 Back to Dashboard
@@ -920,15 +927,15 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
                         p: 1.5,
                         backgroundColor:
                           msg.role === 'user'
-                            ? '#1976d2'
+                            ? APP_COLORS.primary
                             : msg.type === 'error'
-                              ? '#ffebee'
+                              ? STATUS_BADGE.error.bg
                               : msg.type === 'success'
-                                ? '#e8f5e9'
+                                ? STATUS_BADGE.success.bg
                                 : '#f5f5f5',
-                        color: msg.role === 'user' ? '#fff' : msg.type === 'error' ? '#c62828' : '#333',
+                        color: msg.role === 'user' ? '#fff' : msg.type === 'error' ? STATUS_BADGE.error.color : '#333',
                         boxShadow: 'none',
-                        border: msg.type === 'error' ? '1px solid #ef5350' : 'none',
+                        border: msg.type === 'error' ? `1px solid ${STATUS_BADGE.error.dot}` : 'none',
                       }}
                     >
                       {msg.type === 'table' && msg.data ? (
@@ -940,7 +947,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
                             size="small"
                             onClick={() => exportDataAsCsv(msg.data)}
                             title="Export as CSV"
-                            sx={{ ml: 1, color: '#1976d2', '&:hover': { backgroundColor: 'rgba(25,118,210,0.08)' } }}
+                            sx={{ ml: 1, color: APP_COLORS.primary, '&:hover': { backgroundColor: 'rgba(46,26,71,0.08)' } }}
                           >
                             <FileDownloadIcon sx={{ fontSize: 18 }} />
                           </IconButton>
@@ -948,7 +955,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
                       ) : msg.role === 'agent' ? (
                         <FormattedMessage
                           text={msg.content}
-                          color={msg.type === 'error' ? '#c62828' : msg.type === 'success' ? '#2e7d32' : '#333'}
+                          color={msg.type === 'error' ? STATUS_BADGE.error.color : msg.type === 'success' ? STATUS_BADGE.success.color : '#333'}
                         />
                       ) : (
                         <Typography variant="body2" sx={{ fontSize: '13px', lineHeight: 1.4 }}>
@@ -987,20 +994,20 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
                               textTransform: 'none',
                               padding: '6px 12px',
                               backgroundColor:
-                                action.action === 'restart_service' ? '#4caf50' :
-                                action.action === 'terminate_service' ? '#ef5350' :
-                                msg.type === 'error' ? '#ef5350' :
-                                msg.type === 'success' ? '#4caf50' : '#1976d2',
+                                action.action === 'restart_service' ? TRUIST.dusk :
+                                action.action === 'terminate_service' ? TRUIST.charcoal :
+                                msg.type === 'error' ? TRUIST.charcoal :
+                                msg.type === 'success' ? TRUIST.dusk : APP_COLORS.primary,
                               color: '#fff',
                               border: 'none',
                               borderRadius: '4px',
                               cursor: 'pointer',
                               '&:hover': {
                                 backgroundColor:
-                                  action.action === 'restart_service' ? '#388e3c' :
-                                  action.action === 'terminate_service' ? '#d32f2f' :
-                                  msg.type === 'error' ? '#d32f2f' :
-                                  msg.type === 'success' ? '#388e3c' : '#1565c0',
+                                  action.action === 'restart_service' ? TRUIST.darkGray :
+                                  action.action === 'terminate_service' ? TRUIST.purple :
+                                  msg.type === 'error' ? TRUIST.purple :
+                                  msg.type === 'success' ? TRUIST.darkGray : TRUIST.dusk,
                                 boxShadow: '0 2px 8px rgba(0,0,0,0.2)'
                               },
                               '&:disabled': { opacity: 0.6, cursor: 'not-allowed' },
@@ -1017,7 +1024,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
 
                 {isSessionLoading && (
                   <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 0.75 }}>
-                    <Box sx={{ width: 26, height: 26, borderRadius: '50%', backgroundColor: '#1976d2', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Box sx={{ width: 26, height: 26, borderRadius: '50%', backgroundColor: APP_COLORS.primary, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                       {renderAgentIcon(18)}
                     </Box>
                     <Paper sx={{ p: 1.5, backgroundColor: '#f0f4f8', boxShadow: 'none', borderRadius: '16px 16px 16px 4px', border: '1px solid transparent' }}>
@@ -1056,9 +1063,9 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
                           fontSize: '11px',
                           height: 28,
                           cursor: 'pointer',
-                          backgroundColor: '#e3f2fd',
-                          color: '#1565c0',
-                          border: '1px solid #bbdefb',
+                          backgroundColor: TRUIST.mist,
+                          color: APP_COLORS.primary,
+                          border: `1px solid ${TRUIST.sky}`,
                           fontWeight: 500,
                           '&:hover': { backgroundColor: '#bbdefb' },
                           '& .MuiChip-label': { px: 1.2 },
@@ -1219,7 +1226,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
         onMouseDown={handleDragStart}
         sx={{
           backgroundColor: agent.color,
-          color: '#fff',
+          color: headerTextColor,
           p: 2,
           display: 'flex',
           alignItems: 'center',
@@ -1233,7 +1240,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
             <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
               {agent.name}
             </Typography>
-            <Typography sx={{ fontSize: '10px', opacity: 0.8, lineHeight: 1 }}>
+            <Typography sx={{ fontSize: '10px', color: headerSubtextColor, lineHeight: 1 }}>
               {agent.subtitle}
             </Typography>
           </Box>
@@ -1244,23 +1251,23 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
               size="small"
               onClick={resetToMainMenu}
               sx={{
-                color: '#fff',
+                color: headerTextColor,
                 textTransform: 'none',
                 fontSize: '12px',
                 minWidth: 'auto',
                 padding: '4px 8px',
-                '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' },
+                '&:hover': { backgroundColor: headerActionHover },
               }}
             >
               ↺ Clear
             </Button>
           )}
           <Tooltip title={expanded ? 'Collapse panel' : 'Expand panel'} placement="bottom">
-            <IconButton size="small" onClick={() => setExpanded(e => !e)} sx={{ color: '#fff' }}>
+            <IconButton size="small" onClick={() => setExpanded(e => !e)} sx={{ color: headerTextColor }}>
               {expanded ? <CloseFullscreenIcon sx={{ fontSize: 18 }} /> : <OpenInFullIcon sx={{ fontSize: 18 }} />}
             </IconButton>
           </Tooltip>
-          <IconButton size="small" onClick={onClose} sx={{ color: '#fff' }}>
+          <IconButton size="small" onClick={onClose} sx={{ color: headerTextColor }}>
             <CloseIcon />
           </IconButton>
         </Box>
@@ -1409,20 +1416,18 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
                         textTransform: 'none',
                         padding: '5px 10px',
                         backgroundColor:
-                          action.action === 'restart_service' ? '#4caf50' :
-                          action.action === 'terminate_service' ? '#ef5350' :
-                          msg.type === 'error' ? '#ef5350' :
-                          msg.type === 'success' ? '#4caf50' : '#1976d2',
+                          action.action === 'restart_service' ? TRUIST.dusk :
+                          action.action === 'terminate_service' ? TRUIST.charcoal :
+                          APP_COLORS.primary,
                         color: '#fff',
                         border: 'none',
                         borderRadius: '3px',
                         cursor: 'pointer',
                         '&:hover': {
                           backgroundColor:
-                            action.action === 'restart_service' ? '#388e3c' :
-                            action.action === 'terminate_service' ? '#d32f2f' :
-                            msg.type === 'error' ? '#d32f2f' :
-                            msg.type === 'success' ? '#388e3c' : '#1565c0',
+                            action.action === 'restart_service' ? TRUIST.darkGray :
+                            action.action === 'terminate_service' ? TRUIST.purple :
+                            TRUIST.dusk,
                           boxShadow: '0 2px 6px rgba(0,0,0,0.2)'
                         },
                         '&:disabled': { opacity: 0.6, cursor: 'not-allowed' },

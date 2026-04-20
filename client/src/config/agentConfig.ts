@@ -12,6 +12,8 @@
  *   Streaming variants     : same path + /stream
  */
 
+import { AGENT_BRAND } from '../theme/truistPalette'
+
 export interface AgentConfig {
   id: string
   /** Display name shown in the chat panel header */
@@ -49,7 +51,7 @@ export const AGENTS: Record<string, AgentConfig> = {
     id: 'knowledge',
     name: 'TDT DataOps Knowledge Assistant',
     subtitle: 'Cross-platform · Documentation & Standards',
-    color: '#1976d2',
+    color: AGENT_BRAND.knowledge,
     icon: '/agent-icons/KnowledgeAssist.png',
     endpoint: '/api/v1/chat',
     streamEndpoint: '/api/v1/chat/stream',
@@ -67,7 +69,7 @@ export const AGENTS: Record<string, AgentConfig> = {
     id: 'esp',
     name: 'TDT ESP Scheduling Agent',
     subtitle: 'Enterprise Scheduler Platform · Job Intelligence',
-    color: '#2e7d32',
+    color: AGENT_BRAND.esp,
     icon: '/agent-icons/ESPAgent.png',
     endpoint: '/api/esp/chat',
     streamEndpoint: '/api/esp/chat/stream',
@@ -85,7 +87,7 @@ export const AGENTS: Record<string, AgentConfig> = {
     id: 'dmf',
     name: 'TDT DMF Pipeline Agent',
     subtitle: 'Data Management Framework · Pipeline Intelligence',
-    color: '#1565c0',
+    color: AGENT_BRAND.dmf,
     icon: '/agent-icons/DMFAgent.png',
     endpoint: '/api/dmf/chat',
     streamEndpoint: '/api/dmf/chat/stream',
@@ -103,7 +105,7 @@ export const AGENTS: Record<string, AgentConfig> = {
     id: 'servicenow',
     name: 'TDT ServiceNow Incident Agent',
     subtitle: 'ITSM · Incidents & Problem Management',
-    color: '#5c6bc0',
+    color: AGENT_BRAND.servicenow,
     icon: '/agent-icons/ServiceNowAgent.png',
     endpoint: '/api/snow/chat',
     streamEndpoint: '/api/snow/chat/stream',
@@ -121,7 +123,7 @@ export const AGENTS: Record<string, AgentConfig> = {
     id: 'talend',
     name: 'TDT Talend Integration Agent',
     subtitle: 'Data Integration · Job Monitoring',
-    color: '#e65100',
+    color: AGENT_BRAND.talend,
     icon: '/agent-icons/TalendLogAgent.png',
     endpoint: '/api/talend/chat',
     streamEndpoint: '/api/talend/chat/stream',
@@ -139,7 +141,7 @@ export const AGENTS: Record<string, AgentConfig> = {
     id: 'snowflake',
     name: 'TDT Snowflake Analytics Agent',
     subtitle: 'Cloud Data Platform · Cost & Query Intelligence',
-    color: '#0277bd',
+    color: AGENT_BRAND.snowflake,
     icon: '/agent-icons/SnowflakeAgent.png',
     endpoint: '/api/snow/chat',
     streamEndpoint: '/api/snow/chat/stream',

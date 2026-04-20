@@ -36,6 +36,7 @@ import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward'
 import UnfoldMoreIcon from '@mui/icons-material/UnfoldMore'
 import DownloadIcon from '@mui/icons-material/Download'
 import { IconButton, Tooltip } from '@mui/material'
+import { APP_COLORS } from '../../theme/truistPalette'
 
 export interface ColumnDef<T = any> {
   /** Property name on the row object, or any unique string when using render */
@@ -69,7 +70,7 @@ interface DataTableProps<T = any> {
   headerBg?: string
   /** Tooltip shown on row hover */
   rowTooltip?: string
-  /** Accent color for header left border strip (defaults to #1976d2) */
+  /** Accent color for header left border strip */
   accentColor?: string
   /** Optional minimum width for the inner table to enable horizontal scrolling */
   tableMinWidth?: number | string
@@ -96,7 +97,7 @@ export function DataTable<T = any>({
   compact = false,
   headerBg,
   rowTooltip,
-  accentColor = '#1976d2',
+  accentColor = APP_COLORS.primary,
   tableMinWidth,
   pageSize,
 }: DataTableProps<T>) {

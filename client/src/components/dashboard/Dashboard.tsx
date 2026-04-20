@@ -22,6 +22,7 @@ import GroupIcon from '@mui/icons-material/Group'
 import AnalyticsIcon from '@mui/icons-material/Analytics'
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator'
 import { WidgetPreferences } from '../settings/UserPreferences'
+import { APP_COLORS, TRUIST } from '../../theme/truistPalette'
 
 interface Workflow {
   id: string
@@ -135,7 +136,7 @@ export function Dashboard({ onChatClick, preferences, widgetOrder = [], onWidget
         cursor: 'move',
         opacity: draggedWidget === widgetId ? 0.5 : 1,
         transform: dragOverWidget === widgetId && draggedWidget ? 'scale(1.02)' : 'scale(1)',
-        backgroundColor: dragOverWidget === widgetId && draggedWidget ? '#e3f2fd' : 'transparent',
+        backgroundColor: dragOverWidget === widgetId && draggedWidget ? TRUIST.mist : 'transparent',
         transition: 'all 0.2s ease',
         position: 'relative',
         borderRadius: 1,
@@ -152,7 +153,7 @@ export function Dashboard({ onChatClick, preferences, widgetOrder = [], onWidget
           left: 8,
           opacity: 0,
           transition: 'opacity 0.2s ease',
-          color: '#1976d2',
+          color: APP_COLORS.primary,
           zIndex: 10,
         }}
       >
@@ -172,7 +173,7 @@ export function Dashboard({ onChatClick, preferences, widgetOrder = [], onWidget
         cursor: 'move',
         '&:hover': {
           boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-          borderColor: '#1976d2',
+          borderColor: APP_COLORS.primary,
         },
       }}
     >
@@ -187,7 +188,7 @@ export function Dashboard({ onChatClick, preferences, widgetOrder = [], onWidget
           {icon}
         </Box>
         <Box sx={{ flex: 1 }}>
-          <Typography variant="h5" sx={{ fontWeight: 700, color: '#1976d2', mb: 0.5 }}>
+          <Typography variant="h5" sx={{ fontWeight: 700, color: APP_COLORS.primary, mb: 0.5 }}>
             {value}
           </Typography>
           <Typography variant="caption" sx={{ color: '#666', fontSize: '12px' }}>
@@ -198,7 +199,7 @@ export function Dashboard({ onChatClick, preferences, widgetOrder = [], onWidget
               variant="caption"
               sx={{
                 display: 'block',
-                color: change.includes('+') ? '#2e7d32' : '#d32f2f',
+                color: change.includes('+') ? TRUIST.dusk : TRUIST.charcoal,
                 fontSize: '11px',
                 mt: 0.5,
               }}
@@ -212,7 +213,7 @@ export function Dashboard({ onChatClick, preferences, widgetOrder = [], onWidget
   )
 
   return (
-    <Box sx={{ p: 3, backgroundColor: '#fafafa', minHeight: '100vh', flexGrow: 1, overflow: 'auto' }}>
+    <Box sx={{ p: 3, backgroundColor: APP_COLORS.background, minHeight: '100vh', flexGrow: 1, overflow: 'auto' }}>
       {/* Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Box>
@@ -224,7 +225,7 @@ export function Dashboard({ onChatClick, preferences, widgetOrder = [], onWidget
           </Typography>
         </Box>
         <Box sx={{ display: 'flex', gap: 1 }}>
-          <IconButton size="small" sx={{ color: '#1976d2' }}>
+          <IconButton size="small" sx={{ color: APP_COLORS.primary }}>
             <RefreshIcon />
           </IconButton>
           <Button
@@ -232,7 +233,7 @@ export function Dashboard({ onChatClick, preferences, widgetOrder = [], onWidget
             size="small"
             onClick={onChatClick}
             sx={{
-              backgroundColor: '#1976d2',
+              backgroundColor: APP_COLORS.primary,
               textTransform: 'none',
               fontSize: '13px',
               fontWeight: 500,
@@ -244,8 +245,8 @@ export function Dashboard({ onChatClick, preferences, widgetOrder = [], onWidget
       </Box>
 
       {/* Customization Tip */}
-      <Paper sx={{ p: 1.5, mb: 2.5, backgroundColor: '#e3f2fd', border: '1px solid #90caf9' }}>
-        <Typography variant="caption" sx={{ color: '#1565c0', fontSize: '12px' }}>
+      <Paper sx={{ p: 1.5, mb: 2.5, backgroundColor: TRUIST.mist, border: `1px solid ${TRUIST.sky}` }}>
+        <Typography variant="caption" sx={{ color: APP_COLORS.primary, fontSize: '12px' }}>
           💡 Drag widgets to reorder them. Configure visibility in User Preference settings.
         </Typography>
       </Paper>

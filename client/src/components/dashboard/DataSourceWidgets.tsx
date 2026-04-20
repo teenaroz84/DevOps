@@ -13,6 +13,7 @@ import { WidgetShell, StatCardGrid, MetricBarList, DataTable, ColumnDef } from '
 import { cloudwatchService, servicenowService, snowflakeService, postgresService, espService } from '../../services'
 import { DonutChart } from '../widgets'
 import { useMockData } from '../../context/MockDataContext'
+import { APP_COLORS, CHART_PALETTE, TRUIST } from '../../theme/truistPalette'
 import { AGENTS } from '../../config/agentConfig'
 import {
   MOCK_SERVICENOW_TICKETS,
@@ -90,7 +91,7 @@ export const ErrorsWidget: React.FC = () => {
     <>
       <WidgetShell
         title="Error Monitor"
-        titleIcon={<BugReportIcon sx={{ color: '#e53935', fontSize: 18 }} />}
+        titleIcon={<BugReportIcon sx={{ color: TRUIST.charcoal, fontSize: 18 }} />}
         source="CloudWatch"
         loading={loading}
         subheader={
@@ -113,7 +114,7 @@ export const ErrorsWidget: React.FC = () => {
             onRowClick={row => setDrillDown({ type: 'error', data: row })}
             rowKey="id"
             compact
-            accentColor="#e53935"
+            accentColor={TRUIST.charcoal}
             rowTooltip="Click to view stack trace & resolution"
           />
         </Box>
@@ -193,7 +194,7 @@ export const TicketsWidget: React.FC = () => {
     <>
       <WidgetShell
         title="Support Tickets"
-        titleIcon={<ConfirmationNumberIcon sx={{ color: '#7b1fa2', fontSize: 18 }} />}
+        titleIcon={<ConfirmationNumberIcon sx={{ color: TRUIST.purple, fontSize: 18 }} />}
         source="ServiceNow"
         loading={loading}
         subheader={
@@ -211,7 +212,7 @@ export const TicketsWidget: React.FC = () => {
             onRowClick={row => setDrillDown({ type: 'ticket', data: row })}
             rowKey="id"
             compact
-            accentColor="#7b1fa2"
+            accentColor={TRUIST.purple}
             rowTooltip="Click to view ticket details & activity"
           />
         </Box>
@@ -243,7 +244,7 @@ export const LogStreamWidget: React.FC = () => {
   return (
     <WidgetShell
       title="Live Logs"
-      titleIcon={<StreamIcon sx={{ color: '#1565c0', fontSize: 18 }} />}
+      titleIcon={<StreamIcon sx={{ color: APP_COLORS.primary, fontSize: 18 }} />}
       source="CloudWatch"
       loading={loading}
       subheader={
@@ -252,7 +253,7 @@ export const LogStreamWidget: React.FC = () => {
             <Chip key={f} label={f} size="small" onClick={() => setFilter(f)}
               sx={{
                 fontSize: '10px', height: 20, cursor: 'pointer',
-                backgroundColor: filter === f ? (LOG_COLORS[f] || '#1976d2') : '#f0f0f0',
+                backgroundColor: filter === f ? (LOG_COLORS[f] || APP_COLORS.primary) : '#f0f0f0',
                 color: filter === f ? '#fff' : '#555',
                 fontWeight: filter === f ? 700 : 400,
               }} />
@@ -324,7 +325,7 @@ export const CostWidget: React.FC = () => {
   return (
     <WidgetShell
       title="Cost vs Budget"
-      titleIcon={<AttachMoneyIcon sx={{ color: '#388e3c', fontSize: 18 }} />}
+      titleIcon={<AttachMoneyIcon sx={{ color: TRUIST.purple, fontSize: 18 }} />}
       source="Snowflake"
       loading={loading}
     >
@@ -407,7 +408,7 @@ export const ESPJobsWidget: React.FC = () => {
   return (
     <WidgetShell
       title="ESP Jobs & Pipelines"
-      titleIcon={<WorkIcon sx={{ color: '#2e7d32', fontSize: 18 }} />}
+      titleIcon={<WorkIcon sx={{ color: TRUIST.dusk, fontSize: 18 }} />}
       source="PostgreSQL · esp_job_cmnd | pipelines"
       loading={loading}
       error={error ?? undefined}
@@ -550,7 +551,7 @@ export const IncidentsWidget: React.FC<{ platform?: string | null; days?: number
                     label: i.priority_field || 'Unknown',
                     value: i.incident_count || 0,
                     color: INCIDENT_COLORS[i.priority_field] || '#757575',
-                    bg: ({ P1: '#fce4ec', P2: '#fff3e0', P3: '#e8f5e9', P4: '#e3f2fd', P5: '#f5f5f5' } as Record<string,string>)[i.priority_field] || '#f5f5f5',
+                    bg: PRIORITY_CONFIG[i.priority_field]?.bg || '#f5f5f5',
                   })),
                   { label: 'Total', value: totalIncidents, color: '#1565c0', bg: '#e3f2fd' },
                 ]}
@@ -621,7 +622,7 @@ export const MissedIncidentsWidget: React.FC<{ platform?: string | null; days?: 
     <>
       <WidgetShell
         title="Top Incidents by SLA"
-        titleIcon={<WarningAmberIcon sx={{ color: '#e65100', fontSize: 18 }} />}
+        titleIcon={<WarningAmberIcon sx={{ color: TRUIST.darkGray, fontSize: 18 }} />}
         source="PostgreSQL · edoops.service_now_inc"
         loading={loading}
         error={error ?? undefined}
@@ -635,7 +636,7 @@ export const MissedIncidentsWidget: React.FC<{ platform?: string | null; days?: 
                     label: r.priority_field || 'Unknown',
                     value: r.incident_count || 0,
                     color: INCIDENT_COLORS[r.priority_field] || '#757575',
-                    bg: ({ P1: '#fce4ec', P2: '#fff3e0', P3: '#e8f5e9', P4: '#e3f2fd', P5: '#f5f5f5' } as Record<string,string>)[r.priority_field] || '#f5f5f5',
+                    bg: PRIORITY_CONFIG[r.priority_field]?.bg || '#f5f5f5',
                   })),
                   { label: 'Total', value: total, color: '#1565c0', bg: '#e3f2fd' },
                 ]}
@@ -750,7 +751,7 @@ export const IncidentListWidget: React.FC<{ platform?: string | null; days?: num
         <Chip label={row.priority_field} size="small"
           sx={{ height: 20, fontSize: '10px', fontWeight: 700,
             color: INCIDENT_COLORS[row.priority_field] || '#555',
-            backgroundColor: ({ P1: '#fce4ec', P2: '#fff3e0', P3: '#e8f5e9', P4: '#e3f2fd', P5: '#f5f5f5' } as Record<string,string>)[row.priority_field] || '#eee' }} />
+            backgroundColor: PRIORITY_CONFIG[row.priority_field]?.bg || '#eee' }} />
       ),
     },
     { key: 'sninc_capability',     header: 'Capability',        width: 140, render: row => <Typography sx={{ fontSize: '11px', color: '#555' }}>{row.sninc_capability || '—'}</Typography> },
@@ -782,7 +783,7 @@ export const IncidentListWidget: React.FC<{ platform?: string | null; days?: num
                 sx={{
                   fontSize: '10px', height: 22, cursor: 'pointer',
                   fontWeight: priorityFilter === p ? 700 : 400,
-                  backgroundColor: priorityFilter === p ? (({ P1: '#fce4ec', P2: '#fff3e0', P3: '#e8f5e9', P4: '#e3f2fd', P5: '#f5f5f5' } as Record<string,string>)[p] ?? '#f5f5f5') : '#f5f5f5',
+                  backgroundColor: priorityFilter === p ? (PRIORITY_CONFIG[p]?.bg ?? '#f5f5f5') : '#f5f5f5',
                   color: priorityFilter === p ? (INCIDENT_COLORS[p] ?? '#1565c0') : '#aaa',
                   border: priorityFilter === p ? `1px solid ${INCIDENT_COLORS[p] ?? '#1565c0'}40` : '1px solid transparent',
                   '& .MuiChip-label': { px: 1 },
@@ -813,7 +814,7 @@ export const IncidentListWidget: React.FC<{ platform?: string | null; days?: num
 
 // ─── By Capability Widget ──────────────────────────────────
 
-const CAPABILITY_COLORS = ['#1565c0','#2e7d32','#e65100','#7b1fa2','#c62828','#00838f','#37474f']
+const CAPABILITY_COLORS = CHART_PALETTE
 
 export const CapabilityWidget: React.FC<{ platform?: string | null; days?: number }> = ({ platform, days = 7 }) => {
   const [data, setData] = useState<any[]>([])
@@ -888,7 +889,7 @@ export const AssignmentGroupWidget: React.FC<{ platform?: string | null; days?: 
   return (
     <WidgetShell
       title="Incidents by Assignment Group"
-      titleIcon={<ConfirmationNumberIcon sx={{ color: '#2e7d32', fontSize: 18 }} />}
+      titleIcon={<ConfirmationNumberIcon sx={{ color: TRUIST.dusk, fontSize: 18 }} />}
       source="PostgreSQL · edoops.service_now_inc"
       loading={loading}
       error={error ?? undefined}
@@ -952,7 +953,7 @@ export const EmergencyChangesWidget: React.FC<{ platform?: string | null }> = ({
                   label: r.priority_field || 'Unknown',
                   value: r.incident_count || 0,
                   color: PRIORITY_CONFIG[r.priority_field]?.color || '#757575',
-                  bg: ({ P1: '#fce4ec', P2: '#fff3e0', P3: '#e8f5e9', P4: '#e3f2fd', P5: '#f5f5f5' } as Record<string,string>)[r.priority_field] || '#f5f5f5',
+                  bg: PRIORITY_CONFIG[r.priority_field]?.bg || '#f5f5f5',
                 })),
                 { label: 'Total', value: total, color: '#7b1fa2', bg: '#f3e5f5' },
               ]}
@@ -978,7 +979,7 @@ export const EmergencyChangesWidget: React.FC<{ platform?: string | null }> = ({
 
 // ─── Pipelines Widget ──────────────────────────────────────
 
-const STATUS_CFG: Record<string, { color: string; bg: string; dot: string }> = {
+const PIPELINE_HEALTH_CONFIG: Record<string, { color: string; bg: string; dot: string }> = {
   healthy:  { color: '#2e7d32', bg: '#e8f5e9', dot: '#4caf50' },
   at_risk:  { color: '#f57c00', bg: '#fff8e1', dot: '#fb8c00' },
   critical: { color: '#c62828', bg: '#fce4ec', dot: '#e53935' },
@@ -1003,7 +1004,7 @@ export const PipelinesWidget: React.FC = () => {
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.3 }}>
             <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#1a1a1a' }}>{row.name}</Typography>
             <Chip label={row.status.replace('_', ' ')} size="small"
-              sx={{ height: 18, fontSize: '10px', fontWeight: 700, ...STATUS_CFG[row.status] }} />
+              sx={{ height: 18, fontSize: '10px', fontWeight: 700, ...PIPELINE_HEALTH_CONFIG[row.status] }} />
           </Box>
           <Box sx={{ display: 'flex', gap: 2, mb: 0.4 }}>
             <Typography sx={{ fontSize: '11px', color: '#777' }}>Success: <b>{row.successRate}%</b></Typography>
@@ -1011,7 +1012,7 @@ export const PipelinesWidget: React.FC = () => {
             <Typography sx={{ fontSize: '11px', color: '#777' }}>{row.schedule}</Typography>
           </Box>
           <Box sx={{ height: 4, backgroundColor: '#e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
-            <Box sx={{ height: '100%', width: `${row.successRate}%`, backgroundColor: STATUS_CFG[row.status]?.dot || '#aaa', borderRadius: 2 }} />
+            <Box sx={{ height: '100%', width: `${row.successRate}%`, backgroundColor: PIPELINE_HEALTH_CONFIG[row.status]?.dot || '#aaa', borderRadius: 2 }} />
           </Box>
         </Box>
       ),
@@ -1076,7 +1077,7 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
             ServiceNow 
           </Typography>
           {useMock && (
-            <Chip label="MOCK DATA" size="small" sx={{ fontSize: '9px', height: 18, bgcolor: '#fff3e0', color: '#f57c00', fontWeight: 700, border: '1px solid #f57c0040' }} />
+            <Chip label="MOCK DATA" size="small" sx={{ fontSize: '9px', height: 18, bgcolor: '#EFEDF4', color: TRUIST.purple, fontWeight: 700, border: `1px solid ${TRUIST.lightGray}` }} />
           )}
           <Autocomplete
               options={platforms}
@@ -1171,7 +1172,7 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
         <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #c62828', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
           <IncidentsWidget platform={selectedPlatform} days={days} />
         </Paper>
-        <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #e65100', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
+        <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: `3px solid ${TRUIST.darkGray}`, boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
           <MissedIncidentsWidget platform={selectedPlatform} days={days} />
         </Paper>
       </Box>
@@ -1201,7 +1202,7 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
         <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #1565c0', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
           <CapabilityWidget platform={selectedPlatform} days={days} />
         </Paper>
-        <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #2e7d32', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
+        <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: `3px solid ${TRUIST.dusk}`, boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
           <AssignmentGroupWidget platform={selectedPlatform} days={days} />
         </Paper>
       </Box>

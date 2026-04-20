@@ -16,6 +16,7 @@ import FilterListIcon from '@mui/icons-material/FilterList'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import DownloadIcon from '@mui/icons-material/Download'
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday'
+import { APP_COLORS, TRUIST } from '../../theme/truistPalette'
 
 interface DashboardFiltersProps {
   onFilterChange: (filters: DashboardFilters) => void
@@ -139,9 +140,9 @@ export const DashboardFilters: React.FC<DashboardFiltersProps> = ({ onFilterChan
             startIcon={<RefreshIcon />}
             onClick={onRefresh}
             sx={{
-              borderColor: '#1976d2',
-              color: '#1976d2',
-              '&:hover': { backgroundColor: '#e3f2fd' },
+              borderColor: APP_COLORS.primary,
+              color: APP_COLORS.primary,
+              '&:hover': { backgroundColor: TRUIST.mist },
             }}
           >
             Refresh
@@ -152,9 +153,9 @@ export const DashboardFilters: React.FC<DashboardFiltersProps> = ({ onFilterChan
             startIcon={<DownloadIcon />}
             onClick={handleExport}
             sx={{
-              borderColor: '#1976d2',
-              color: '#1976d2',
-              '&:hover': { backgroundColor: '#e3f2fd' },
+              borderColor: APP_COLORS.primary,
+              color: APP_COLORS.primary,
+              '&:hover': { backgroundColor: TRUIST.mist },
             }}
           >
             Export
@@ -172,7 +173,7 @@ export const DashboardFilters: React.FC<DashboardFiltersProps> = ({ onFilterChan
                 label={`Pipeline: ${filters.pipeline}`}
                 onDelete={() => handleFilterChange('pipeline', undefined)}
                 size="small"
-                sx={{ backgroundColor: '#e3f2fd', color: '#1976d2' }}
+                sx={{ backgroundColor: TRUIST.mist, color: APP_COLORS.primary }}
               />
             )}
             {filters.status !== 'all' && (
@@ -180,7 +181,7 @@ export const DashboardFilters: React.FC<DashboardFiltersProps> = ({ onFilterChan
                 label={`Status: ${filters.status}`}
                 onDelete={() => handleFilterChange('status', 'all')}
                 size="small"
-                sx={{ backgroundColor: '#e3f2fd', color: '#1976d2' }}
+                sx={{ backgroundColor: TRUIST.mist, color: APP_COLORS.primary }}
               />
             )}
             {filters.compareWith !== 'none' && (
@@ -188,7 +189,7 @@ export const DashboardFilters: React.FC<DashboardFiltersProps> = ({ onFilterChan
                 label={`Compare: ${filters.compareWith}`}
                 onDelete={() => handleFilterChange('compareWith', 'none')}
                 size="small"
-                sx={{ backgroundColor: '#e3f2fd', color: '#1976d2' }}
+                sx={{ backgroundColor: TRUIST.mist, color: APP_COLORS.primary }}
               />
             )}
           </Box>

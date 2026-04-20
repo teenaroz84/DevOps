@@ -9,6 +9,7 @@ import {
 } from '@mui/material'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import SaveIcon from '@mui/icons-material/Save'
+import { APP_COLORS, TRUIST } from '../../theme/truistPalette'
 
 export interface WidgetPreferences {
   activeWorkflows: boolean
@@ -81,10 +82,10 @@ export const UserPreferences: React.FC<UserPreferencesProps> = ({
   const totalCount = Object.values(preferences).length
 
   return (
-    <Box sx={{ p: 3, backgroundColor: '#fafafa', minHeight: '100vh' }}>
+    <Box sx={{ p: 3, backgroundColor: APP_COLORS.background, minHeight: '100vh' }}>
       {/* Header */}
       <Box sx={{ mb: 3 }}>
-        <Typography variant="h5" sx={{ fontWeight: 700, color: '#1976d2', mb: 1 }}>
+        <Typography variant="h5" sx={{ fontWeight: 700, color: APP_COLORS.primary, mb: 1 }}>
           User Preferences
         </Typography>
         <Typography variant="body2" sx={{ color: '#666' }}>
@@ -93,7 +94,7 @@ export const UserPreferences: React.FC<UserPreferencesProps> = ({
       </Box>
 
       {/* Stats */}
-      <Paper sx={{ p: 2, mb: 3, backgroundColor: '#e3f2fd', borderLeft: '4px solid #1976d2' }}>
+      <Paper sx={{ p: 2, mb: 3, backgroundColor: TRUIST.mist, borderLeft: `4px solid ${APP_COLORS.primary}` }}>
         <Typography variant="body1" sx={{ fontWeight: 600 }}>
           Visible Widgets: {visibleCount} / {totalCount}
         </Typography>
@@ -140,10 +141,10 @@ export const UserPreferences: React.FC<UserPreferencesProps> = ({
                       padding: '10px 12px',
                       borderRadius: 1,
                       border: '1px solid #e0e0e0',
-                      backgroundColor: preferences[widget.key] ? '#e8f5e9' : '#f5f5f5',
+                      backgroundColor: preferences[widget.key] ? TRUIST.shell : '#f5f5f5',
                       transition: 'all 0.2s ease',
                       '&:hover': {
-                        backgroundColor: preferences[widget.key] ? '#c8e6c9' : '#eeeeee',
+                        backgroundColor: preferences[widget.key] ? '#ece9f1' : '#eeeeee',
                       },
                     }}
                   />
@@ -155,8 +156,8 @@ export const UserPreferences: React.FC<UserPreferencesProps> = ({
       ))}
 
       {/* Dashboard Tips */}
-      <Paper sx={{ p: 2.5, mb: 2, backgroundColor: '#fff3e0', border: '1px solid #ffe0b2' }}>
-        <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#e65100', mb: 1 }}>
+      <Paper sx={{ p: 2.5, mb: 2, backgroundColor: '#EFEDF4', border: `1px solid ${TRUIST.lightGray}` }}>
+        <Typography variant="subtitle2" sx={{ fontWeight: 600, color: TRUIST.purple, mb: 1 }}>
           💡 Tips for Dashboard Customization
         </Typography>
         <Box component="ul" sx={{ m: 0, pl: 2, color: '#555', fontSize: '13px' }}>
@@ -177,7 +178,7 @@ export const UserPreferences: React.FC<UserPreferencesProps> = ({
             // Preferences are auto-saved, show confirmation
             alert('Preferences saved successfully!')
           }}
-          sx={{ backgroundColor: '#1976d2' }}
+          sx={{ backgroundColor: APP_COLORS.primary }}
         >
           Save Preferences
         </Button>
@@ -185,7 +186,7 @@ export const UserPreferences: React.FC<UserPreferencesProps> = ({
           variant="outlined"
           startIcon={<RefreshIcon />}
           onClick={handleResetDefaults}
-          sx={{ borderColor: '#ff9800', color: '#ff9800' }}
+          sx={{ borderColor: TRUIST.darkGray, color: TRUIST.darkGray }}
         >
           Reset to Defaults
         </Button>
