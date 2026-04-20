@@ -453,23 +453,31 @@ const PlatformIntelligenceScreen: React.FC<{ data: PlatformData; queriesDayLabel
   const heatValues = data.heatmap.map(r => r.cells.map(c => c.value))
 
   const utilColor = (v: number) => {
-    if (v >= 90) return '#d50000'
-    if (v >= 80) return '#ff6d00'
-    if (v >= 70) return '#ffd600'
-    if (v >= 60) return '#aeea00'
-    if (v >= 50) return '#00c853'
-    if (v >= 40) return '#00b8d4'
-    if (v >= 30) return '#2979ff'
-    if (v >= 20) return '#7c4dff'
-    return '#b388ff'
+    if (v >= 95) return '#b71c1c'
+    if (v >= 85) return '#e65100'
+    if (v >= 75) return '#fb8c00'
+    if (v >= 65) return '#fdd835'
+    if (v >= 55) return '#9ccc65'
+    if (v >= 45) return '#43a047'
+    if (v >= 35) return '#00897b'
+    if (v >= 25) return '#00acc1'
+    if (v >= 15) return '#1e88e5'
+    if (v >= 5) return '#5e35b1'
+    return '#8e24aa'
   }
 
   const heatLegend = [
-    { label: '90-100%', color: '#d50000' },
-    { label: '70-89%', color: '#ffd600' },
-    { label: '50-69%', color: '#00c853' },
-    { label: '30-49%', color: '#2979ff' },
-    { label: '0-29%', color: '#b388ff' },
+    { label: '95-100%', color: '#b71c1c' },
+    { label: '85-94%', color: '#e65100' },
+    { label: '75-84%', color: '#fb8c00' },
+    { label: '65-74%', color: '#fdd835' },
+    { label: '55-64%', color: '#9ccc65' },
+    { label: '45-54%', color: '#43a047' },
+    { label: '35-44%', color: '#00897b' },
+    { label: '25-34%', color: '#00acc1' },
+    { label: '15-24%', color: '#1e88e5' },
+    { label: '5-14%', color: '#5e35b1' },
+    { label: '0-4%', color: '#8e24aa' },
   ]
 
   const queryCols: ColumnDef[] = [
@@ -507,17 +515,19 @@ const PlatformIntelligenceScreen: React.FC<{ data: PlatformData; queriesDayLabel
 
       {/* Row 1: Warehouse Heatmap + Query Volume & Performance */}
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '2fr 1fr' }, gap: 2, alignItems: 'stretch', '& > *': { minWidth: 0 } }}>
-        <Paper elevation={0} sx={{ p: 2, minWidth: 0, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: `3px solid ${TRUIST.purple}`, borderRadius: 2 }}>
+        <Paper elevation={0} sx={{ p: 2, minWidth: 0, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: `3px solid ${TRUIST.purple}`, borderRadius: 2, height: 270, display: 'flex', flexDirection: 'column' }}>
           <Typography sx={{ fontSize: '12px', fontWeight: 600, mb: 1, color: '#1a2535' }}>Warehouse Usage Heatmap</Typography>
-          <HeatmapGrid
-            rows={heatRows}
-            cols={heatCols}
-            values={heatValues}
-            colorScale={utilColor}
-            showRowLabels
-            rowLabels={heatRows}
-            showLegend={false}
-          />
+          <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', pr: 0.5 }}>
+            <HeatmapGrid
+              rows={heatRows}
+              cols={heatCols}
+              values={heatValues}
+              colorScale={utilColor}
+              showRowLabels
+              rowLabels={heatRows}
+              showLegend={false}
+            />
+          </Box>
           <Box sx={{ mt: 1.25, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
             {heatLegend.map((item) => (
               <Box key={item.label} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
