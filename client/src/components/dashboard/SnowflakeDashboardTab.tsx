@@ -56,6 +56,28 @@ const TRUIST = {
   mist: '#EEF7F8',
 } as const
 
+const SAMPLE_AS_OF_DATE = '2026-03-12'
+
+const toIsoDate = (date: Date) => {
+  const year = date.getUTCFullYear()
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(date.getUTCDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+const shiftIsoDate = (isoDate: string, daysBack: number) => {
+  const shifted = new Date(`${isoDate}T00:00:00Z`)
+  shifted.setUTCDate(shifted.getUTCDate() - daysBack)
+  return toIsoDate(shifted)
+}
+
+const formatDisplayDate = (isoDate: string) => new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+  timeZone: 'UTC',
+}).format(new Date(`${isoDate}T00:00:00Z`))
+
 const fmtK = (n: number) => `$${(n / 1000).toFixed(1)}k`
 const fmtDollar = (n?: number) => n != null ? `$${n.toLocaleString()}` : '—'
 
@@ -275,7 +297,7 @@ const EMPTY_PLATFORM_SUMMARY: PlatformSummaryShape = {
 
 // ── Sub-screen 1: Cost & Efficiency ──────────────────────
 
-const CostEfficiencyScreen: React.FC<{ data: CostData }> = ({ data }) => {
+const CostEfficiencyScreen: React.FC<{ data: CostData; costDayLabel: string }> = ({ data, costDayLabel }) => {
   const s = data.summary
   const rowPanelHeight = 430
 
@@ -347,7 +369,7 @@ const CostEfficiencyScreen: React.FC<{ data: CostData }> = ({ data }) => {
 
       {/* 6 KPIs matching screenshot */}
       <StatCardGrid items={[
-        { label: 'Cost Today',           value: fmtDollar(s.cost_today),                              color: '#1565c0', bg: '#e3f2fd' },
+        { label: costDayLabel,           value: fmtDollar(s.cost_today),                              color: '#1565c0', bg: '#e3f2fd' },
         { label: 'Cost MTD',             value: fmtDollar(s.cost_mtd),                                color: '#37474f', bg: '#f5f5f5' },
         { label: 'Avg Daily Burn (30d)', value: fmtDollar(s.avg_daily_burn_30d),                      color: '#6a1b9a', bg: '#f3e5f5' },
         { label: 'Remaining Balance',    value: fmtDollar(s.remaining_balance),                       color: '#2e7d32', bg: '#e8f5e9' },
@@ -422,7 +444,7 @@ const CostEfficiencyScreen: React.FC<{ data: CostData }> = ({ data }) => {
 
 // ── Sub-screen 2: Platform Intelligence ──────────────────
 
-const PlatformIntelligenceScreen: React.FC<{ data: PlatformData }> = ({ data }) => {
+const PlatformIntelligenceScreen: React.FC<{ data: PlatformData; queriesDayLabel: string }> = ({ data, queriesDayLabel }) => {
   const s = data.summary
   const rowPanelHeight = 430
 
@@ -475,7 +497,7 @@ const PlatformIntelligenceScreen: React.FC<{ data: PlatformData }> = ({ data }) 
 
       {/* 6 KPIs matching screenshot */}
       <StatCardGrid items={[
-        { label: 'Queries Today',   value: (s.queries_today ?? 0).toLocaleString(),            color: '#1565c0', bg: '#e3f2fd' },
+        { label: queriesDayLabel,   value: (s.queries_today ?? 0).toLocaleString(),            color: '#1565c0', bg: '#e3f2fd' },
         { label: 'Query Success %', value: `${s.query_success_pct ?? 0}%`,                     color: '#2e7d32', bg: '#e8f5e9' },
         { label: 'Avg Query Time',  value: `${(s.avg_query_time_ms ?? 0).toLocaleString()} ms`, color: '#37474f', bg: '#f5f5f5' },
         { label: 'Credits Used',    value: (s.warehouse_credits_used ?? 0).toLocaleString(),   color: '#6a1b9a', bg: '#f3e5f5' },
@@ -602,8 +624,10 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
   const [isLive, setIsLive] = useState(false)
   const [platformLoading, setPlatformLoading] = useState(true)
   const [costLoading, setCostLoading] = useState(false)
-  const asOfDate = asOfOption === 'sample' ? '2026-03-12' : undefined
-  const queryParams = asOfDate ? { asOf: asOfDate } : { days }
+  const todayIsoDate = toIsoDate(new Date())
+  const selectedAsOfDate = asOfOption === 'sample' ? SAMPLE_AS_OF_DATE : shiftIsoDate(todayIsoDate, days)
+  const selectedDateLabel = formatDisplayDate(selectedAsOfDate)
+  const queryParams = { asOf: selectedAsOfDate }
   const [costData, setCostData] = useState<CostData>({
     summary: EMPTY_COST_SUMMARY,
     byPipeline: [],
@@ -700,7 +724,7 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
       if (successCount > 0) setIsLive(true)
     })
     return () => { alive = false }
-  }, [useMock, days, asOfDate])
+  }, [useMock, selectedAsOfDate])
 
   useEffect(() => {
     if (useMock || subTab !== 'cost') return
@@ -745,7 +769,7 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
     return () => {
       alive = false
     }
-  }, [useMock, subTab, days, asOfDate])
+  }, [useMock, subTab, selectedAsOfDate])
 
   const SUB_TABS: { key: SubTab; label: string; icon: React.ReactElement; accent: string }[] = [
     { key: 'platform', label: 'Platform Intelligence', icon: <QueryStatsIcon />,  accent: TRUIST.purple },
@@ -754,14 +778,12 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
 
   const loading = subTab === 'platform' ? platformLoading : costLoading
   const sliderValue = asOfOption === 'sample' ? 0 : days
-  const sliderLabel = asOfOption === 'sample' ? 'Sample Date' : `Last ${days}d`
+  const sliderLabel = asOfOption === 'sample' ? 'Sample Date' : selectedDateLabel
+  const costDayLabel = selectedAsOfDate === todayIsoDate ? 'Cost Today' : 'Cost Selected Day'
+  const queriesDayLabel = selectedAsOfDate === todayIsoDate ? 'Queries Today' : 'Queries Selected Day'
 
   const handleLookbackChange = (_: Event, value: number | number[]) => {
     const nextDays = Number(Array.isArray(value) ? value[0] : value)
-    if (nextDays <= 0) {
-      setAsOfOption('sample')
-      return
-    }
     setDays(nextDays)
     setAsOfOption('current')
   }
@@ -771,6 +793,7 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
   }
 
   const handleSelectCurrentDate = () => {
+    setDays(0)
     setAsOfOption('current')
   }
 
@@ -899,7 +922,7 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
             </Typography>
             <Chip
               size="small"
-              label="Mar 12, 2026"
+              label={formatDisplayDate(SAMPLE_AS_OF_DATE)}
               onClick={handleSelectSampleDate}
               sx={{
                 fontSize: '10px',
@@ -941,8 +964,8 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
           </Box>
         ) : (
           <>
-        {subTab === 'platform' && <PlatformIntelligenceScreen data={platformData} />}
-        {subTab === 'cost'     && <CostEfficiencyScreen data={costData} />}
+        {subTab === 'platform' && <PlatformIntelligenceScreen data={platformData} queriesDayLabel={queriesDayLabel} />}
+        {subTab === 'cost'     && <CostEfficiencyScreen data={costData} costDayLabel={costDayLabel} />}
           </>
         )}
       </Box>
