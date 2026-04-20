@@ -9,7 +9,7 @@ All queries run against **PostgreSQL** via `getPgPool()` in `server/src/routes/e
 | `esp_plt_mapping` | `edoops` | Platform registry — each row maps one `keys` value to a `plt_name` display name. Multiple `keys` rows can share the same `plt_name`. |
 | `esp_job_cmnd` | `edoops` | Job definitions — one row per job / appl_name entry |
 | `esp_job_stats_recent` | `edoops` | Recent job run history |
-| `esp_job_dpndnt` | `edoops` | Job dependency chains |
+| `esp_job_dpndt` | `edoops` | Job dependency chains |
 
 **`esp_plt_mapping` columns:**
 
@@ -36,7 +36,7 @@ All queries run against **PostgreSQL** via `getPgPool()` in `server/src/routes/e
 
 **`esp_job_stats_recent` columns:** `appl_name`, `job_longname`, `start_date`, `start_time`, `end_date`, `end_time`, `exec_qtime`, `ccfail` (`YES`/`NO`), `comp_code`
 
-**`esp_job_dpndnt` columns:** `appl_name`, `jobname`, `release` (successor job name)
+**`esp_job_dpndt` columns:** `appl_name`, `jobname`, `release` (successor job name)
 
 ---
 
@@ -189,13 +189,13 @@ SELECT
 
   (SELECT COALESCE(json_agg(s), '[]'::json)
    FROM (SELECT DISTINCT d.jobname, d.release AS successor_job
-         FROM edoops.esp_job_dpndnt d
+         FROM edoops.esp_job_dpndt d
          WHERE d.appl_name IN (SELECT appl_name FROM appl_names)
          ORDER BY d.jobname LIMIT 200) s) AS successors,
 
   (SELECT COALESCE(json_agg(p), '[]'::json)
    FROM (SELECT DISTINCT d.jobname, d.release AS predecessor_job
-         FROM edoops.esp_job_dpndnt d
+         FROM edoops.esp_job_dpndt d
          WHERE d.appl_name IN (SELECT appl_name FROM appl_names)
          ORDER BY d.jobname LIMIT 200) p) AS predecessors
 ```

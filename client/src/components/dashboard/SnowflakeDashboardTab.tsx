@@ -542,12 +542,14 @@ const PlatformIntelligenceScreen: React.FC<{ data: PlatformData; queriesDayLabel
 
         <Paper elevation={0} sx={{ p: 2, minWidth: 0, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: `3px solid ${TRUIST.sky}`, borderRadius: 2 }}>
           <Typography sx={{ fontSize: '12px', fontWeight: 600, mb: 1, color: '#1a2535' }}>Query Volume & Performance</Typography>
-          <Box sx={{ height: 180, width: '100%', minWidth: 0, overflow: 'hidden' }}>
+          <Box sx={{ height: 196, width: '100%', minWidth: 0, overflow: 'visible', pb: 1 }}>
             <ComposedBarLineChart
               data={data.queryVolumeTrend}
               xKey="date"
               bars={[{ key: 'queries', color: '#1976d2', label: 'Queries' }]}
               lines={[{ key: 'avg_time_ms', color: '#e53935', label: 'Avg Query Time (ms)', yAxisId: 'right' }]}
+              height={188}
+              margin={{ top: 5, right: 35, left: 0, bottom: 24 }}
             />
           </Box>
         </Paper>
@@ -789,8 +791,8 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
   const loading = subTab === 'platform' ? platformLoading : costLoading
   const sliderValue = asOfOption === 'sample' ? 0 : days
   const sliderLabel = asOfOption === 'sample' ? 'Sample Date' : selectedDateLabel
-  const costDayLabel = selectedAsOfDate === todayIsoDate ? 'Cost Today' : 'Cost Selected Day'
-  const queriesDayLabel = selectedAsOfDate === todayIsoDate ? 'Queries Today' : 'Queries Selected Day'
+  const costDayLabel =  'Cost Today' 
+  const queriesDayLabel =  'Queries Today' 
 
   const handleLookbackChange = (_: Event, value: number | number[]) => {
     const nextDays = Number(Array.isArray(value) ? value[0] : value)

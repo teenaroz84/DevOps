@@ -73,6 +73,8 @@ const DEFAULT_PREFS: OverviewPrefs = {
 }
 
 const PREFS_STORAGE_KEY = `executive-overview-prefs:${SESSION_ID}`
+const OVERVIEW_SNOWFLAKE_AS_OF = '2026-03-12'
+const OVERVIEW_SNOWFLAKE_AS_OF_LABEL = 'Mar 12, 2026'
 
 // ─── Overview / Landing page ───────────────────────────────
 const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({ onSourceSelect }) => {
@@ -107,12 +109,12 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
 
   useEffect(() => {
     setLoadingSnowflake(true)
-    snowflakeService.getCost()
+    snowflakeService.getCost({ asOf: OVERVIEW_SNOWFLAKE_AS_OF })
       .then(setCost)
       .catch(() => setCost(null))
       .finally(() => setLoadingSnowflake(false))
 
-    snowflakeService.getPlatformSummary()
+    snowflakeService.getPlatformSummary({ asOf: OVERVIEW_SNOWFLAKE_AS_OF })
       .then(setSnowflakePlatform)
       .catch(() => setSnowflakePlatform(null))
   }, [])
@@ -235,7 +237,7 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
   const platformHealthItems = [
     { label: 'DMF',         value: dmfSummary?.successRate?.value ?? 0, suffix: '%', max: 100, sublabel: `${dmfSummary?.failedRuns?.value ?? '—'} failed / ${dmfSummary?.totalRuns?.value ?? '—'} runs` },
     { label: 'Talend',      value: talendSuccessPct,                    suffix: '%', max: 100, sublabel: `${talendFailed} failed · ${talendRunning} running` },
-    { label: 'Snowflake',   value: sfEfficiencyPct,                     suffix: '%', max: 100, sublabel: `$${cost ? (cost.wasted_spend / 1000).toFixed(1) : '—'}K wasted spend` },
+    { label: 'Snowflake',   value: sfEfficiencyPct,                     suffix: '%', max: 100, sublabel: `$${cost ? (cost.wasted_spend / 1000).toFixed(1) : '—'}K wasted spend · as of ${OVERVIEW_SNOWFLAKE_AS_OF_LABEL}` },
     { label: 'ServiceNow',  value: snSlaCompliancePct,                  suffix: '%', max: 100, sublabel: `${slaBreached} SLA breached / ${tickets.length} tickets` },
   ]
 
@@ -281,10 +283,10 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
       color: budgetPct > 110 ? '#c62828' : budgetPct > 100 ? '#f57c00' : '#2e7d32',
       bg: budgetPct > 110 ? '#fce4ec' : budgetPct > 100 ? '#fff3e0' : '#e8f5e9',
       trend: cost
-        ? `$${(cost.total / 1000).toFixed(0)}K of $${(cost.budget / 1000).toFixed(0)}K`
+        ? `$${(cost.total / 1000).toFixed(0)}K of $${(cost.budget / 1000).toFixed(0)}K · as of ${OVERVIEW_SNOWFLAKE_AS_OF_LABEL}`
         : 'Snowflake',
       trendPositiveIsGood: false,
-      description: 'Snowflake compute + infrastructure budget utilisation.',
+      description: `Snowflake compute + infrastructure budget utilisation as of ${OVERVIEW_SNOWFLAKE_AS_OF_LABEL}.`,
     },
   ]
 
@@ -535,6 +537,22 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
         )}
       </Paper>
 
+      <Box sx={{ px: 0.25, pb: 0.25 }}>
+        <Chip
+          label={`Overview Snowflake metrics pinned to ${OVERVIEW_SNOWFLAKE_AS_OF_LABEL} for meaningful sample data`}
+          size="small"
+          sx={{
+            height: 22,
+            fontSize: '10px',
+            fontWeight: 700,
+            backgroundColor: '#eef7f8',
+            color: TRUIST.purple,
+            border: `1px solid ${TRUIST.sky}`,
+            '& .MuiChip-label': { px: 1.2 },
+          }}
+        />
+      </Box>
+
       {/* ── Cross-source KPI strip ── */}
       {prefs.kpiStrip && (
         <Paper sx={{ borderRadius: 2, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
@@ -594,7 +612,7 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
                         suffix: '%',
                         color: budgetPct > 110 ? '#c62828' : budgetPct > 100 ? '#f57c00' : '#2e7d32',
                         max: 120,
-                        sublabel: cost ? `Snowflake · $${(cost.total / 1000).toFixed(0)}K / $${(cost.budget / 1000).toFixed(0)}K` : 'Snowflake',
+                        sublabel: cost ? `Snowflake · $${(cost.total / 1000).toFixed(0)}K / $${(cost.budget / 1000).toFixed(0)}K · as of ${OVERVIEW_SNOWFLAKE_AS_OF_LABEL}` : `Snowflake · as of ${OVERVIEW_SNOWFLAKE_AS_OF_LABEL}`,
                       },
                     ]}
                     barHeight={10}
@@ -608,6 +626,7 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
                         talendFailed > 10  ? `${talendFailed} Talend task${talendFailed > 1 ? 's' : ''} failed`  : null,
                       ].filter(Boolean).join(' · ')}
                     />
+
                   )}
                 </Box>
               </WidgetShell>

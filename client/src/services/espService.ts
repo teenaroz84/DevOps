@@ -79,6 +79,13 @@ export const espService = {
     return apiClient.get(`/api/esp/platform-applications/${encodeURIComponent(platform)}?${params}`)
   },
 
+  /** Returns latest SLA violation rows narrowed by platform and optional applib */
+  getSlaViolations: (platformId: string, applName = '', limit = 250) => {
+    const params = new URLSearchParams({ platformId, limit: String(limit) })
+    if (applName) params.set('applName', applName)
+    return apiClient.get(`/api/esp/sla-violations?${params}`)
+  },
+
   /** Returns { applications: [{appl_name}] } — used to populate the dropdown */
   getApplications: () => apiClient.get('/api/esp/applications'),
 

@@ -41,6 +41,26 @@ interface AppData {
   job_run_table: Array<{ job_longname: string; command: string | null; argument: string | null; runs: number | null; start_date: string | null; start_time: string | null; end_date: string | null; end_time: string | null; exec_qtime: string | null; ccfail: string | null; comp_code: string | null }>
 }
 
+interface SLAViolationRow {
+  platform: string | null
+  batch_dt: string | null
+  appl_lib: string | null
+  job_name: string | null
+  run_criteria: string | null
+  sla_time: string | null
+  sla_type: string | null
+  job_start_time: string | null
+  job_end_time: string | null
+  sla_status: string | null
+  time_diff: string | null
+  application_desc: string | null
+  ccfail: string | null
+  bus_unit: string | null
+  sub_bus_unit: string | null
+  bus_summary: string | null
+  last_updated: string | null
+}
+
 const TREND_RUN_COLORS  = ['#1565c0', '#2e7d32', '#6a1b9a', '#00838f']
 const TREND_FAIL_COLORS = ['#e53935', '#f57c00', '#d81b60', '#ff6f00']
 
@@ -78,6 +98,8 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   const [metadataDetail, setMetadataDetail] = React.useState<AppData['metadata_detail']>([])
   const [jobRunTable, setJobRunTable] = React.useState<AppData['job_run_table']>([])
   const [tableLoading, setTableLoading] = React.useState(false)
+  const [slaViolations, setSlaViolations] = React.useState<SLAViolationRow[]>([])
+  const [slaViolationsLoading, setSlaViolationsLoading] = React.useState(false)
   const [selectedJobs, setSelectedJobs] = React.useState<string[]>([])
   const [jobStatusFilter, setJobStatusFilter] = React.useState('All')
 
@@ -209,6 +231,38 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
     setMetadataDetail([])
     setJobRunTable([])
     setTableLoading(false)
+  }, [selectedPlatform, selected, useMock])
+
+  React.useEffect(() => {
+    if (!selectedPlatform) {
+      setSlaViolations([])
+      setSlaViolationsLoading(false)
+      return
+    }
+
+    if (useMock) {
+      setSlaViolations([])
+      setSlaViolationsLoading(false)
+      return
+    }
+
+    let cancelled = false
+    setSlaViolationsLoading(true)
+    espService.getSlaViolations(selectedPlatform, selected || '')
+      .then((rows: any) => {
+        if (cancelled) return
+        setSlaViolations(Array.isArray(rows) ? rows : [])
+      })
+      .catch(() => {
+        if (!cancelled) setSlaViolations([])
+      })
+      .finally(() => {
+        if (!cancelled) setSlaViolationsLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
   }, [selectedPlatform, selected, useMock])
 
   // Load first 200 application names when platform changes; supports search-as-you-type
@@ -585,6 +639,44 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
     { key: 'jobname', header: 'Job Name', flex: 1, noWrap: true },
     { key: 'col2',    header: 'Link',     width: 120, noWrap: true,
       render: (r: any) => r.successor_job ?? r.predecessor_job ?? '—' },
+  ]
+
+  const slaViolationCols: ColumnDef[] = [
+    { key: 'platform', header: 'Platform', width: 80, render: r => r.platform ?? '—' },
+    { key: 'batch_dt', header: 'Batch Dt', width: 92, render: r => r.batch_dt ?? '—' },
+    { key: 'appl_lib', header: 'Applib', width: 120, noWrap: true, render: r => r.appl_lib ?? '—' },
+    { key: 'job_name', header: 'Job Name', flex: 1, noWrap: true, render: r => r.job_name ?? '—' },
+    { key: 'run_criteria', header: 'Run Criteria', width: 100, render: r => r.run_criteria ?? '—' },
+    { key: 'sla_time', header: 'SLA Time', width: 82, render: r => r.sla_time ?? '—' },
+    { key: 'sla_type', header: 'SLA Type', width: 110, render: r => r.sla_type ?? '—' },
+    {
+      key: 'sla_status',
+      header: 'SLA Status',
+      width: 126,
+      render: r => {
+        const status = String(r.sla_status ?? '').toUpperCase()
+        const isRed = status.includes('RED')
+        const isAmber = status.includes('AMBER')
+        return (
+          <Chip
+            label={r.sla_status ?? '—'}
+            size="small"
+            sx={{
+              height: 18,
+              fontSize: '10px',
+              fontWeight: 700,
+              bgcolor: isRed ? '#fce4ec' : isAmber ? '#fff3e0' : '#eceff1',
+              color: isRed ? '#c62828' : isAmber ? '#e65100' : '#546e7a',
+              border: `1px solid ${isRed ? '#ef9a9a' : isAmber ? '#ffcc80' : '#cfd8dc'}`,
+            }}
+          />
+        )
+      },
+    },
+    { key: 'time_diff', header: 'Time Diff', width: 150, render: r => r.time_diff ?? '—' },
+    { key: 'job_start_time', header: 'Job Start', width: 160, render: r => r.job_start_time ? String(r.job_start_time).replace('T', ' ').slice(0, 19) : '—' },
+    { key: 'job_end_time', header: 'Job End', width: 160, render: r => r.job_end_time ? String(r.job_end_time).replace('T', ' ').slice(0, 19) : '—' },
+    { key: 'application_desc', header: 'Application Desc', width: 170, render: r => r.application_desc ?? '—' },
   ]
 
   return (
@@ -1198,7 +1290,37 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
             */}
           </Box>
 
-          {/* ── Row 4: Predecessor Jobs | Successor Jobs | Metadata Table ── */}
+          {/* ── Row 4: SLA Violations ── */}
+          <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #c62828', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+            <WidgetShell
+              title="SLA Violations"
+              source={selected
+                ? `${selected} · latest missed SLA rows from job_sla_missed`
+                : `${data.appl_name} · latest missed SLA rows from job_sla_missed`}
+              titleIcon={<ScheduleIcon sx={{ color: '#c62828', fontSize: 18 }} />}
+            >
+              {slaViolationsLoading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                  <CircularProgress size={22} sx={{ color: '#c62828' }} />
+                </Box>
+              ) : (
+                <Box sx={{ px: 1.5, pb: 1 }}>
+                  <DataTable
+                    columns={slaViolationCols}
+                    rows={slaViolations}
+                    rowKey={(r) => `${r.platform}-${r.appl_lib}-${r.job_name}-${r.batch_dt}-${r.job_start_time}`}
+                    compact
+                    maxHeight={260}
+                    pageSize={200}
+                    accentColor="#c62828"
+                    emptyMessage="No SLA violations found for the current platform/applib selection"
+                  />
+                </Box>
+              )}
+            </WidgetShell>
+          </Paper>
+
+          {/* ── Row 5: Predecessor Jobs | Successor Jobs | Metadata Table ── */}
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 2fr', gap: 2 }}>
 
             <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
@@ -1266,7 +1388,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
             </Paper>
           </Box>
 
-          {/* ── Row 5: Metadata Detail ── */}
+          {/* ── Row 6: Metadata Detail ── */}
           <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #37474f', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
             <WidgetShell
               title="Metadata Table (esp_job_cmnd)"
@@ -1298,7 +1420,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
             </WidgetShell>
           </Paper>
 
-          {/* ── Row 6: Job Run Table ── */}
+          {/* ── Row 7: Job Run Table ── */}
           <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #1565c0', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
             <WidgetShell
               title="Job Run Table (esp_job_cmnd ⋈ esp_job_stats_recent)"
