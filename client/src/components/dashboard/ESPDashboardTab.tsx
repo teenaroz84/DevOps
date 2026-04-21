@@ -778,125 +778,134 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
         <Box sx={{ px: 2, py: 1, display: 'flex', alignItems: 'flex-start', gap: 1.5, flexWrap: 'wrap' }}>
 
           {/* Platform */}
-          <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'stretch', sm: 'center' }, gap: 0.75, flex: '1 1 180px', minWidth: { xs: '100%', sm: 180 } }}>
-            <Typography sx={{ fontSize: '11px', color: '#555', fontWeight: 600, whiteSpace: 'nowrap' }}>Platform:</Typography>
-            <FormControl size="small" sx={{ width: '100%', minWidth: 0 }}>
-              <Select
-                value={selectedPlatform ?? selectedApplibPlatform ?? ''}
-                onChange={(e) => {
-                  const val = (e.target.value as string) || null
-                  if (!val) return   // no-op — always keep a platform selected
-                  setSelected('')
-                  setSelectedPlatform(val)
-                }}
-                displayEmpty
-                disabled={platformLoading}
-                renderValue={(val) => {
-                  if (platformLoading) {
-                    return (
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <CircularProgress size={11} sx={{ color: '#2e7d32' }} />
-                        <em style={{ color: '#888', fontSize: '12px' }}>Loading…</em>
-                      </Box>
-                    )
-                  }
-                  return val ? String(val) : <em style={{ color: '#888' }}>All</em>
-                }}
-                sx={{
-                  fontSize: '12px', fontWeight: 600, width: '100%', minWidth: 0, bgcolor: '#fff',
-                  '& .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d3240' },
-                  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
-                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
-                }}
-              >
-                {platformSummary.filter(p => p.platform).map(p => (
-                  <MenuItem key={p.platform} value={p.platform} sx={{ fontSize: '12px', p: 0 }}>
-                    <Tooltip title={p.platform_name ?? p.platform} placement="right" arrow>
-                      <Box sx={{ width: '100%', px: 2, py: 0.75, display: 'flex', alignItems: 'center' }}>
-                        {p.platform_name ?? p.platform}
-                      </Box>
-                    </Tooltip>
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </Box>
-
-          {/* Applib */}
-          <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'stretch', sm: 'center' }, gap: 0.75, flex: '1 1 260px', minWidth: { xs: '100%', md: 260 } }}>
-            <Typography sx={{ fontSize: '11px', color: '#666', fontWeight: 500, whiteSpace: 'nowrap' }}>Applib:</Typography>
-            {!selectedPlatform ? (
-              <TextField
-                disabled
-                size="small"
-                placeholder="Select a platform first"
-                sx={{
-                  width: '100%', minWidth: 0,
-                  '& .MuiOutlinedInput-root': {
-                    fontSize: '12px', borderRadius: 1, bgcolor: '#f5f5f5',
-                  },
-                }}
-              />
-            ) : (
-              <Autocomplete
-                options={applibHasMore ? [...platformApplications, '__LOAD_MORE__'] : platformApplications}
-                value={selected || null}
-                inputValue={applibSearch}
-                onInputChange={(_, val, reason) => {
-                  if (reason === 'reset') return
-                  setApplibSearch(val)
-                  if (!selectedPlatform) return
-                  if (applibSearchRef.current) clearTimeout(applibSearchRef.current)
-                  applibSearchRef.current = setTimeout(() => {
-                    fetchApplibs(selectedPlatform, val)
-                  }, 300)
-                }}
-                onChange={(_, val) => {
-                  if (val === '__LOAD_MORE__' || !val) { setSelected(''); return }
-                  setSelected(val)
-                  setApplibSearch(val)
-                }}
-                filterOptions={(opts) => opts}
-                loading={applibLoading}
-                size="small"
-                sx={{ width: '100%', minWidth: 0 }}
-                componentsProps={{ paper: { sx: { fontSize: '12px' } } }}
-                getOptionLabel={(opt) => opt === '__LOAD_MORE__' ? '' : opt}
-                isOptionEqualToValue={(opt, val) => opt === val}
-                renderOption={(props, option) => {
-                  if (option === '__LOAD_MORE__') {
-                    const { key, ...rest } = props as any
-                    return (
-                      <li key="__LOAD_MORE__" {...rest}
-                        onClick={(e) => { e.stopPropagation(); if (selectedPlatform) fetchApplibs(selectedPlatform, applibSearch, true) }}
-                        style={{ justifyContent: 'center', borderTop: '1px solid #e8ecf1', padding: '6px' }}
-                      >
-                        <Typography sx={{ fontSize: '11px', color: '#1976d2', fontWeight: 700, cursor: 'pointer' }}>
-                          {applibLoading ? 'Loading…' : `Load more (${(applibTotal - platformApplications.length).toLocaleString()} remaining)`}
-                        </Typography>
-                      </li>
-                    )
-                  }
-                  const { key, ...rest } = props as any
-                  return <li key={option} {...rest} style={{ fontSize: '12px', padding: '4px 12px' }}>{option}</li>
-                }}
-                renderInput={(params) => (
-                  <TextField
-                    {...params}
-                    placeholder={applibTotal > 0 ? `${applibTotal.toLocaleString()} applib(s)` : `${platformApplications.length} applib(s)`}
+          {dashboardView === 'operations' && (
+            <>
+              <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'stretch', sm: 'center' }, gap: 0.75, flex: '1 1 180px', minWidth: { xs: '100%', sm: 180 } }}>
+                <Typography sx={{ fontSize: '11px', color: '#555', fontWeight: 600, whiteSpace: 'nowrap' }}>Platform:</Typography>
+                <FormControl size="small" sx={{ width: '100%', minWidth: 0 }}>
+                  <Select
+                    value={selectedPlatform ?? selectedApplibPlatform ?? ''}
+                    onChange={(e) => {
+                      const val = (e.target.value as string) || null
+                      if (!val) return
+                      setSelected('')
+                      setSelectedPlatform(val)
+                    }}
+                    displayEmpty
+                    disabled={platformLoading}
+                    renderValue={(val) => {
+                      if (platformLoading) {
+                        return (
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <CircularProgress size={11} sx={{ color: '#2e7d32' }} />
+                            <em style={{ color: '#888', fontSize: '12px' }}>Loading…</em>
+                          </Box>
+                        )
+                      }
+                      return val ? String(val) : <em style={{ color: '#888' }}>All</em>
+                    }}
                     sx={{
+                      fontSize: '12px', fontWeight: 600, width: '100%', minWidth: 0, bgcolor: '#fff',
+                      '& .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d3240' },
+                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
+                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
+                    }}
+                  >
+                    {platformSummary.filter(p => p.platform).map(p => (
+                      <MenuItem key={p.platform} value={p.platform} sx={{ fontSize: '12px', p: 0 }}>
+                        <Tooltip title={p.platform_name ?? p.platform} placement="right" arrow>
+                          <Box sx={{ width: '100%', px: 2, py: 0.75, display: 'flex', alignItems: 'center' }}>
+                            {p.platform_name ?? p.platform}
+                          </Box>
+                        </Tooltip>
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Box>
+
+              <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'stretch', sm: 'center' }, gap: 0.75, flex: '1 1 260px', minWidth: { xs: '100%', md: 260 } }}>
+                <Typography sx={{ fontSize: '11px', color: '#666', fontWeight: 500, whiteSpace: 'nowrap' }}>Applib:</Typography>
+                {!selectedPlatform ? (
+                  <TextField
+                    disabled
+                    size="small"
+                    placeholder="Select a platform first"
+                    sx={{
+                      width: '100%', minWidth: 0,
                       '& .MuiOutlinedInput-root': {
-                        fontSize: '12px', fontWeight: 600, borderRadius: 1, bgcolor: '#fff',
-                        '& .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d3240' },
-                        '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
-                        '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
+                        fontSize: '12px', borderRadius: 1, bgcolor: '#f5f5f5',
                       },
                     }}
                   />
+                ) : (
+                  <Autocomplete
+                    options={applibHasMore ? [...platformApplications, '__LOAD_MORE__'] : platformApplications}
+                    value={selected || null}
+                    inputValue={applibSearch}
+                    onInputChange={(_, val, reason) => {
+                      if (reason === 'reset') return
+                      setApplibSearch(val)
+                      if (!selectedPlatform) return
+                      if (applibSearchRef.current) clearTimeout(applibSearchRef.current)
+                      applibSearchRef.current = setTimeout(() => {
+                        fetchApplibs(selectedPlatform, val)
+                      }, 300)
+                    }}
+                    onChange={(_, val) => {
+                      if (val === '__LOAD_MORE__' || !val) { setSelected(''); return }
+                      setSelected(val)
+                      setApplibSearch(val)
+                    }}
+                    filterOptions={(opts) => opts}
+                    loading={applibLoading}
+                    size="small"
+                    sx={{ width: '100%', minWidth: 0 }}
+                    componentsProps={{ paper: { sx: { fontSize: '12px' } } }}
+                    getOptionLabel={(opt) => opt === '__LOAD_MORE__' ? '' : opt}
+                    isOptionEqualToValue={(opt, val) => opt === val}
+                    renderOption={(props, option) => {
+                      if (option === '__LOAD_MORE__') {
+                        const { key, ...rest } = props as any
+                        return (
+                          <li key="__LOAD_MORE__" {...rest}
+                            onClick={(e) => { e.stopPropagation(); if (selectedPlatform) fetchApplibs(selectedPlatform, applibSearch, true) }}
+                            style={{ justifyContent: 'center', borderTop: '1px solid #e8ecf1', padding: '6px' }}
+                          >
+                            <Typography sx={{ fontSize: '11px', color: '#1976d2', fontWeight: 700, cursor: 'pointer' }}>
+                              {applibLoading ? 'Loading…' : `Load more (${(applibTotal - platformApplications.length).toLocaleString()} remaining)`}
+                            </Typography>
+                          </li>
+                        )
+                      }
+                      const { key, ...rest } = props as any
+                      return <li key={option} {...rest} style={{ fontSize: '12px', padding: '4px 12px' }}>{option}</li>
+                    }}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        placeholder={applibTotal > 0 ? `${applibTotal.toLocaleString()} applib(s)` : `${platformApplications.length} applib(s)`}
+                        sx={{
+                          '& .MuiOutlinedInput-root': {
+                            fontSize: '12px', fontWeight: 600, borderRadius: 1, bgcolor: '#fff',
+                            '& .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d3240' },
+                            '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
+                            '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
+                          },
+                        }}
+                      />
+                    )}
+                  />
                 )}
-              />
-            )}
-          </Box>
+              </Box>
+            </>
+          )}
+
+          {/* Future SLA filters retained for later enablement.
+          {dashboardView === 'sla' && selectedPlatform && selected && (
+            <Box>Platform / Applib filter controls will be re-enabled here later.</Box>
+          )}
+          */}
 
           {/* Job selector */}
           {dashboardView === 'operations' && (
@@ -1007,8 +1016,8 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       {/* ── Dashboard ── */}
       {dashboardView === 'sla' && (
         <ESPSlaMissedJobsTab
-          selectedPlatform={selectedPlatform}
-          selectedApplib={selected}
+          selectedPlatform={null}
+          selectedApplib=""
           useMock={useMock}
         />
       )}

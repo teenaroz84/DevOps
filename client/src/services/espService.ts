@@ -87,15 +87,17 @@ export const espService = {
   },
 
   /** Returns the ESP SLA missed jobs dashboard aggregates from PostgreSQL only */
-  getSlaMissedDashboard: (platformId: string, applName = '') => {
-    const params = new URLSearchParams({ platformId })
+  getSlaMissedDashboard: (platformId = '', applName = '') => {
+    const params = new URLSearchParams()
+    if (platformId) params.set('platformId', platformId)
     if (applName) params.set('applName', applName)
     return apiClient.get(`/api/esp/sla-missed-dashboard?${params}`)
   },
 
   /** Returns drilldown rows for one SLA-missed ESP job */
-  getSlaMissedJobDetail: (platformId: string, jobName: string, applName = '', limit = 100) => {
-    const params = new URLSearchParams({ platformId, jobName, limit: String(limit) })
+  getSlaMissedJobDetail: (platformId = '', jobName: string, applName = '', limit = 100) => {
+    const params = new URLSearchParams({ jobName, limit: String(limit) })
+    if (platformId) params.set('platformId', platformId)
     if (applName) params.set('applName', applName)
     return apiClient.get(`/api/esp/sla-missed-job-detail?${params}`)
   },

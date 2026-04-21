@@ -567,18 +567,20 @@ router.get('/sla-missed-dashboard', async (req: Request, res: Response) => {
     const pool = getPgPool();
     const platformId = typeof req.query.platformId === 'string' ? decodeURIComponent(req.query.platformId) : '';
     const applName = typeof req.query.applName === 'string' ? req.query.applName.trim() : '';
+    const params: any[] = [];
+    let whereClause = '1=1';
 
-    if (!platformId) {
-      return res.status(400).json({ error: 'platformId is required' });
+    if (platformId) {
+      const plt = await getPlatformRow(platformId);
+      if (!plt) return res.status(404).json({ error: 'Unknown platform' });
+      params.push(plt.platform_name);
+      whereClause = `s.jslmis_pltf_nm IN ${pltKeysSubquery}`;
     }
 
-    const plt = await getPlatformRow(platformId);
-    if (!plt) return res.status(404).json({ error: 'Unknown platform' });
-
-    const params: any[] = [plt.platform_name];
-    const applClause = applName ? ' AND s.jslmis_appl_lib = $2' : '';
-    if (applName) params.push(applName);
-    const whereClause = `s.jslmis_pltf_nm IN ${pltKeysSubquery}${applClause}`;
+    if (applName) {
+      params.push(applName);
+      whereClause += ` AND s.jslmis_appl_lib = $${params.length}`;
+    }
 
     const safe = async <T>(fn: () => Promise<T>, fallback: T): Promise<T> => {
       try {
@@ -999,18 +1001,23 @@ router.get('/sla-missed-job-detail', async (req: Request, res: Response) => {
     const applName = typeof req.query.applName === 'string' ? req.query.applName.trim() : '';
     const limit = parseLimit(req.query, ESP_SLA_DETAIL_LIMIT, 500);
 
-    if (!platformId || !jobName) {
-      return res.status(400).json({ error: 'platformId and jobName are required' });
+    if (!jobName) {
+      return res.status(400).json({ error: 'jobName is required' });
     }
 
-    const plt = await getPlatformRow(platformId);
-    if (!plt) return res.status(404).json({ error: 'Unknown platform' });
+    const params: any[] = [jobName];
+    let whereClause = 's.jslmis_job_nm = $1';
 
-    const params: any[] = [plt.platform_name, jobName];
-    let applClause = '';
+    if (platformId) {
+      const plt = await getPlatformRow(platformId);
+      if (!plt) return res.status(404).json({ error: 'Unknown platform' });
+      params.unshift(plt.platform_name);
+      whereClause = `s.jslmis_pltf_nm IN ${pltKeysSubquery} AND s.jslmis_job_nm = $2`;
+    }
+
     if (applName) {
       params.push(applName);
-      applClause = ' AND s.jslmis_appl_lib = $3';
+      whereClause += ` AND s.jslmis_appl_lib = $${params.length}`;
     }
 
     const result = await pool.query(
@@ -1033,8 +1040,7 @@ router.get('/sla-missed-job-detail', async (req: Request, res: Response) => {
          s.jslmis_bus_summary,
          s.jslmis_last_updt_dttm
        FROM edoops.job_sla_missed s
-       WHERE s.jslmis_pltf_nm IN ${pltKeysSubquery}
-         AND s.jslmis_job_nm = $2${applClause}
+       WHERE ${whereClause}
        ORDER BY s.jslmis_last_updt_dttm DESC NULLS LAST
        LIMIT ${limit}`,
       params,

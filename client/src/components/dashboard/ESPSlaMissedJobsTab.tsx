@@ -184,7 +184,7 @@ export const ESPSlaMissedJobsTab: React.FC<ESPSlaMissedJobsTabProps> = ({
     setSelectedJobName(null)
     setJobDetailRows([])
 
-    if (!selectedPlatform || useMock) {
+    if (useMock) {
       setDashboard(null)
       setLoading(false)
       setError(null)
@@ -195,7 +195,7 @@ export const ESPSlaMissedJobsTab: React.FC<ESPSlaMissedJobsTabProps> = ({
     setLoading(true)
     setError(null)
 
-    espService.getSlaMissedDashboard(selectedPlatform, selectedApplib || '')
+    espService.getSlaMissedDashboard(selectedPlatform ?? '', selectedApplib || '')
       .then((result: any) => {
         if (cancelled) return
         setDashboard(result as SlaDashboardResponse)
@@ -215,7 +215,7 @@ export const ESPSlaMissedJobsTab: React.FC<ESPSlaMissedJobsTabProps> = ({
   }, [selectedApplib, selectedPlatform, useMock])
 
   React.useEffect(() => {
-    if (!selectedPlatform || !selectedJobName || useMock) {
+    if (!selectedJobName || useMock) {
       setJobDetailRows([])
       setJobDetailLoading(false)
       return
@@ -223,7 +223,7 @@ export const ESPSlaMissedJobsTab: React.FC<ESPSlaMissedJobsTabProps> = ({
 
     let cancelled = false
     setJobDetailLoading(true)
-    espService.getSlaMissedJobDetail(selectedPlatform, selectedJobName, selectedApplib || '')
+    espService.getSlaMissedJobDetail(selectedPlatform ?? '', selectedJobName, selectedApplib || '')
       .then((rows: any) => {
         if (cancelled) return
         setJobDetailRows(Array.isArray(rows) ? rows : [])
@@ -352,14 +352,6 @@ export const ESPSlaMissedJobsTab: React.FC<ESPSlaMissedJobsTabProps> = ({
     )
   }
 
-  if (!selectedPlatform) {
-    return (
-      <Paper elevation={0} sx={{ borderRadius: 2, p: 3, border: '1px solid #e8ecf1', backgroundColor: '#fff' }}>
-        <Typography sx={{ fontSize: '13px', color: '#666' }}>Select a platform to load the ESP SLA missed jobs dashboard.</Typography>
-      </Paper>
-    )
-  }
-
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
@@ -383,7 +375,7 @@ export const ESPSlaMissedJobsTab: React.FC<ESPSlaMissedJobsTabProps> = ({
       <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #c62828', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
         <WidgetShell
           title="ESP SLA Missed Jobs Dashboard"
-          source={selectedApplib ? `${selectedApplib} · PostgreSQL job_sla_missed` : 'Platform scope · PostgreSQL job_sla_missed'}
+          source={selectedApplib ? `${selectedApplib} · PostgreSQL job_sla_missed` : selectedPlatform ? 'Filtered platform scope · PostgreSQL job_sla_missed' : 'All platforms · PostgreSQL job_sla_missed'}
           titleIcon={<WarningAmberIcon sx={{ color: '#c62828', fontSize: 18 }} />}
         >
           <Box sx={{ p: 1.5 }}>
