@@ -1,15 +1,14 @@
 
 /**
- * ESP routes — queries against PostgreSQL edoops ESP tables
+ * ESP routes — queries against PostgreSQL edoops ESP tables.
  *
- * Platform resolution is driven by edoops.esp_plt_mapping:
- *   keys     → one pattern/key value per row (multiple rows per platform)
- *   plt_name → platform display name shared across multiple keys rows
+ * Platform resolution is now driven by edoops.esp_job_config:
+ *   pltf_name      → canonical platform identifier and display label used by the UI
+ *   appl_name      → application scope for platform-level filters
+ *   jobname        → job scope for platform/job-level widgets
  *
- * A single canonical keys value is chosen per plt_name with DISTINCT ON to serve
- * as the stable platform_id used in URLs and state.  All data queries still span
- * every keys row for the platform via:
- *     WHERE c.keys IN (SELECT keys FROM edoops.esp_plt_mapping WHERE plt_name = $1)
+ * Non-SLA routes resolve platform membership through esp_job_config rather than
+ * esp_plt_mapping/plt_name. SLA routes remain based on job_sla_missed.
  */
 import { Router, Request, Response } from 'express';
 import { getPgPool } from '../db/postgres';
@@ -57,52 +56,51 @@ function mapSlaMissedRow(row: any) {
   };
 }
 
-// ─── Helper: look up a platform by its canonical keys value (platform_id) ────
-// Returns { platform_id, platform_name } or null if the keys value is unknown.
+// Returns { platform_id, platform_name } or null if the platform value is unknown.
 async function getPlatformRow(platformId: string): Promise<{ platform_id: string; platform_name: string } | null> {
   const pool = getPgPool();
   const r = await pool.query(
-    `SELECT keys AS platform_id, plt_name AS platform_name
-     FROM edoops.esp_plt_mapping WHERE keys = $1 LIMIT 1`,
+    `SELECT DISTINCT pltf_name AS platform_id, pltf_name AS platform_name
+     FROM edoops.esp_job_config WHERE pltf_name = $1 LIMIT 1`,
     [platformId]
   );
   if (!r.rows.length) return null;
   return { platform_id: r.rows[0].platform_id, platform_name: r.rows[0].platform_name };
 }
 
-// Subquery: given a display plt_name ($1), returns all keys values for that platform.
-// Used as: WHERE c.plt_name IN ${pltKeysSubquery}
-const pltKeysSubquery = `(SELECT keys FROM edoops.esp_plt_mapping WHERE plt_name = $1)`;
+// SLA routes still filter by the platform name carried in job_sla_missed.
+const pltKeysSubquery = `(SELECT DISTINCT pltf_name FROM edoops.esp_job_config WHERE pltf_name = $1)`;
 
 // GET /api/esp/platform-summary
 // Streams NDJSON — one JSON line per platform.
-// Uses a single query that scans esp_job_cmnd ONCE across all platforms,
-// replacing the old N-separate-queries approach (one full scan per platform).
-// For EDL (25k jobs) the old approach caused 1.5min waits because each platform
-// query ran its own scan; now all aggregates are computed in one pass.
 router.get('/platform-summary', async (_req: Request, res: Response) => {
   try {
     const pool = getPgPool();
     const t0 = Date.now();
 
-    // per_job: join esp_plt_mapping → esp_job_cmnd, dedup jobs per platform
-    //   (GROUP BY plt_name, jobname so a job appearing in multiple applibs
-    //    is counted only once per platform, with its latest last_run_date)
-    // counts: aggregate totals per platform
-    // platforms: resolve the canonical platform_id (DISTINCT ON — tiny table, instant)
     const result = await pool.query(`
-      WITH per_job AS (
+      WITH config_jobs AS MATERIALIZED (
         SELECT
-          m.plt_name,
+          cfg.pltf_name,
+          cfg.appl_name,
+          cfg.jobname
+        FROM edoops.esp_job_config cfg
+        WHERE cfg.pltf_name IS NOT NULL
+          AND cfg.appl_name IS NOT NULL
+          AND cfg.jobname IS NOT NULL
+      ),
+      per_job AS (
+        SELECT
+          cfg.pltf_name,
           c.jobname,
           MAX(c.last_run_date) AS last_run_date
-        FROM edoops.esp_plt_mapping m
-        JOIN edoops.esp_job_cmnd c ON c.plt_name = m.keys
-        GROUP BY m.plt_name, c.jobname
+        FROM config_jobs cfg
+        JOIN edoops.esp_job_cmnd c ON c.appl_name = cfg.appl_name AND c.jobname = cfg.jobname
+        GROUP BY cfg.pltf_name, c.jobname
       ),
       counts AS (
         SELECT
-          plt_name,
+          pltf_name,
           COUNT(*)::int AS total,
           COUNT(CASE WHEN last_run_date IS NOT NULL
                        AND last_run_date::timestamp < NOW() - INTERVAL '2 days'
@@ -110,20 +108,20 @@ router.get('/platform-summary', async (_req: Request, res: Response) => {
           COUNT(CASE WHEN jobname LIKE '%JSDELAY%' OR jobname LIKE '%RETRIG%'
                      THEN 1 END)::int AS special
         FROM per_job
-        GROUP BY plt_name
+        GROUP BY pltf_name
       ),
       platforms AS (
-        SELECT DISTINCT ON (plt_name) keys AS platform_id, plt_name
-        FROM edoops.esp_plt_mapping
-        ORDER BY plt_name, keys
+        SELECT DISTINCT pltf_name AS platform_id, pltf_name AS platform_name
+        FROM edoops.esp_job_config
+        WHERE pltf_name IS NOT NULL
       )
-      SELECT p.platform_id, p.plt_name,
+      SELECT p.platform_id, p.platform_name,
              COALESCE(c.total,   0) AS total,
              COALESCE(c.idle,    0) AS idle,
              COALESCE(c.special, 0) AS special
       FROM platforms p
-      LEFT JOIN counts c ON c.plt_name = p.plt_name
-      ORDER BY p.plt_name
+      LEFT JOIN counts c ON c.pltf_name = p.platform_name
+      ORDER BY p.platform_name
     `);
 
     console.log(`[ESP] platform-summary — ${result.rows.length} platforms in ${Date.now() - t0}ms`);
@@ -133,12 +131,12 @@ router.get('/platform-summary', async (_req: Request, res: Response) => {
     res.flushHeaders();
 
     // Talend rows first so the client auto-selects Talend immediately
-    const talend = result.rows.filter((r: any) =>  r.plt_name.toLowerCase().includes('talend'));
-    const others = result.rows.filter((r: any) => !r.plt_name.toLowerCase().includes('talend'));
+    const talend = result.rows.filter((r: any) =>  r.platform_name.toLowerCase().includes('talend'));
+    const others = result.rows.filter((r: any) => !r.platform_name.toLowerCase().includes('talend'));
     for (const row of [...talend, ...others]) {
       res.write(JSON.stringify({
         platform:      row.platform_id,
-        platform_name: row.plt_name,
+        platform_name: row.platform_name,
         total:         row.total   ?? 0,
         idle:          row.idle    ?? 0,
         special:       row.special ?? 0,
@@ -176,13 +174,13 @@ router.get('/platform-applications/:platformId', async (req: Request, res: Respo
 
     const [totalResult, rowsResult] = await Promise.all([
       pool.query(
-        `SELECT COUNT(DISTINCT appl_name) AS cnt FROM edoops.esp_job_cmnd
-         WHERE plt_name IN ${pltKeysSubquery} ${searchClause}`,
+        `SELECT COUNT(DISTINCT appl_name) AS cnt FROM edoops.esp_job_config
+         WHERE pltf_name = $1 ${searchClause}`,
         params
       ),
       pool.query(
-        `SELECT DISTINCT appl_name FROM edoops.esp_job_cmnd
-         WHERE plt_name IN ${pltKeysSubquery} ${searchClause}
+        `SELECT DISTINCT appl_name FROM edoops.esp_job_config
+         WHERE pltf_name = $1 ${searchClause}
          ORDER BY appl_name
          LIMIT ${limit} OFFSET ${offset}`,
         params
@@ -225,7 +223,13 @@ router.get('/platform-detail/:platformId', async (req: Request, res: Response) =
       WITH base AS MATERIALIZED (
         SELECT jobname, appl_name, agent, jobtype, user_job, last_run_date
         FROM edoops.esp_job_cmnd
-        WHERE plt_name IN ${pltKeysSubquery}
+        WHERE (appl_name, jobname) IN (
+          SELECT DISTINCT appl_name, jobname
+          FROM edoops.esp_job_config
+          WHERE pltf_name = $1
+            AND appl_name IS NOT NULL
+            AND jobname IS NOT NULL
+        )
       ),
       appl_names AS MATERIALIZED (
         SELECT DISTINCT appl_name FROM base
@@ -329,7 +333,16 @@ router.get('/platform-job-list/:platformId', async (req: Request, res: Response)
 
     const [totalResult, jobsResult] = await Promise.all([
       pool.query(
-        `SELECT COUNT(DISTINCT jobname) AS cnt FROM edoops.esp_job_cmnd WHERE plt_name IN ${pltKeysSubquery}${applClause}`,
+        `SELECT COUNT(DISTINCT c.jobname) AS cnt
+         FROM edoops.esp_job_cmnd c
+         JOIN (
+           SELECT DISTINCT appl_name, jobname
+           FROM edoops.esp_job_config
+           WHERE pltf_name = $1
+             AND appl_name IS NOT NULL
+             AND jobname IS NOT NULL
+         ) cfg ON cfg.appl_name = c.appl_name AND cfg.jobname = c.jobname
+         WHERE 1=1${applClause}`,
         params.slice(0, applName ? 2 : 1)
       ),
       pool.query(`
@@ -337,7 +350,14 @@ router.get('/platform-job-list/:platformId', async (req: Request, res: Response)
           SELECT DISTINCT ON (c.jobname)
             c.jobname, c.appl_name, c.jobtype AS job_type, c.last_run_date
           FROM edoops.esp_job_cmnd c
-          WHERE c.plt_name IN ${pltKeysSubquery}${applClause.replace('appl_name', 'c.appl_name')}
+          JOIN (
+            SELECT DISTINCT appl_name, jobname
+            FROM edoops.esp_job_config
+            WHERE pltf_name = $1
+              AND appl_name IS NOT NULL
+              AND jobname IS NOT NULL
+          ) cfg ON cfg.appl_name = c.appl_name AND cfg.jobname = c.jobname
+          WHERE 1=1${applClause.replace('appl_name', 'c.appl_name')}
           ORDER BY c.jobname, c.last_run_date DESC NULLS LAST
         ),
         latest_status AS (
@@ -392,14 +412,18 @@ router.get('/platform-run-trend/:platformId', async (req: Request, res: Response
     const plt = await getPlatformRow(platformId);
     if (!plt) return res.status(404).json({ error: 'Unknown platform' });
     const pltName = plt.platform_name;
-
     const result = await pool.query(`
       WITH base AS (
-        SELECT s.end_date, s.end_time::time AS et, s.jobname, s.ccfail
+        SELECT s.end_date, s.end_time::time AS et, s.job_longname AS jobname, s.ccfail
         FROM edoops.esp_job_stats_recent s
-        JOIN edoops.esp_job_cmnd c ON c.appl_name = s.appl_name AND c.jobname = s.job_longname
-        WHERE c.plt_name IN ${pltKeysSubquery}
-          AND s.end_date >= CURRENT_DATE - INTERVAL '${days} days'
+        JOIN (
+          SELECT DISTINCT appl_name, jobname
+          FROM edoops.esp_job_config
+          WHERE pltf_name = $1
+            AND appl_name IS NOT NULL
+            AND jobname IS NOT NULL
+        ) cfg ON cfg.appl_name = s.appl_name AND cfg.jobname = s.job_longname
+        WHERE s.end_date >= CURRENT_DATE - INTERVAL '${days} days'
       )
       SELECT
         end_date AS day,
@@ -433,7 +457,13 @@ router.get('/platform-metadata/:platformId', async (req: Request, res: Response)
       SELECT jobname, command, argument, agent, jobtype AS job_type,
              esp_command AS comp_code, runs, user_job, appl_name
       FROM edoops.esp_job_cmnd
-      WHERE plt_name IN ${pltKeysSubquery}
+      WHERE (appl_name, jobname) IN (
+        SELECT DISTINCT appl_name, jobname
+        FROM edoops.esp_job_config
+        WHERE pltf_name = $1
+          AND appl_name IS NOT NULL
+          AND jobname IS NOT NULL
+      )
       ORDER BY jobname
     `, [plt.platform_name]);
     res.json(result.rows.map((r: any) => ({
@@ -461,10 +491,16 @@ router.get('/platform-job-run-table/:platformId', async (req: Request, res: Resp
              es.start_date, es.start_time, es.end_date, es.end_time,
              es.exec_qtime, es.ccfail, es.comp_code
       FROM edoops.esp_job_cmnd ec
+      JOIN (
+        SELECT DISTINCT appl_name, jobname
+        FROM edoops.esp_job_config
+        WHERE pltf_name = $1
+          AND appl_name IS NOT NULL
+          AND jobname IS NOT NULL
+      ) cfg ON cfg.appl_name = ec.appl_name AND cfg.jobname = ec.jobname
       JOIN edoops.esp_job_stats_recent es
         ON ec.appl_name = es.appl_name AND ec.jobname = es.job_longname
-      WHERE ec.plt_name IN ${pltKeysSubquery}
-        AND es.end_date >= CURRENT_DATE - INTERVAL '${days} days'
+      WHERE es.end_date >= CURRENT_DATE - INTERVAL '${days} days'
       ORDER BY es.end_date DESC, es.end_time DESC
     `, [plt.platform_name]);
     res.json(result.rows.map((r: any) => ({
@@ -1051,23 +1087,18 @@ router.get('/sla-missed-job-detail', async (req: Request, res: Response) => {
 });
 
 // GET /api/esp/applications
-// Returns all distinct appl_names with their canonical platform_id and plt_name
+// Returns all distinct appl_names with their canonical platform id/name.
 router.get('/applications', async (_req: Request, res: Response) => {
   try {
     const pool = getPgPool();
     const result = await pool.query(`
-      WITH plt_ids AS (
-        SELECT DISTINCT ON (plt_name) keys AS platform_id, plt_name
-        FROM edoops.esp_plt_mapping
-        ORDER BY plt_name, keys
-      )
-      SELECT DISTINCT ON (c.appl_name)
-        c.appl_name,
-        pi.platform_id,
-        pi.plt_name AS platform_name
-      FROM edoops.esp_job_cmnd c
-      LEFT JOIN plt_ids pi ON c.plt_name IN (SELECT keys FROM edoops.esp_plt_mapping WHERE plt_name = pi.plt_name)
-      ORDER BY c.appl_name
+      SELECT DISTINCT ON (cfg.appl_name)
+        cfg.appl_name,
+        cfg.pltf_name AS platform_id,
+        cfg.pltf_name AS platform_name
+      FROM edoops.esp_job_config cfg
+      WHERE cfg.appl_name IS NOT NULL
+      ORDER BY cfg.appl_name, cfg.pltf_name
     `);
     res.json({
       applications: result.rows.map((row: any) => ({
