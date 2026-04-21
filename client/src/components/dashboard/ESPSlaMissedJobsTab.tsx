@@ -55,7 +55,6 @@ interface SlaDetailRow {
   job_start_time: string | null
   job_end_time: string | null
   time_diff: string | null
-  cmd_detail: string | null
   bus_unit: string | null
   sub_bus_unit: string | null
   bus_summary: string | null
@@ -332,7 +331,6 @@ export const ESPSlaMissedJobsTab: React.FC<ESPSlaMissedJobsTabProps> = ({
     { key: 'sla_status', header: 'SLA Status', width: 110, render: row => row.sla_status ?? '—' },
     { key: 'job_start_time', header: 'Job Start', width: 132, render: row => formatDateTime(row.job_start_time) },
     { key: 'job_end_time', header: 'Job End', width: 132, render: row => formatDateTime(row.job_end_time) },
-    { key: 'cmd_detail', header: 'Command Detail', flex: 1.2, render: row => row.cmd_detail ?? '—' },
     { key: 'bus_unit', header: 'Business Unit', width: 120, render: row => row.bus_unit ?? '—' },
     { key: 'sub_bus_unit', header: 'Sub Business Unit', width: 140, render: row => row.sub_bus_unit ?? '—' },
     { key: 'bus_summary', header: 'Business Summary', flex: 1, render: row => row.bus_summary ?? '—' },
@@ -423,6 +421,24 @@ export const ESPSlaMissedJobsTab: React.FC<ESPSlaMissedJobsTabProps> = ({
           </WidgetShell>
         </Paper>
 
+        <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex' }}>
+          <WidgetShell title="Top Applications with Most SLA Misses" source="Last 7 days" titleIcon={<AppsIcon sx={{ color: '#0057B8', fontSize: 18 }} />}>
+            <Box sx={{ px: 1.5, py: 1.25, overflowY: 'auto' }}>
+              <MetricBarList
+                items={topApplications.map((item, index) => ({
+                  label: item.name,
+                  value: item.sla_misses,
+                  max: Math.max(...topApplications.map(entry => entry.sla_misses), 1),
+                  color: CHART_COLORS[index % CHART_COLORS.length],
+                }))}
+                compact
+              />
+            </Box>
+          </WidgetShell>
+        </Paper>
+      </Box>
+
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))', xl: '1.15fr 1fr 1fr' }, gap: 2 }}>
         <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
           <WidgetShell title="7-Day Trend by Platform" source="Daily trend" titleIcon={<InsightsIcon sx={{ color: '#00A3AD', fontSize: 18 }} />}>
             <Box sx={{ p: 1.5 }}>
@@ -440,9 +456,7 @@ export const ESPSlaMissedJobsTab: React.FC<ESPSlaMissedJobsTabProps> = ({
             </Box>
           </WidgetShell>
         </Paper>
-      </Box>
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))', xl: '1.15fr 1fr 1fr' }, gap: 2 }}>
         <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
           <WidgetShell title="7-Day Trend by SLA Type" source="Daily trend" titleIcon={<ScheduleIcon sx={{ color: '#6F5BD3', fontSize: 18 }} />}>
             <Box sx={{ p: 1.5 }}>
@@ -456,22 +470,6 @@ export const ESPSlaMissedJobsTab: React.FC<ESPSlaMissedJobsTabProps> = ({
                 }))}
                 height={250}
                 margin={{ top: 8, right: 12, left: -8, bottom: 4 }}
-              />
-            </Box>
-          </WidgetShell>
-        </Paper>
-
-        <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex' }}>
-          <WidgetShell title="Top Applications with Most SLA Misses" source="Last 7 days" titleIcon={<AppsIcon sx={{ color: '#0057B8', fontSize: 18 }} />}>
-            <Box sx={{ px: 1.5, py: 1.25, overflowY: 'auto' }}>
-              <MetricBarList
-                items={topApplications.map((item, index) => ({
-                  label: item.name,
-                  value: item.sla_misses,
-                  max: Math.max(...topApplications.map(entry => entry.sla_misses), 1),
-                  color: CHART_COLORS[index % CHART_COLORS.length],
-                }))}
-                compact
               />
             </Box>
           </WidgetShell>
