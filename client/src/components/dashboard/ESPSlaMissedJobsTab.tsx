@@ -394,7 +394,7 @@ export const ESPSlaMissedJobsTab: React.FC<ESPSlaMissedJobsTabProps> = ({
         </WidgetShell>
       </Paper>
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: '1fr 1fr 1.2fr' }, gap: 2 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))', xl: '1fr 1fr 1.2fr' }, gap: 2 }}>
         <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
           <WidgetShell title="SLA Misses by Day" source="Last 14 days" titleIcon={<TrendingUpIcon sx={{ color: '#0057B8', fontSize: 18 }} />}>
             <Box sx={{ p: 1.5 }}>
@@ -442,7 +442,7 @@ export const ESPSlaMissedJobsTab: React.FC<ESPSlaMissedJobsTabProps> = ({
         </Paper>
       </Box>
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: '1.15fr 1fr 1fr' }, gap: 2 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))', xl: '1.15fr 1fr 1fr' }, gap: 2 }}>
         <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
           <WidgetShell title="7-Day Trend by SLA Type" source="Daily trend" titleIcon={<ScheduleIcon sx={{ color: '#6F5BD3', fontSize: 18 }} />}>
             <Box sx={{ p: 1.5 }}>
@@ -494,7 +494,7 @@ export const ESPSlaMissedJobsTab: React.FC<ESPSlaMissedJobsTabProps> = ({
         </Paper>
       </Box>
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: 'repeat(4, 1fr)' }, gap: 2 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))', xl: 'repeat(4, 1fr)' }, gap: 2 }}>
         <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
           <WidgetShell title="Misses by Platform" source="Last 7 days" titleIcon={<InsightsIcon sx={{ color: '#0057B8', fontSize: 18 }} />}>
             <Box sx={{ p: 1.5, display: 'flex', justifyContent: 'center' }}>
@@ -563,7 +563,7 @@ export const ESPSlaMissedJobsTab: React.FC<ESPSlaMissedJobsTabProps> = ({
         </Paper>
       </Box>
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: 'repeat(2, 1fr)' }, gap: 2 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' }, gap: 2 }}>
         <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
           <WidgetShell title="Current Open Missed Jobs Queue" source="Open queue" titleIcon={<TableChartIcon sx={{ color: '#0057B8', fontSize: 18 }} />}>
             <Box sx={{ px: 1.25, pb: 1.25 }}>
@@ -635,7 +635,7 @@ export const ESPSlaMissedJobsTab: React.FC<ESPSlaMissedJobsTabProps> = ({
         </Paper>
       </Box>
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: 'repeat(2, 1fr)' }, gap: 2 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' }, gap: 2 }}>
         <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex' }}>
           <WidgetShell title="SLA Miss Percent by Platform" source="Last 7 days" titleIcon={<InsightsIcon sx={{ color: '#0057B8', fontSize: 18 }} />}>
             <Box sx={{ px: 1.5, py: 1.25, overflowY: 'auto' }}>
@@ -673,7 +673,7 @@ export const ESPSlaMissedJobsTab: React.FC<ESPSlaMissedJobsTabProps> = ({
         </Paper>
       </Box>
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: '1.2fr 1fr' }, gap: 2 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))', xl: '1.2fr 1fr' }, gap: 2 }}>
         <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
           <WidgetShell title="Daily Open vs Closed Missed Jobs" source="Last 14 days" titleIcon={<TrendingUpIcon sx={{ color: '#6F5BD3', fontSize: 18 }} />}>
             <Box sx={{ p: 1.5 }}>
