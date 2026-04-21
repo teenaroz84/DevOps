@@ -5,7 +5,7 @@
  *   2. Cost & Efficiency Overview
  */
 import React, { useState, useEffect } from 'react'
-import { Box, Typography, Paper, Chip, Tooltip, Button, CircularProgress, Slider } from '@mui/material'
+import { Box, Typography, Paper, Chip, Button, CircularProgress, Slider } from '@mui/material'
 import AcUnitIcon from '@mui/icons-material/AcUnit'
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney'
 import QueryStatsIcon from '@mui/icons-material/QueryStats'
@@ -18,6 +18,7 @@ import {
   ComposedBarLineChart,
   TrendLineChart,
   DataTable,
+  DonutChart,
 } from '../widgets'
 import type { ColumnDef } from '../widgets'
 import {
@@ -88,47 +89,6 @@ const ERROR_COLOR: Record<string, string> = {
   ROW_ACCESS: '#42a5f5',
   ERROR:      '#e53935',
   SLOW:       '#fb8c00',
-}
-
-// ── Treemap (simple CSS grid based) ───────────────────────
-
-const Treemap: React.FC<{ items: typeof MOCK_SF_COST_BY_PIPELINE }> = ({ items }) => {
-  const total = items.reduce((s, i) => s + i.cost, 0)
-  if (total === 0) {
-    return (
-      <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Typography sx={{ color: '#aaa', fontSize: '12px' }}>No data</Typography>
-      </Box>
-    )
-  }
-  return (
-    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '2px', height: '100%', alignContent: 'flex-start' }}>
-      {items.map(item => {
-        const pct = (item.cost / total) * 100
-        return (
-          <Tooltip key={item.name} title={`${item.name}: ${fmtK(item.cost)}`}>
-            <Box sx={{
-              width: `${Math.max(pct * 1.5, 8)}%`,
-              minHeight: pct > 20 ? '48%' : '22%',
-              backgroundColor: item.color,
-              borderRadius: '2px',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              cursor: 'default',
-              flexGrow: pct > 15 ? 1 : 0,
-              opacity: 0.9,
-              '&:hover': { opacity: 1 },
-            }}>
-              {pct > 12 && (
-                <Typography sx={{ fontSize: '10px', color: '#fff', fontWeight: 700, textAlign: 'center', px: 0.5 }}>
-                  {item.name.split('_')[0]}
-                </Typography>
-              )}
-            </Box>
-          </Tooltip>
-        )
-      })}
-    </Box>
-  )
 }
 
 // ── Scatter plot (SVG) ────────────────────────────────────
@@ -381,8 +341,21 @@ const CostEfficiencyScreen: React.FC<{ data: CostData; costDayLabel: string }> =
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' }, gap: 2, alignItems: 'stretch', '& > *': { minWidth: 0 } }}>
         <Paper elevation={0} sx={{ p: 2, minWidth: 0, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: `3px solid ${TRUIST.purple}`, borderRadius: 2 }}>
           <Typography sx={{ fontSize: '12px', fontWeight: 600, mb: 1, color: '#1a2535' }}>Cost by Service Type</Typography>
-          <Box sx={{ height: 180, minWidth: 0, overflow: 'hidden' }}>
-            <Treemap items={data.byPipeline} />
+          <Box sx={{ minHeight: 180, minWidth: 0, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <DonutChart
+              data={data.byPipeline.map(item => ({
+                name: item.name,
+                value: item.cost,
+                color: item.color,
+              }))}
+              size={190}
+              innerRadius={34}
+              outerRadius={62}
+              centerLabel={fmtK(data.byPipeline.reduce((sum, item) => sum + item.cost, 0))}
+              showLegend
+              valueFormatter={fmtK}
+              tooltipTitleFormatter={(item) => `Service: ${item.name}`}
+            />
           </Box>
         </Paper>
 
@@ -789,7 +762,7 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
 
   const SUB_TABS: { key: SubTab; label: string; icon: React.ReactElement; accent: string }[] = [
     { key: 'platform', label: 'Platform Intelligence', icon: <QueryStatsIcon />,  accent: TRUIST.purple },
-    { key: 'cost',     label: 'Cost & Efficiency',     icon: <AttachMoneyIcon />, accent: TRUIST.dusk },
+    { key: 'cost',     label: 'FinOps',                icon: <AttachMoneyIcon />, accent: TRUIST.dusk },
   ]
 
   const loading = subTab === 'platform' ? platformLoading : costLoading
@@ -985,7 +958,7 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
             <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.5, color: '#78909c' }}>
               <CircularProgress size={26} sx={{ color: TRUIST.purple }} />
               <Typography sx={{ fontSize: '12px', fontWeight: 600 }}>
-                {subTab === 'platform' ? 'Loading Platform Intelligence...' : 'Loading Cost & Efficiency...'}
+                {subTab === 'platform' ? 'Loading Platform Intelligence...' : 'Loading FinOps...'}
               </Typography>
             </Box>
           </Box>

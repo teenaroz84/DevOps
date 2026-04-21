@@ -19,6 +19,7 @@ import { useMockData } from '../../context/MockDataContext'
 import { MOCK_ESP_PLATFORM_SUMMARY, getMockAppData } from '../../services/espMockData'
 import { AGENTS } from '../../config/agentConfig'
 import { APP_COLORS, TRUIST } from '../../theme/truistPalette'
+import { ESPSlaMissedJobsTab } from './ESPSlaMissedJobsTab'
 
 // ─── Types ────────────────────────────────────────────────
 interface NameCount { name: string; count: number }
@@ -90,6 +91,7 @@ const getEspRunStatus = (row: { run_status?: string | null; last_run_date?: stri
 export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void }> = ({ onOpenAgent }) => {
   const { useMock } = useMockData()
   const didAutoSelectPlatform = React.useRef(false)
+  const [dashboardView, setDashboardView] = React.useState<'operations' | 'sla'>('operations')
   const [selected, setSelected] = React.useState<string>('')
   const [data, setData] = React.useState<AppData | null>(null)
   const [loading, setLoading] = React.useState(false)
@@ -687,6 +689,37 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
         elevation={0}
         sx={{ borderRadius: 2, border: '1px solid #e8ecf1', bgcolor: '#f8f9fb', overflow: 'hidden', position: 'sticky', top: 0, zIndex: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.07)' }}
       >
+        <Box sx={{ display: 'flex', alignItems: 'center', backgroundColor: '#1a2535', px: 2, flexShrink: 0 }}>
+          {[
+            { key: 'operations' as const, label: 'ESP', accent: '#1976d2' },
+            { key: 'sla' as const, label: 'SLA Missed Jobs', accent: '#c62828' },
+          ].map(tab => {
+            const isActive = dashboardView === tab.key
+            return (
+              <Box
+                key={tab.key}
+                onClick={() => setDashboardView(tab.key)}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 0.75,
+                  px: 2.5,
+                  py: 1.2,
+                  cursor: 'pointer',
+                  borderBottom: isActive ? `3px solid ${tab.accent}` : '3px solid transparent',
+                  color: isActive ? '#fff' : '#78909c',
+                  transition: 'all 0.15s',
+                  '&:hover': { color: '#fff', backgroundColor: 'rgba(255,255,255,0.05)' },
+                }}
+              >
+                <Typography sx={{ fontSize: '12px', fontWeight: isActive ? 700 : 400 }}>
+                  {tab.label}
+                </Typography>
+              </Box>
+            )
+          })}
+        </Box>
+
         {/* ── Row 1: Title ── */}
         <Box sx={{ px: 2, py: 1, display: 'flex', alignItems: 'center', gap: 1.5, borderBottom: '1px solid #e8ecf1' }}>
           <AppsIcon sx={{ fontSize: 15, color: '#2e7d32' }} />
@@ -698,24 +731,26 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
           )}
           <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1.5 }}>
             {/* ── Date range slider ── */}
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 200 }}>
-              <Typography sx={{ fontSize: '11px', color: '#777', whiteSpace: 'nowrap' }}>Last {days}d</Typography>
-              <Slider
-                value={days}
-                min={1}
-                max={5}
-                step={1}
-                onChange={(_e, v) => setDays(v as number)}
-                size="small"
-                sx={{
-                  color: '#2e7d32',
-                  width: 120,
-                  '& .MuiSlider-thumb': { width: 12, height: 12 },
-                  '& .MuiSlider-rail': { opacity: 0.3 },
-                }}
-              />
-              <Typography sx={{ fontSize: '10px', color: '#bbb', whiteSpace: 'nowrap' }}>5d</Typography>
-            </Box>
+            {dashboardView === 'operations' && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 200 }}>
+                <Typography sx={{ fontSize: '11px', color: '#777', whiteSpace: 'nowrap' }}>Last {days}d</Typography>
+                <Slider
+                  value={days}
+                  min={1}
+                  max={5}
+                  step={1}
+                  onChange={(_e, v) => setDays(v as number)}
+                  size="small"
+                  sx={{
+                    color: '#2e7d32',
+                    width: 120,
+                    '& .MuiSlider-thumb': { width: 12, height: 12 },
+                    '& .MuiSlider-rail': { opacity: 0.3 },
+                  }}
+                />
+                <Typography sx={{ fontSize: '10px', color: '#bbb', whiteSpace: 'nowrap' }}>5d</Typography>
+              </Box>
+            )}
             {onOpenAgent && (
               <Button
                 size="small"
@@ -864,6 +899,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
           </Box>
 
           {/* Job selector */}
+          {dashboardView === 'operations' && (
             <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'stretch', sm: 'center' }, gap: 0.75, flex: '1 1 320px', minWidth: { xs: '100%', lg: 320 } }}>
               <Typography sx={{ fontSize: '11px', color: '#666', fontWeight: 500, whiteSpace: 'nowrap' }}>Job:</Typography>
               <Autocomplete
@@ -932,14 +968,15 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                 )}
               />
             </Box>
+          )}
 
           {/* Clear Filters */}
-          {(selectedJobs.length > 0 || selected || (selectedPlatform && platformSummary.length > 0 && selectedPlatform !== platformSummary[0].platform)) && (
+          {((dashboardView === 'operations' && selectedJobs.length > 0) || selected || (selectedPlatform && platformSummary.length > 0 && selectedPlatform !== platformSummary[0].platform)) && (
             <Button
               size="small"
               onClick={() => {
                 const first = platformSummary[0]?.platform ?? null
-                setSelectedJobs([])
+                if (dashboardView === 'operations') setSelectedJobs([])
                 setSelected('')
                 setSelectedPlatform(first)
               }}
@@ -952,14 +989,14 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       </Paper>
 
       {/* ── Loading ── */}
-      {loading && (
+      {dashboardView === 'operations' && loading && (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
           <CircularProgress sx={{ color: '#2e7d32' }} />
         </Box>
       )}
 
       {/* ── No data ── */}
-      {!loading && !data && selected && (
+      {dashboardView === 'operations' && !loading && !data && selected && (
         <Paper elevation={0} sx={{ borderRadius: 2, p: 4, textAlign: 'center', border: '1px solid #e8ecf1' }}>
           <Typography sx={{ fontSize: '13px', color: '#aaa' }}>
             No data available for <strong>{selected}</strong>
@@ -968,7 +1005,15 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       )}
 
       {/* ── Dashboard ── */}
-      {!loading && data && (
+      {dashboardView === 'sla' && (
+        <ESPSlaMissedJobsTab
+          selectedPlatform={selectedPlatform}
+          selectedApplib={selected}
+          useMock={useMock}
+        />
+      )}
+
+      {dashboardView === 'operations' && !loading && data && (
         <>
           {/* ── Row 1: KPI stat cards ── */}
           <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #2e7d32', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>

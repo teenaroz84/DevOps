@@ -45,6 +45,10 @@ interface DonutChartProps {
   onSliceClick?: (name: string) => void
   /** Highlighted slice name (shows ring) */
   activeSlice?: string | null
+  /** Formats numeric values in the tooltip and legend */
+  valueFormatter?: (value: number) => string
+  /** Formats the tooltip title/label for a slice */
+  tooltipTitleFormatter?: (item: DonutSlice) => string
 }
 
 export const DonutChart: React.FC<DonutChartProps> = ({
@@ -58,9 +62,12 @@ export const DonutChart: React.FC<DonutChartProps> = ({
   showTitle = false,
   onSliceClick,
   activeSlice,
+  valueFormatter,
+  tooltipTitleFormatter,
 }) => {
   const cx = size / 2
   const cy = size / 2
+  const formatValue = (value: number) => valueFormatter ? valueFormatter(value) : value.toLocaleString()
 
   return (
     <Box>
@@ -100,9 +107,11 @@ export const DonutChart: React.FC<DonutChartProps> = ({
               ))}
             </Pie>
             <RechartsTooltip
-              formatter={(val: any) => [
-                typeof val === 'number' ? val.toLocaleString() : val,
-              ]}
+              formatter={(val: any, _name: any, entry: any) => {
+                const slice = entry?.payload as DonutSlice | undefined
+                const label = slice ? (tooltipTitleFormatter ? tooltipTitleFormatter(slice) : slice.name) : 'Value'
+                return [typeof val === 'number' ? formatValue(val) : val, label]
+              }}
               contentStyle={{
                 fontSize: 12,
                 border: '1px solid #ddd',
@@ -138,7 +147,7 @@ export const DonutChart: React.FC<DonutChartProps> = ({
             {data.map(item => (
               <Tooltip
                 key={item.name}
-                title={`${item.name}: ${item.value.toLocaleString()}`}
+                title={`${tooltipTitleFormatter ? tooltipTitleFormatter(item) : item.name}: ${formatValue(item.value)}`}
                 placement="right"
                 arrow
               >
@@ -174,7 +183,7 @@ export const DonutChart: React.FC<DonutChartProps> = ({
                     {item.name}
                   </Typography>
                   <Typography sx={{ fontSize: '12px', fontWeight: 700, color: '#222', flexShrink: 0 }}>
-                    {item.value.toLocaleString()}
+                    {formatValue(item.value)}
                   </Typography>
                 </Box>
               </Tooltip>

@@ -19,6 +19,8 @@ const router = Router();
 const ESP_DEFAULT_DAYS = 2;
 const ESP_MAX_DAYS = 5;
 const ESP_SLA_VIOLATION_LIMIT = 250;
+const ESP_SLA_QUEUE_LIMIT = 25;
+const ESP_SLA_DETAIL_LIMIT = 100;
 
 function parseDays(query: any): number {
   const n = parseInt(String(query.days ?? ESP_DEFAULT_DAYS), 10);
@@ -29,6 +31,31 @@ function parseLimit(query: any, fallback: number, max: number): number {
   const n = parseInt(String(query.limit ?? fallback), 10);
   if (isNaN(n)) return fallback;
   return Math.min(Math.max(n, 1), max);
+}
+
+function mapSlaMissedRow(row: any) {
+  return {
+    platform: row.jslmis_pltf_nm ?? null,
+    batch_dt: row.jslmis_batch_dt ? String(row.jslmis_batch_dt).split('T')[0] : null,
+    appl_lib: row.jslmis_appl_lib ?? null,
+    application_desc: row.jslmis_application_desc ?? null,
+    job_name: row.jslmis_job_nm ?? null,
+    run_criteria: row.jslmis_run_criteria ?? null,
+    sla_time: row.jslmis_sla_time ?? null,
+    sla_type: row.jslmis_sla_typ ?? null,
+    sla_status: row.jslmis_sla_status ?? null,
+    job_start_time: row.jslmis_job_start_time ?? null,
+    job_end_time: row.jslmis_job_end_time ?? null,
+    time_diff: row.jslmis_time_diff ?? null,
+    cmd_detail: row.jslmis_cmd_dtl ?? null,
+    bus_unit: row.jslmis_bus_unit ?? null,
+    sub_bus_unit: row.jslmis_sub_bus_unit ?? null,
+    bus_summary: row.jslmis_bus_summary ?? null,
+    last_updated: row.jslmis_last_updt_dttm ?? null,
+    duration_minutes: row.duration_minutes != null ? parseFloat(row.duration_minutes) : null,
+    running_minutes: row.running_minutes != null ? parseFloat(row.running_minutes) : null,
+    sla_miss_count: row.sla_miss_count != null ? parseInt(row.sla_miss_count, 10) : null,
+  };
 }
 
 // ─── Helper: look up a platform by its canonical keys value (platform_id) ────
@@ -529,6 +556,493 @@ router.get('/sla-violations', async (req: Request, res: Response) => {
     })));
   } catch (err: any) {
     console.error('ESP sla-violations error:', err.message);
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
+// GET /api/esp/sla-missed-dashboard?platformId=<id>&applName=<name>
+// Aggregates the SLA missed jobs dashboard directly from PostgreSQL.
+router.get('/sla-missed-dashboard', async (req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const platformId = typeof req.query.platformId === 'string' ? decodeURIComponent(req.query.platformId) : '';
+    const applName = typeof req.query.applName === 'string' ? req.query.applName.trim() : '';
+
+    if (!platformId) {
+      return res.status(400).json({ error: 'platformId is required' });
+    }
+
+    const plt = await getPlatformRow(platformId);
+    if (!plt) return res.status(404).json({ error: 'Unknown platform' });
+
+    const params: any[] = [plt.platform_name];
+    const applClause = applName ? ' AND s.jslmis_appl_lib = $2' : '';
+    if (applName) params.push(applName);
+    const whereClause = `s.jslmis_pltf_nm IN ${pltKeysSubquery}${applClause}`;
+
+    const safe = async <T>(fn: () => Promise<T>, fallback: T): Promise<T> => {
+      try {
+        return await fn();
+      } catch (error: any) {
+        console.warn('[ESP] sla-missed-dashboard query skipped:', error.message);
+        return fallback;
+      }
+    };
+
+    const detailFields = `
+      s.jslmis_pltf_nm,
+      s.jslmis_batch_dt,
+      s.jslmis_appl_lib,
+      s.jslmis_application_desc,
+      s.jslmis_job_nm,
+      s.jslmis_run_criteria,
+      s.jslmis_sla_time,
+      s.jslmis_sla_typ,
+      s.jslmis_sla_status,
+      s.jslmis_job_start_time,
+      s.jslmis_job_end_time,
+      s.jslmis_time_diff,
+      s.jslmis_cmd_dtl,
+      s.jslmis_bus_unit,
+      s.jslmis_sub_bus_unit,
+      s.jslmis_bus_summary,
+      s.jslmis_last_updt_dttm
+    `;
+
+    const [
+      metrics,
+      dailyMisses,
+      hourlyMisses,
+      platformTrend,
+      slaTypeTrend,
+      topApplications,
+      topBusinessUnits,
+      missesByPlatform,
+      missesBySlaType,
+      missesByRunCriteria,
+      topRepeatedJobs,
+      openQueue,
+      longestRunning,
+      recentlyUpdated,
+      noEndTime,
+      percentByPlatform,
+      percentByBusinessUnit,
+      dailyOpenClosed,
+      avgDurationByApplication,
+    ] = await Promise.all([
+      safe(async () => {
+        const result = await pool.query(
+          `WITH base AS MATERIALIZED (
+             SELECT *
+             FROM edoops.job_sla_missed s
+             WHERE ${whereClause}
+           )
+           SELECT
+             COUNT(*) FILTER (WHERE jslmis_batch_dt = CURRENT_DATE)::int AS total_sla_missed_jobs_today,
+             COUNT(*) FILTER (WHERE jslmis_job_end_time IS NULL)::int AS open_missed_jobs_right_now,
+             COUNT(DISTINCT jslmis_application_desc) FILTER (WHERE jslmis_batch_dt = CURRENT_DATE)::int AS distinct_applications_impacted,
+             COUNT(DISTINCT jslmis_bus_unit) FILTER (WHERE jslmis_batch_dt = CURRENT_DATE)::int AS distinct_business_units_impacted,
+             ROUND(AVG(CASE
+               WHEN jslmis_job_start_time IS NOT NULL
+               THEN EXTRACT(EPOCH FROM (COALESCE(jslmis_job_end_time, CURRENT_TIMESTAMP) - jslmis_job_start_time)) / 60
+             END)::numeric, 2) AS avg_delay_minutes,
+             ROUND(MAX(CASE
+               WHEN jslmis_job_start_time IS NOT NULL
+               THEN EXTRACT(EPOCH FROM (COALESCE(jslmis_job_end_time, CURRENT_TIMESTAMP) - jslmis_job_start_time)) / 60
+             END)::numeric, 2) AS longest_delay_minutes
+           FROM base`,
+          params,
+        );
+        const row = result.rows[0] ?? {};
+        return {
+          total_sla_missed_jobs_today: parseInt(row.total_sla_missed_jobs_today ?? '0', 10),
+          open_missed_jobs_right_now: parseInt(row.open_missed_jobs_right_now ?? '0', 10),
+          distinct_applications_impacted: parseInt(row.distinct_applications_impacted ?? '0', 10),
+          distinct_business_units_impacted: parseInt(row.distinct_business_units_impacted ?? '0', 10),
+          avg_delay_minutes: row.avg_delay_minutes != null ? parseFloat(row.avg_delay_minutes) : null,
+          longest_delay_minutes: row.longest_delay_minutes != null ? parseFloat(row.longest_delay_minutes) : null,
+        };
+      }, {
+        total_sla_missed_jobs_today: 0,
+        open_missed_jobs_right_now: 0,
+        distinct_applications_impacted: 0,
+        distinct_business_units_impacted: 0,
+        avg_delay_minutes: null,
+        longest_delay_minutes: null,
+      }),
+      safe(async () => {
+        const result = await pool.query(
+          `SELECT
+             s.jslmis_batch_dt AS day,
+             COUNT(*)::int AS sla_misses
+           FROM edoops.job_sla_missed s
+           WHERE ${whereClause}
+             AND s.jslmis_batch_dt >= CURRENT_DATE - INTERVAL '14 days'
+           GROUP BY s.jslmis_batch_dt
+           ORDER BY s.jslmis_batch_dt`,
+          params,
+        );
+        return result.rows.map((row: any) => ({
+          day: row.day ? String(row.day).split('T')[0] : null,
+          sla_misses: parseInt(row.sla_misses, 10),
+        }));
+      }, []),
+      safe(async () => {
+        const result = await pool.query(
+          `SELECT
+             EXTRACT(HOUR FROM s.jslmis_job_start_time)::int AS job_start_hour,
+             COUNT(*)::int AS sla_misses
+           FROM edoops.job_sla_missed s
+           WHERE ${whereClause}
+             AND s.jslmis_job_start_time IS NOT NULL
+             AND s.jslmis_batch_dt >= CURRENT_DATE - INTERVAL '7 days'
+           GROUP BY EXTRACT(HOUR FROM s.jslmis_job_start_time)
+           ORDER BY job_start_hour`,
+          params,
+        );
+        return result.rows.map((row: any) => ({
+          hour: parseInt(row.job_start_hour, 10),
+          sla_misses: parseInt(row.sla_misses, 10),
+        }));
+      }, []),
+      safe(async () => {
+        const result = await pool.query(
+          `SELECT
+             s.jslmis_batch_dt AS day,
+             s.jslmis_pltf_nm AS platform,
+             COUNT(*)::int AS sla_misses
+           FROM edoops.job_sla_missed s
+           WHERE ${whereClause}
+             AND s.jslmis_batch_dt >= CURRENT_DATE - INTERVAL '7 days'
+           GROUP BY s.jslmis_batch_dt, s.jslmis_pltf_nm
+           ORDER BY s.jslmis_batch_dt, s.jslmis_pltf_nm`,
+          params,
+        );
+        return result.rows.map((row: any) => ({
+          day: row.day ? String(row.day).split('T')[0] : null,
+          platform: row.platform ?? 'Unknown',
+          sla_misses: parseInt(row.sla_misses, 10),
+        }));
+      }, []),
+      safe(async () => {
+        const result = await pool.query(
+          `SELECT
+             s.jslmis_batch_dt AS day,
+             COALESCE(s.jslmis_sla_typ, 'Unknown') AS sla_type,
+             COUNT(*)::int AS sla_misses
+           FROM edoops.job_sla_missed s
+           WHERE ${whereClause}
+             AND s.jslmis_batch_dt >= CURRENT_DATE - INTERVAL '7 days'
+           GROUP BY s.jslmis_batch_dt, COALESCE(s.jslmis_sla_typ, 'Unknown')
+           ORDER BY s.jslmis_batch_dt, sla_type`,
+          params,
+        );
+        return result.rows.map((row: any) => ({
+          day: row.day ? String(row.day).split('T')[0] : null,
+          sla_type: row.sla_type ?? 'Unknown',
+          sla_misses: parseInt(row.sla_misses, 10),
+        }));
+      }, []),
+      safe(async () => {
+        const result = await pool.query(
+          `SELECT
+             COALESCE(s.jslmis_application_desc, 'Unknown') AS name,
+             COUNT(*)::int AS sla_misses
+           FROM edoops.job_sla_missed s
+           WHERE ${whereClause}
+             AND s.jslmis_batch_dt >= CURRENT_DATE - INTERVAL '7 days'
+           GROUP BY COALESCE(s.jslmis_application_desc, 'Unknown')
+           ORDER BY sla_misses DESC, name
+           LIMIT 10`,
+          params,
+        );
+        return result.rows.map((row: any) => ({ name: row.name, sla_misses: parseInt(row.sla_misses, 10) }));
+      }, []),
+      safe(async () => {
+        const result = await pool.query(
+          `SELECT
+             COALESCE(s.jslmis_bus_unit, 'Unknown') AS name,
+             COUNT(*)::int AS sla_misses
+           FROM edoops.job_sla_missed s
+           WHERE ${whereClause}
+             AND s.jslmis_batch_dt >= CURRENT_DATE - INTERVAL '7 days'
+           GROUP BY COALESCE(s.jslmis_bus_unit, 'Unknown')
+           ORDER BY sla_misses DESC, name
+           LIMIT 10`,
+          params,
+        );
+        return result.rows.map((row: any) => ({ name: row.name, sla_misses: parseInt(row.sla_misses, 10) }));
+      }, []),
+      safe(async () => {
+        const result = await pool.query(
+          `SELECT
+             COALESCE(s.jslmis_pltf_nm, 'Unknown') AS name,
+             COUNT(*)::int AS sla_misses
+           FROM edoops.job_sla_missed s
+           WHERE ${whereClause}
+             AND s.jslmis_batch_dt >= CURRENT_DATE - INTERVAL '7 days'
+           GROUP BY COALESCE(s.jslmis_pltf_nm, 'Unknown')
+           ORDER BY sla_misses DESC, name`,
+          params,
+        );
+        return result.rows.map((row: any) => ({ name: row.name, sla_misses: parseInt(row.sla_misses, 10) }));
+      }, []),
+      safe(async () => {
+        const result = await pool.query(
+          `SELECT
+             COALESCE(s.jslmis_sla_typ, 'Unknown') AS name,
+             COUNT(*)::int AS sla_misses
+           FROM edoops.job_sla_missed s
+           WHERE ${whereClause}
+             AND s.jslmis_batch_dt >= CURRENT_DATE - INTERVAL '7 days'
+           GROUP BY COALESCE(s.jslmis_sla_typ, 'Unknown')
+           ORDER BY sla_misses DESC, name`,
+          params,
+        );
+        return result.rows.map((row: any) => ({ name: row.name, sla_misses: parseInt(row.sla_misses, 10) }));
+      }, []),
+      safe(async () => {
+        const result = await pool.query(
+          `SELECT
+             COALESCE(s.jslmis_run_criteria, 'Unknown') AS name,
+             COUNT(*)::int AS sla_misses
+           FROM edoops.job_sla_missed s
+           WHERE ${whereClause}
+             AND s.jslmis_batch_dt >= CURRENT_DATE - INTERVAL '7 days'
+           GROUP BY COALESCE(s.jslmis_run_criteria, 'Unknown')
+           ORDER BY sla_misses DESC, name
+           LIMIT 10`,
+          params,
+        );
+        return result.rows.map((row: any) => ({ name: row.name, sla_misses: parseInt(row.sla_misses, 10) }));
+      }, []),
+      safe(async () => {
+        const result = await pool.query(
+          `SELECT
+             s.jslmis_job_nm,
+             COUNT(*)::int AS sla_miss_count
+           FROM edoops.job_sla_missed s
+           WHERE ${whereClause}
+             AND s.jslmis_batch_dt >= CURRENT_DATE - INTERVAL '30 days'
+           GROUP BY s.jslmis_job_nm
+           ORDER BY sla_miss_count DESC, s.jslmis_job_nm
+           LIMIT 10`,
+          params,
+        );
+        return result.rows.map((row: any) => ({
+          job_name: row.jslmis_job_nm ?? null,
+          sla_miss_count: parseInt(row.sla_miss_count, 10),
+        }));
+      }, []),
+      safe(async () => {
+        const result = await pool.query(
+          `SELECT
+             ${detailFields},
+             ROUND(EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - s.jslmis_job_start_time)) / 60, 2) AS running_minutes
+           FROM edoops.job_sla_missed s
+           WHERE ${whereClause}
+             AND s.jslmis_job_end_time IS NULL
+           ORDER BY s.jslmis_job_start_time ASC NULLS LAST
+           LIMIT ${ESP_SLA_QUEUE_LIMIT}`,
+          params,
+        );
+        return result.rows.map(mapSlaMissedRow);
+      }, []),
+      safe(async () => {
+        const result = await pool.query(
+          `SELECT
+             ${detailFields},
+             ROUND(EXTRACT(EPOCH FROM (COALESCE(s.jslmis_job_end_time, CURRENT_TIMESTAMP) - s.jslmis_job_start_time)) / 60, 2) AS duration_minutes
+           FROM edoops.job_sla_missed s
+           WHERE ${whereClause}
+             AND s.jslmis_job_start_time IS NOT NULL
+           ORDER BY duration_minutes DESC NULLS LAST
+           LIMIT 10`,
+          params,
+        );
+        return result.rows.map(mapSlaMissedRow);
+      }, []),
+      safe(async () => {
+        const result = await pool.query(
+          `SELECT ${detailFields}
+           FROM edoops.job_sla_missed s
+           WHERE ${whereClause}
+           ORDER BY s.jslmis_last_updt_dttm DESC NULLS LAST
+           LIMIT 10`,
+          params,
+        );
+        return result.rows.map(mapSlaMissedRow);
+      }, []),
+      safe(async () => {
+        const result = await pool.query(
+          `SELECT ${detailFields}
+           FROM edoops.job_sla_missed s
+           WHERE ${whereClause}
+             AND s.jslmis_job_end_time IS NULL
+           ORDER BY s.jslmis_job_start_time ASC NULLS LAST
+           LIMIT 50`,
+          params,
+        );
+        return result.rows.map(mapSlaMissedRow);
+      }, []),
+      safe(async () => {
+        const result = await pool.query(
+          `SELECT
+             COALESCE(s.jslmis_pltf_nm, 'Unknown') AS name,
+             COUNT(*)::int AS sla_misses,
+             ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) AS pct_of_total
+           FROM edoops.job_sla_missed s
+           WHERE ${whereClause}
+             AND s.jslmis_batch_dt >= CURRENT_DATE - INTERVAL '7 days'
+           GROUP BY COALESCE(s.jslmis_pltf_nm, 'Unknown')
+           ORDER BY sla_misses DESC, name`,
+          params,
+        );
+        return result.rows.map((row: any) => ({
+          name: row.name,
+          sla_misses: parseInt(row.sla_misses, 10),
+          pct_of_total: parseFloat(row.pct_of_total),
+        }));
+      }, []),
+      safe(async () => {
+        const result = await pool.query(
+          `SELECT
+             COALESCE(s.jslmis_bus_unit, 'Unknown') AS name,
+             COUNT(*)::int AS sla_misses,
+             ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) AS pct_of_total
+           FROM edoops.job_sla_missed s
+           WHERE ${whereClause}
+             AND s.jslmis_batch_dt >= CURRENT_DATE - INTERVAL '7 days'
+           GROUP BY COALESCE(s.jslmis_bus_unit, 'Unknown')
+           ORDER BY sla_misses DESC, name`,
+          params,
+        );
+        return result.rows.map((row: any) => ({
+          name: row.name,
+          sla_misses: parseInt(row.sla_misses, 10),
+          pct_of_total: parseFloat(row.pct_of_total),
+        }));
+      }, []),
+      safe(async () => {
+        const result = await pool.query(
+          `SELECT
+             s.jslmis_batch_dt AS day,
+             SUM(CASE WHEN s.jslmis_job_end_time IS NULL THEN 1 ELSE 0 END)::int AS open_jobs,
+             SUM(CASE WHEN s.jslmis_job_end_time IS NOT NULL THEN 1 ELSE 0 END)::int AS closed_jobs
+           FROM edoops.job_sla_missed s
+           WHERE ${whereClause}
+             AND s.jslmis_batch_dt >= CURRENT_DATE - INTERVAL '14 days'
+           GROUP BY s.jslmis_batch_dt
+           ORDER BY s.jslmis_batch_dt`,
+          params,
+        );
+        return result.rows.map((row: any) => ({
+          day: row.day ? String(row.day).split('T')[0] : null,
+          open_jobs: parseInt(row.open_jobs, 10),
+          closed_jobs: parseInt(row.closed_jobs, 10),
+        }));
+      }, []),
+      safe(async () => {
+        const result = await pool.query(
+          `SELECT
+             COALESCE(s.jslmis_application_desc, 'Unknown') AS name,
+             ROUND(AVG(EXTRACT(EPOCH FROM (COALESCE(s.jslmis_job_end_time, CURRENT_TIMESTAMP) - s.jslmis_job_start_time)) / 60)::numeric, 2) AS avg_duration_minutes
+           FROM edoops.job_sla_missed s
+           WHERE ${whereClause}
+             AND s.jslmis_job_start_time IS NOT NULL
+             AND s.jslmis_batch_dt >= CURRENT_DATE - INTERVAL '7 days'
+           GROUP BY COALESCE(s.jslmis_application_desc, 'Unknown')
+           ORDER BY avg_duration_minutes DESC NULLS LAST, name
+           LIMIT 10`,
+          params,
+        );
+        return result.rows.map((row: any) => ({
+          name: row.name,
+          avg_duration_minutes: row.avg_duration_minutes != null ? parseFloat(row.avg_duration_minutes) : 0,
+        }));
+      }, []),
+    ]);
+
+    res.json({
+      metrics,
+      daily_misses: dailyMisses,
+      hourly_misses: hourlyMisses,
+      platform_trend: platformTrend,
+      sla_type_trend: slaTypeTrend,
+      top_applications: topApplications,
+      top_business_units: topBusinessUnits,
+      misses_by_platform: missesByPlatform,
+      misses_by_sla_type: missesBySlaType,
+      misses_by_run_criteria: missesByRunCriteria,
+      top_repeated_jobs: topRepeatedJobs,
+      open_queue: openQueue,
+      longest_running: longestRunning,
+      recently_updated: recentlyUpdated,
+      no_end_time: noEndTime,
+      percent_by_platform: percentByPlatform,
+      percent_by_business_unit: percentByBusinessUnit,
+      daily_open_closed: dailyOpenClosed,
+      avg_duration_by_application: avgDurationByApplication,
+    });
+  } catch (err: any) {
+    console.error('ESP sla-missed-dashboard error:', err.message);
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
+// GET /api/esp/sla-missed-job-detail?platformId=<id>&jobName=<name>&applName=<name>&limit=N
+router.get('/sla-missed-job-detail', async (req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const platformId = typeof req.query.platformId === 'string' ? decodeURIComponent(req.query.platformId) : '';
+    const jobName = typeof req.query.jobName === 'string' ? req.query.jobName.trim() : '';
+    const applName = typeof req.query.applName === 'string' ? req.query.applName.trim() : '';
+    const limit = parseLimit(req.query, ESP_SLA_DETAIL_LIMIT, 500);
+
+    if (!platformId || !jobName) {
+      return res.status(400).json({ error: 'platformId and jobName are required' });
+    }
+
+    const plt = await getPlatformRow(platformId);
+    if (!plt) return res.status(404).json({ error: 'Unknown platform' });
+
+    const params: any[] = [plt.platform_name, jobName];
+    let applClause = '';
+    if (applName) {
+      params.push(applName);
+      applClause = ' AND s.jslmis_appl_lib = $3';
+    }
+
+    const result = await pool.query(
+      `SELECT
+         s.jslmis_pltf_nm,
+         s.jslmis_batch_dt,
+         s.jslmis_appl_lib,
+         s.jslmis_application_desc,
+         s.jslmis_job_nm,
+         s.jslmis_run_criteria,
+         s.jslmis_sla_time,
+         s.jslmis_sla_typ,
+         s.jslmis_sla_status,
+         s.jslmis_job_start_time,
+         s.jslmis_job_end_time,
+         s.jslmis_time_diff,
+         s.jslmis_cmd_dtl,
+         s.jslmis_bus_unit,
+         s.jslmis_sub_bus_unit,
+         s.jslmis_bus_summary,
+         s.jslmis_last_updt_dttm
+       FROM edoops.job_sla_missed s
+       WHERE s.jslmis_pltf_nm IN ${pltKeysSubquery}
+         AND s.jslmis_job_nm = $2${applClause}
+       ORDER BY s.jslmis_last_updt_dttm DESC NULLS LAST
+       LIMIT ${limit}`,
+      params,
+    );
+
+    res.json(result.rows.map(mapSlaMissedRow));
+  } catch (err: any) {
+    console.error('ESP sla-missed-job-detail error:', err.message);
     res.status(500).json({ error: 'Query failed', details: err.message });
   }
 });

@@ -18,7 +18,7 @@ export type { StatCardItem } from './StatCardGrid'
 export { MetricBarList } from './MetricBarList'
 export type { MetricBarItem } from './MetricBarList'
 
-export { TrendLineChart, ComposedBarLineChart } from './TrendCharts'
+export { TrendLineChart, ComposedBarLineChart, SimpleBarChart } from './TrendCharts'
 export type { LineConfig, BarConfig, ComposedLineConfig } from './TrendCharts'
 
 export { DonutChart, DonutPair } from './DonutChart'
