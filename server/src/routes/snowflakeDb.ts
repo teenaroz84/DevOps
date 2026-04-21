@@ -5,6 +5,7 @@ import { Router, Request, Response } from 'express';
 import { getPgPool } from '../db';
 
 const router = Router();
+const queryCache = new Map<string, { expiresAt: number; rows: any }>();
 
 async function safeQuery(sql: string, fallback: any = null): Promise<any> {
   try {
@@ -15,6 +16,20 @@ async function safeQuery(sql: string, fallback: any = null): Promise<any> {
     console.error('Snowflake dashboard Postgres query error:', e.message);
     return fallback;
   }
+}
+
+async function safeCachedQuery(cacheKey: string, sql: string, fallback: any = null, ttlMs = 60_000): Promise<any> {
+  const now = Date.now();
+  const cached = queryCache.get(cacheKey);
+  if (cached && cached.expiresAt > now) {
+    return cached.rows;
+  }
+
+  const rows = await safeQuery(sql, fallback);
+  if (rows != null) {
+    queryCache.set(cacheKey, { expiresAt: now + ttlMs, rows });
+  }
+  return rows;
 }
 
 function getLookbackDays(req: Request, fallbackDays: number): number {
@@ -483,34 +498,56 @@ router.get('/hourly-queries', async (req: Request, res: Response) => {
 router.get('/top-slow-queries', async (req: Request, res: Response) => {
   const windowEndTimestamp = sqlRefTimestamp(req);
   const rollingWindowStartTimestamp = sqlSinceTimestamp(req, 30);
-  const rows = await safeQuery(`
-    WITH q AS (
+  const cacheKey = `top-slow-queries:${getAsOfDate(req) ?? 'current'}:30`;
+  const rows = await safeCachedQuery(cacheKey, `
+    WITH base AS MATERIALIZED (
       SELECT
         COALESCE(query_hash::text, MD5(COALESCE(query_text::text, ''))) AS query_pattern,
-        MAX(NULLIF(start_time::text, '')::timestamp) AS last_run,
-        ROUND(AVG(NULLIF(total_elapsed_time::text, '')::numeric), 2) AS avg_elapsed_ms,
-        ROUND((PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY NULLIF(total_elapsed_time::text, '')::numeric))::numeric, 2) AS p95_elapsed_ms,
-        COUNT(*) FILTER (WHERE execution_status NOT ILIKE 'SUCCESS%') AS error_count,
-        MAX(error_message) AS latest_error_message
+        NULLIF(start_time::text, '')::timestamp AS start_ts,
+        NULLIF(total_elapsed_time::text, '')::numeric AS elapsed_ms,
+        COALESCE(execution_status::text, '') AS execution_status,
+        NULLIF(error_message::text, '') AS error_message
       FROM edoops.sf_query_history
       WHERE NULLIF(start_time::text, '')::timestamp >= ${rollingWindowStartTimestamp}
         AND NULLIF(start_time::text, '')::timestamp < (${windowEndTimestamp} + INTERVAL '1 day')
-      GROUP BY COALESCE(query_hash::text, MD5(COALESCE(query_text::text, '')))
+        AND NULLIF(total_elapsed_time::text, '')::numeric IS NOT NULL
+    ),
+    candidates AS MATERIALIZED (
+      SELECT
+        query_pattern,
+        MAX(start_ts) AS last_run,
+        ROUND(AVG(elapsed_ms), 2) AS avg_elapsed_ms,
+        MAX(elapsed_ms) AS max_elapsed_ms,
+        COUNT(*) FILTER (WHERE execution_status NOT ILIKE 'SUCCESS%') AS error_count,
+        MAX(error_message) AS latest_error_message
+      FROM base
+      GROUP BY query_pattern
+      ORDER BY error_count DESC, max_elapsed_ms DESC NULLS LAST, avg_elapsed_ms DESC NULLS LAST
+      LIMIT 25
+    ),
+    ranked AS (
+      SELECT
+        b.query_pattern,
+        ROUND((PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY b.elapsed_ms))::numeric, 2) AS p95_elapsed_ms
+      FROM base b
+      JOIN candidates c ON c.query_pattern = b.query_pattern
+      GROUP BY b.query_pattern
     )
     SELECT
-      query_pattern AS pipeline,
-      TO_CHAR(last_run, 'HH24:MI') AS last_run,
-      CASE WHEN error_count > 0 THEN 'ERROR' ELSE 'SLOW' END AS error_type,
-      CASE WHEN error_count > 0 OR p95_elapsed_ms >= 15000 THEN FALSE ELSE TRUE END AS sla_ok,
+      c.query_pattern AS pipeline,
+      TO_CHAR(c.last_run, 'HH24:MI') AS last_run,
+      CASE WHEN c.error_count > 0 THEN 'ERROR' ELSE 'SLOW' END AS error_type,
+      CASE WHEN c.error_count > 0 OR ranked.p95_elapsed_ms >= 15000 THEN FALSE ELSE TRUE END AS sla_ok,
       CASE
-        WHEN p95_elapsed_ms >= 60000 THEN 'Consider clustering, pruning, or materialized view'
-        WHEN p95_elapsed_ms >= 15000 THEN 'Review joins and warehouse sizing'
+        WHEN ranked.p95_elapsed_ms >= 60000 THEN 'Consider clustering, pruning, or materialized view'
+        WHEN ranked.p95_elapsed_ms >= 15000 THEN 'Review joins and warehouse sizing'
         ELSE 'Monitor pattern'
       END AS fix
-    FROM q
-    ORDER BY p95_elapsed_ms DESC
+    FROM candidates c
+    JOIN ranked ON ranked.query_pattern = c.query_pattern
+    ORDER BY ranked.p95_elapsed_ms DESC NULLS LAST, c.error_count DESC, c.max_elapsed_ms DESC NULLS LAST
     LIMIT 10
-  `, []);
+  `, [], 45_000);
   res.json((rows ?? []).map((r: any) => ({
     pipeline:   r.PIPELINE   ?? r.pipeline   ?? '',
     last_run:   r.LAST_RUN   ?? r.last_run   ?? '',
@@ -524,17 +561,24 @@ router.get('/top-slow-queries', async (req: Request, res: Response) => {
 router.get('/query-volume-trend', async (req: Request, res: Response) => {
   const windowEndTimestamp = sqlRefTimestamp(req);
   const trendWindowStartTimestamp = sqlSinceTimestamp(req, 14);
-  const rows = await safeQuery(`
+  const cacheKey = `query-volume-trend:${getAsOfDate(req) ?? 'current'}:14`;
+  const rows = await safeCachedQuery(cacheKey, `
+    WITH base AS MATERIALIZED (
+      SELECT
+        DATE_TRUNC('day', NULLIF(start_time::text, '')::timestamp) AS day_bucket,
+        NULLIF(total_elapsed_time::text, '')::numeric AS elapsed_ms
+      FROM edoops.sf_query_history
+      WHERE NULLIF(start_time::text, '')::timestamp >= ${trendWindowStartTimestamp}
+        AND NULLIF(start_time::text, '')::timestamp < (${windowEndTimestamp} + INTERVAL '1 day')
+    )
     SELECT
-      TO_CHAR(DATE_TRUNC('day', NULLIF(start_time::text, '')::timestamp), 'MM/DD') AS date,
-      COUNT(*)                                          AS queries,
-      ROUND(AVG(NULLIF(total_elapsed_time::text, '')::numeric), 0) AS avg_time_ms
-    FROM edoops.sf_query_history
-    WHERE NULLIF(start_time::text, '')::timestamp >= ${trendWindowStartTimestamp}
-      AND NULLIF(start_time::text, '')::timestamp < (${windowEndTimestamp} + INTERVAL '1 day')
-    GROUP BY DATE_TRUNC('day', NULLIF(start_time::text, '')::timestamp)
-    ORDER BY DATE_TRUNC('day', NULLIF(start_time::text, '')::timestamp)
-  `, []);
+      TO_CHAR(day_bucket, 'MM/DD') AS date,
+      COUNT(*) AS queries,
+      ROUND(AVG(elapsed_ms), 0) AS avg_time_ms
+    FROM base
+    GROUP BY day_bucket
+    ORDER BY day_bucket
+  `, [], 30_000);
   res.json((rows ?? []).map((r: any) => ({
     date:        r.DATE        ?? r.date        ?? '',
     queries:     parseInt(r.QUERIES    ?? r.queries    ?? 0, 10),

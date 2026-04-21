@@ -421,6 +421,9 @@ export const ESPSlaMissedJobsTab: React.FC<ESPSlaMissedJobsTabProps> = ({
           </WidgetShell>
         </Paper>
 
+      </Box>
+
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))', xl: '1.15fr 1fr 1fr' }, gap: 2 }}>
         <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex' }}>
           <WidgetShell title="Top Applications with Most SLA Misses" source="Last 7 days" titleIcon={<AppsIcon sx={{ color: '#0057B8', fontSize: 18 }} />}>
             <Box sx={{ px: 1.5, py: 1.25, overflowY: 'auto' }}>
@@ -429,6 +432,21 @@ export const ESPSlaMissedJobsTab: React.FC<ESPSlaMissedJobsTabProps> = ({
                   label: item.name,
                   value: item.sla_misses,
                   max: Math.max(...topApplications.map(entry => entry.sla_misses), 1),
+                  color: CHART_COLORS[index % CHART_COLORS.length],
+                }))}
+                compact
+              />
+            </Box>
+          </WidgetShell>
+        </Paper>
+        <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex' }}>
+          <WidgetShell title="Top Business Units with Most SLA Misses" source="Last 7 days" titleIcon={<AccountTreeIcon sx={{ color: '#2E7D32', fontSize: 18 }} />}>
+            <Box sx={{ px: 1.5, py: 1.25, overflowY: 'auto' }}>
+              <MetricBarList
+                items={topBusinessUnits.map((item, index) => ({
+                  label: item.name,
+                  value: item.sla_misses,
+                  max: Math.max(...topBusinessUnits.map(entry => entry.sla_misses), 1),
                   color: CHART_COLORS[index % CHART_COLORS.length],
                 }))}
                 compact
@@ -475,21 +493,6 @@ export const ESPSlaMissedJobsTab: React.FC<ESPSlaMissedJobsTabProps> = ({
           </WidgetShell>
         </Paper>
 
-        <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex' }}>
-          <WidgetShell title="Top Business Units with Most SLA Misses" source="Last 7 days" titleIcon={<AccountTreeIcon sx={{ color: '#2E7D32', fontSize: 18 }} />}>
-            <Box sx={{ px: 1.5, py: 1.25, overflowY: 'auto' }}>
-              <MetricBarList
-                items={topBusinessUnits.map((item, index) => ({
-                  label: item.name,
-                  value: item.sla_misses,
-                  max: Math.max(...topBusinessUnits.map(entry => entry.sla_misses), 1),
-                  color: CHART_COLORS[index % CHART_COLORS.length],
-                }))}
-                compact
-              />
-            </Box>
-          </WidgetShell>
-        </Paper>
       </Box>
 
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))', xl: 'repeat(4, 1fr)' }, gap: 2 }}>

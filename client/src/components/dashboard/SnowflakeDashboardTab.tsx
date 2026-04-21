@@ -417,7 +417,7 @@ const CostEfficiencyScreen: React.FC<{ data: CostData; costDayLabel: string }> =
 
 // ── Sub-screen 2: Platform Intelligence ──────────────────
 
-const PlatformIntelligenceScreen: React.FC<{ data: PlatformData; queriesDayLabel: string }> = ({ data, queriesDayLabel }) => {
+const PlatformIntelligenceScreen: React.FC<{ data: PlatformData; queriesDayLabel: string; analyticsLoading: boolean }> = ({ data, queriesDayLabel, analyticsLoading }) => {
   const s = data.summary
   const rowPanelHeight = 430
 
@@ -516,14 +516,21 @@ const PlatformIntelligenceScreen: React.FC<{ data: PlatformData; queriesDayLabel
         <Paper elevation={0} sx={{ p: 2, minWidth: 0, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: `3px solid ${TRUIST.sky}`, borderRadius: 2 }}>
           <Typography sx={{ fontSize: '12px', fontWeight: 600, mb: 1, color: '#1a2535' }}>Query Volume & Performance</Typography>
           <Box sx={{ height: 196, width: '100%', minWidth: 0, overflow: 'visible', pb: 1 }}>
-            <ComposedBarLineChart
-              data={data.queryVolumeTrend}
-              xKey="date"
-              bars={[{ key: 'queries', color: '#1976d2', label: 'Queries' }]}
-              lines={[{ key: 'avg_time_ms', color: '#e53935', label: 'Avg Query Time (ms)', yAxisId: 'right' }]}
-              height={188}
-              margin={{ top: 5, right: 35, left: 0, bottom: 24 }}
-            />
+            {analyticsLoading && data.queryVolumeTrend.length === 0 ? (
+              <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
+                <CircularProgress size={18} sx={{ color: '#1976d2' }} />
+                <Typography sx={{ fontSize: '12px', color: '#607d8b' }}>Loading query analytics...</Typography>
+              </Box>
+            ) : (
+              <ComposedBarLineChart
+                data={data.queryVolumeTrend}
+                xKey="date"
+                bars={[{ key: 'queries', color: '#1976d2', label: 'Queries' }]}
+                lines={[{ key: 'avg_time_ms', color: '#e53935', label: 'Avg Query Time (ms)', yAxisId: 'right' }]}
+                height={188}
+                margin={{ top: 5, right: 35, left: 0, bottom: 24 }}
+              />
+            )}
           </Box>
         </Paper>
       </Box>
@@ -535,7 +542,14 @@ const PlatformIntelligenceScreen: React.FC<{ data: PlatformData; queriesDayLabel
             <Typography sx={{ fontSize: '13px', fontWeight: 700, color: '#1a2535' }}>Top Slow Queries</Typography>
           </Box>
           <Box sx={{ width: '100%', minWidth: 0, minHeight: 0, flex: 1, overflow: 'hidden', p: 2, pt: 1.5 }}>
-            <DataTable columns={queryCols} rows={data.topSlowQueries} maxHeight={320} compact />
+            {analyticsLoading && data.topSlowQueries.length === 0 ? (
+              <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
+                <CircularProgress size={18} sx={{ color: TRUIST.charcoal }} />
+                <Typography sx={{ fontSize: '12px', color: '#607d8b' }}>Loading slow query patterns...</Typography>
+              </Box>
+            ) : (
+              <DataTable columns={queryCols} rows={data.topSlowQueries} maxHeight={320} compact />
+            )}
           </Box>
         </Paper>
 
@@ -609,6 +623,7 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
   const [asOfOption, setAsOfOption] = useState<'sample' | 'current'>('sample')
   const [isLive, setIsLive] = useState(false)
   const [platformLoading, setPlatformLoading] = useState(true)
+  const [platformAnalyticsLoading, setPlatformAnalyticsLoading] = useState(false)
   const [costLoading, setCostLoading] = useState(false)
   const todayIsoDate = toIsoDate(new Date())
   const selectedAsOfDate = asOfOption === 'sample' ? SAMPLE_AS_OF_DATE : shiftIsoDate(todayIsoDate, days)
@@ -642,6 +657,7 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
     let alive = true
     setIsLive(false)
     setPlatformLoading(true)
+    setPlatformAnalyticsLoading(false)
     setCostLoading(false)
 
     if (useMock) {
@@ -680,36 +696,54 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
       alert: 'Loading live Snowflake data...',
     })
 
+    const valueOr = <T,>(result: PromiseSettledResult<T>, fallback: T): T =>
+      result.status === 'fulfilled' ? result.value : fallback
+
+    setPlatformAnalyticsLoading(true)
+
     Promise.allSettled([
       snowflakeService.getPlatformSummary(queryParams),   // 0
       snowflakeService.getWarehouseHeatmap(queryParams),  // 1
-      snowflakeService.getTopSlowQueries(queryParams),    // 2
-      snowflakeService.getQueryVolumeTrend(queryParams),  // 3
-      snowflakeService.getTaskReliability(queryParams),   // 4
-      snowflakeService.getLoginFailures(queryParams),     // 5
-      snowflakeService.getStorageGrowth(queryParams),     // 6
+      snowflakeService.getTaskReliability(queryParams),   // 2
+      snowflakeService.getLoginFailures(queryParams),     // 3
+      snowflakeService.getStorageGrowth(queryParams),     // 4
     ]).then((results) => {
       if (!alive) return
 
-      const [platformSummary, heatmap, topSlowQueries, queryVolumeTrend, taskReliability, loginFailures, storageGrowth] = results
-
-      const valueOr = <T,>(result: PromiseSettledResult<T>, fallback: T): T =>
-        result.status === 'fulfilled' ? result.value : fallback
+      const [platformSummary, heatmap, taskReliability, loginFailures, storageGrowth] = results
 
       const successCount = results.filter(r => r.status === 'fulfilled').length
-      setPlatformData({
-        summary:          valueOr(platformSummary,  EMPTY_PLATFORM_SUMMARY),
-        heatmap:          valueOr(heatmap,          []),
-        queryVolumeTrend: valueOr(queryVolumeTrend, []),
-        topSlowQueries:   valueOr(topSlowQueries,   []),
-        taskReliability:  valueOr(taskReliability,  []),
-        loginFailures:    valueOr(loginFailures,    []),
-        storageGrowth:    valueOr(storageGrowth,    []),
+      setPlatformData(prev => ({
+        ...prev,
+        summary:         valueOr(platformSummary, EMPTY_PLATFORM_SUMMARY),
+        heatmap:         valueOr(heatmap, []),
+        taskReliability: valueOr(taskReliability, []),
+        loginFailures:   valueOr(loginFailures, []),
+        storageGrowth:   valueOr(storageGrowth, []),
         alert: successCount > 0
-          ? 'Live Snowflake metrics loaded from database queries.'
+          ? 'Core Snowflake metrics loaded. Query analytics are still loading.'
           : 'Unable to load live Snowflake data. Check server query errors.',
-      })
+      }))
       setPlatformLoading(false)
+      if (successCount > 0) setIsLive(true)
+    })
+
+    Promise.allSettled([
+      snowflakeService.getTopSlowQueries(queryParams),
+      snowflakeService.getQueryVolumeTrend(queryParams),
+    ]).then((results) => {
+      if (!alive) return
+
+      const [topSlowQueries, queryVolumeTrend] = results
+      const successCount = results.filter(r => r.status === 'fulfilled').length
+
+      setPlatformData(prev => ({
+        ...prev,
+        queryVolumeTrend: valueOr(queryVolumeTrend, prev.queryVolumeTrend),
+        topSlowQueries: valueOr(topSlowQueries, prev.topSlowQueries),
+        alert: successCount > 0 ? 'Live Snowflake metrics loaded from database queries.' : prev.alert,
+      }))
+      setPlatformAnalyticsLoading(false)
       if (successCount > 0) setIsLive(true)
     })
     return () => { alive = false }
@@ -964,7 +998,7 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
           </Box>
         ) : (
           <>
-        {subTab === 'platform' && <PlatformIntelligenceScreen data={platformData} queriesDayLabel={queriesDayLabel} />}
+        {subTab === 'platform' && <PlatformIntelligenceScreen data={platformData} queriesDayLabel={queriesDayLabel} analyticsLoading={platformAnalyticsLoading} />}
         {subTab === 'cost'     && <CostEfficiencyScreen data={costData} costDayLabel={costDayLabel} />}
           </>
         )}

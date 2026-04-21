@@ -91,6 +91,75 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuChange
     </Tooltip>
   )
 
+  const renderAgentsFoundryToggle = () => {
+    const toggleIcon = isAgentsFoundryExpanded
+      ? <ExpandLessIcon sx={{ fontSize: 20 }} />
+      : <ExpandMoreIcon sx={{ fontSize: 20 }} />
+
+    if (isExpanded) {
+      return (
+        <Box
+          component="button"
+          type="button"
+          onClick={() => setIsAgentsFoundryExpanded(!isAgentsFoundryExpanded)}
+          sx={{
+            width: 'calc(100% - 24px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            margin: '8px 12px 0',
+            padding: '8px 12px',
+            border: 'none',
+            borderRadius: 1,
+            backgroundColor: 'transparent',
+            color: '#90a4ae',
+            cursor: 'pointer',
+            transition: 'all 0.3s ease',
+            '&:hover': {
+              backgroundColor: '#eceff1',
+              color: '#607d8b',
+            },
+          }}
+        >
+          <Typography sx={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+            Agents Foundry
+          </Typography>
+          {toggleIcon}
+        </Box>
+      )
+    }
+
+    return (
+      <Tooltip title="Agent Foundry" placement="right">
+        <Box
+          component="button"
+          type="button"
+          onClick={() => setIsAgentsFoundryExpanded(!isAgentsFoundryExpanded)}
+          sx={{
+            width: 'calc(100% - 24px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '8px 12px 0',
+            padding: '12px 0',
+            border: 'none',
+            borderRadius: 1,
+            backgroundColor: isAgentsFoundryExpanded ? TRUIST.shell : 'transparent',
+            color: isAgentsFoundryExpanded ? APP_COLORS.primary : '#666',
+            cursor: 'pointer',
+            transition: 'all 0.3s ease',
+            '&:hover': {
+              backgroundColor: '#f5f5f5',
+              color: APP_COLORS.primary,
+            },
+          }}
+        >
+          {toggleIcon}
+        </Box>
+      </Tooltip>
+    )
+  }
+
   return (
     <Drawer
       sx={{
@@ -155,37 +224,8 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuChange
 
         {renderMenuButton('dashboard', 'Sample Dashboard', <DashboardIcon sx={{ fontSize: '20px', flexShrink: 0 }} />, APP_COLORS.primary, true)}
 
-        {isExpanded && (
-          <Box
-            component="button"
-            type="button"
-            onClick={() => setIsAgentsFoundryExpanded(!isAgentsFoundryExpanded)}
-            sx={{
-              width: 'calc(100% - 24px)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              margin: '8px 12px 0',
-              padding: '8px 12px',
-              border: 'none',
-              borderRadius: 1,
-              backgroundColor: 'transparent',
-              color: '#90a4ae',
-              cursor: 'pointer',
-              transition: 'all 0.3s ease',
-              '&:hover': {
-                backgroundColor: '#eceff1',
-                color: '#607d8b',
-              },
-            }}
-          >
-            <Typography sx={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px' }}>
-              Agents Foundry
-            </Typography>
-            {isAgentsFoundryExpanded ? <ExpandLessIcon sx={{ fontSize: 18 }} /> : <ExpandMoreIcon sx={{ fontSize: 18 }} />}
-          </Box>
-        )}
-        {isExpanded && isAgentsFoundryExpanded && FULLSCREEN_AGENT_MENUS.map((item) => {
+        {renderAgentsFoundryToggle()}
+        {isAgentsFoundryExpanded && FULLSCREEN_AGENT_MENUS.map((item) => {
           const agent = AGENTS[item.agentId]
           return (
             <React.Fragment key={item.menuId}>
