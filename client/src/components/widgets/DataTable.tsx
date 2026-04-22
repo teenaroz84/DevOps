@@ -81,6 +81,10 @@ interface DataTableProps<T = any> {
    * E.g. pageSize={500} shows pages of 500 rows when total > 500.
    */
   pageSize?: number
+  /** Default sort column key */
+  defaultSortKey?: string
+  /** Default sort direction (default: 'desc') */
+  defaultSortDir?: 'asc' | 'desc'
 }
 
 function getKey<T>(row: T, rowKey: DataTableProps<T>['rowKey'], idx: number): string {
@@ -103,6 +107,8 @@ export function DataTable<T = any>({
   tableMinWidth,
   autoFitColumns = true,
   pageSize,
+  defaultSortKey,
+  defaultSortDir = 'desc',
 }: DataTableProps<T>) {
   const safeColumns = useMemo(
     () => columns.filter((col): col is ColumnDef<T> => Boolean(col && typeof col.key === 'string' && col.key.length > 0)),
@@ -147,8 +153,8 @@ export function DataTable<T = any>({
   }, [autoFitColumns, sampledRows])
 
   // ── Sort ─────────────────────────────────────────────────
-  const [sortKey, setSortKey] = useState<string | null>(null)
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const [sortKey, setSortKey] = useState<string | null>(defaultSortKey ?? null)
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>(defaultSortKey ? defaultSortDir : 'asc')
 
   // ── Pagination ────────────────────────────────────────────
   const [page, setPage] = useState(0)
@@ -473,7 +479,7 @@ export function DataTable<T = any>({
                         width: colWidths[col.key],
                         minWidth: colWidths[col.key],
                         maxWidth: colWidths[col.key],
-                        ...(col.noWrap ? { whiteSpace: 'nowrap' } : {}),
+                        ...(col.noWrap ? { whiteSpace: 'nowrap', textOverflow: 'ellipsis' } : {}),
                         ...(colIdx === 0 ? {
                           borderLeft: `3px solid ${accentColor}22`,
                           pl: '10px',

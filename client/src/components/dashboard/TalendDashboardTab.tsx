@@ -422,6 +422,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
                     bars={[{ key: 'count', label: 'Log Count', color: '#e65100' }]}
                     lines={[]}
                     height={180}
+                    showBarLabels
                   />
                 </Box>
               </WidgetShell>
@@ -471,6 +472,8 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
                   accentColor="#e65100"
                   maxHeight={280}
                   tableMinWidth={1200}
+                  defaultSortKey="start_timestamp"
+                  defaultSortDir="desc"
                 />
               </Box>
             </WidgetShell>
@@ -511,6 +514,8 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
                   accentColor="#c62828"
                   maxHeight={420}
                   tableMinWidth={1600}
+                  defaultSortKey="start_timestamp"
+                  defaultSortDir="desc"
                 />
               </Box>
             </WidgetShell>

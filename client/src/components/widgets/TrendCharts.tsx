@@ -40,6 +40,7 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
+  LabelList,
 } from 'recharts'
 
 // ─── TrendLineChart ────────────────────────────────────────
@@ -153,6 +154,8 @@ interface ComposedBarLineChartProps {
   /** Domain for the right Y axis (for line series) */
   rightYDomain?: [number | 'auto', number | 'auto']
   margin?: { top?: number; right?: number; bottom?: number; left?: number }
+  /** Show exact count label above each bar */
+  showBarLabels?: boolean
 }
 
 export const ComposedBarLineChart: React.FC<ComposedBarLineChartProps> = ({
@@ -164,6 +167,7 @@ export const ComposedBarLineChart: React.FC<ComposedBarLineChartProps> = ({
   showGrid = true,
   rightYDomain,
   margin = { top: 5, right: 35, left: 0, bottom: 5 },
+  showBarLabels = false,
 }) => {
   const hasRightAxis = lines.some(l => l.yAxisId === 'right')
 
@@ -203,7 +207,16 @@ export const ComposedBarLineChart: React.FC<ComposedBarLineChartProps> = ({
               opacity={b.opacity ?? 0.8}
               radius={[2, 2, 0, 0]}
               stackId={b.stackId}
-            />
+            >
+              {showBarLabels && (
+                <LabelList
+                  dataKey={b.key}
+                  position="top"
+                  style={{ fontSize: 11, fontWeight: 700, fill: b.color }}
+                  formatter={(v: number) => v > 0 ? v.toLocaleString() : ''}
+                />
+              )}
+            </Bar>
           ))}
           {lines.map(l => (
             <Line

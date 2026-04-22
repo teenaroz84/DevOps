@@ -91,10 +91,10 @@ export const MOCK_DMF_STEP_FAILURE_TREND = [
 
 export const MOCK_DMF_ANALYTICS = {
   statusSummary: [
-    { status: 'SUCCESS',      count: 5324 },
-    { status: 'FAILED',       count: 1434 },
-    { status: 'PARTIAL LOAD', count: 87   },
-    { status: 'STARTED',      count: 1    },
+    { status: 'success',      count: 5324 },
+    { status: 'failed',       count: 1434 },
+    { status: 'partial load', count: 87   },
+    { status: 'started',      count: 1    },
   ],
   sourceTypeCounts: [
     { type: 'RELATIONAL',  count: 11763 },

@@ -414,8 +414,8 @@ const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void
     { key: 'processTypeCode', header: 'Process Type',     width: 80 },
     { key: 'sourceName',      header: 'Source Name',      flex: 2 },
     { key: 'targetName',      header: 'Target Name',      flex: 2 },
-    { key: 'runStartTime',    header: 'Run Start Time',   width: 140, noWrap: true },
-    { key: 'runEndTime',      header: 'Run End Time',     width: 140, noWrap: true },
+    { key: 'runStartTime',    header: 'Run Start Time',   width: 170, noWrap: true },
+    { key: 'runEndTime',      header: 'Run End Time',     width: 170, noWrap: true },
     {
       key: 'status',           header: 'Status',           width: 80,
       render: r => (
@@ -1005,8 +1005,8 @@ const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void
             <StatCardGrid
               items={(() => {
                 const total = analytics.statusSummary.reduce((s, r) => s + r.count, 0)
-                const success = analytics.statusSummary.find(r => r.status === 'success')?.count ?? 0
-                const failed = analytics.statusSummary.find(r => r.status === 'failed')?.count ?? 0
+                const success = analytics.statusSummary.find(r => r.status.toLowerCase() === 'success')?.count ?? 0
+                const failed = analytics.statusSummary.find(r => r.status.toLowerCase() === 'failed')?.count ?? 0
                 return [
                   { label: 'Total Records', value: total.toLocaleString(), color: '#1976d2', bg: '#e3f2fd' },
                   { label: 'Success', value: success.toLocaleString(), color: '#2e7d32', bg: '#e8f5e9', trend: `${total ? Math.round(success / total * 100) : 0}%` },
