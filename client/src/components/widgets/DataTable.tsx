@@ -318,9 +318,13 @@ export function DataTable<T = any>({
       {/* ── Table ── */}
       <Box
         sx={{
-          overflowX: 'auto',
+          overflowX: 'scroll',
           borderRadius: 1.5,
           border: '1px solid #e8ecf1',
+          scrollbarWidth: 'thin',
+          '&::-webkit-scrollbar': { height: 10, width: 10 },
+          '&::-webkit-scrollbar-thumb': { backgroundColor: '#c7d1db', borderRadius: 8 },
+          '&::-webkit-scrollbar-track': { backgroundColor: '#eef3f8' },
           ...(maxHeight ? { maxHeight, overflowY: 'auto' } : {}),
         }}
       >
