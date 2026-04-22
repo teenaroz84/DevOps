@@ -923,8 +923,8 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
 
 
 
-          {/* ── Row 2: Job List + Trend ── */}
-          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: 2 }}>
+          {/* ── Row 2: Job Execution Status (single row) ── */}
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr', gap: 2 }}>
 
             <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
               <WidgetShell
@@ -995,101 +995,6 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                 </Box>
               </WidgetShell>
             </Paper>
-
-            <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-              <WidgetShell
-                title={drillJob
-                  ? `Job Trend — ${drillJob}`
-                  : `Job Run Trend — ${days} Day${days !== 1 ? 's' : ''}`}
-                source={drillJob ? 'esp_job_stats_recent · click job again or × to reset' : 'ESP · esp_job_stats_recent'}
-                titleIcon={<TrendingUpIcon sx={{ color: '#1565c0', fontSize: 18 }} />}
-                actions={
-                  <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
-                    {drillJob && (
-                      <IconButton
-                        size="small"
-                        onClick={() => setDrillJob(null)}
-                        sx={{ p: 0.25, color: '#888', '&:hover': { color: '#333' } }}
-                        title="Back to platform / app trend"
-                      >
-                        <ArrowBackIcon sx={{ fontSize: 14 }} />
-                      </IconButton>
-                    )}
-                    {/* Keep additional ranges commented for later reuse.
-                    {[1, 2, 3, 5, 7].map(d => (
-                      <Chip
-                        key={d}
-                        label={`${d}d`}
-                        size="small"
-                        onClick={() => setTrendDays(d)}
-                        sx={{
-                          fontSize: '10px', height: 20, cursor: 'pointer',
-                          bgcolor: trendDays === d ? '#1565c0' : '#e3f2fd',
-                          color: trendDays === d ? '#fff' : '#1565c0',
-                          fontWeight: trendDays === d ? 700 : 400,
-                          '&:hover': { bgcolor: trendDays === d ? '#1565c0' : '#bbdefb' },
-                        }}
-                      />
-                    ))} */}
-                    <Chip
-                      label={`${days} Day${days !== 1 ? 's' : ''}`}
-                      size="small"
-                      sx={{
-                        fontSize: '10px', height: 20,
-                        bgcolor: '#1565c0',
-                        color: '#fff',
-                        fontWeight: 700,
-                        cursor: 'default',
-                      }}
-                    />
-                  </Box>
-                }
-              >
-                <Box sx={{ px: 2, pb: 2, pt: 0.5 }}>
-                  {drillJob ? (
-                    drillJobTrendLoading ? (
-                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 260 }}>
-                        <CircularProgress size={24} sx={{ color: '#1565c0' }} />
-                      </Box>
-                    ) : drillJobChart.rows.length > 0 ? (
-                      <TrendLineChart
-                        data={drillJobChart.rows}
-                        xKey="hour"
-                        lines={drillJobChart.days.flatMap((day, i) => [
-                          { key: `${day}_count`, label: `${day} Runs`, color: TREND_RUN_COLORS[i % TREND_RUN_COLORS.length], strokeWidth: 2 },
-                          { key: `${day}_fail`,  label: `${day} Fail`, color: TREND_FAIL_COLORS[i % TREND_FAIL_COLORS.length], dashed: true, strokeWidth: 1.5 },
-                        ])}
-                        height={260}
-                        margin={{ top: 8, right: 16, left: -10, bottom: 4 }}
-                      />
-                    ) : (
-                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 260 }}>
-                        <Typography sx={{ fontSize: '12px', color: '#bbb' }}>No run history for <strong>{drillJob}</strong></Typography>
-                      </Box>
-                    )
-                  ) : trendLoading ? (
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 260 }}>
-                      <CircularProgress size={24} sx={{ color: '#1565c0' }} />
-                    </Box>
-                  ) : trendChart.rows.length > 0 ? (
-                    <TrendLineChart
-                      data={trendChart.rows}
-                      xKey="hour"
-                      lines={trendChart.days.flatMap((day, i) => [
-                        { key: `${day}_count`, label: `${day} Runs`, color: TREND_RUN_COLORS[i % TREND_RUN_COLORS.length], strokeWidth: 2 },
-                        { key: `${day}_fail`,  label: `${day} Fail`, color: TREND_FAIL_COLORS[i % TREND_FAIL_COLORS.length], dashed: true, strokeWidth: 1.5 },
-                      ])}
-                      height={260}
-                      margin={{ top: 8, right: 16, left: -10, bottom: 4 }}
-                    />
-                  ) : (
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 260 }}>
-                      <Typography sx={{ fontSize: '12px', color: '#bbb' }}>No trend data available</Typography>
-                    </Box>
-                  )}
-                </Box>
-              </WidgetShell>
-            </Paper>
           </Box>
 
           {/* ── Widget filter active indicator ── */}
@@ -1108,8 +1013,87 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
             </Box>
           )}
 
-          {/* ── Row 3: Agent | Job Type ── */}
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' }, gap: 2 }}>
+          {/* ── Row 3: Job Run Trend | Agent | Job Type ── */}
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 2 }}>
+
+            <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', height: ESP_WIDGET_PANEL_HEIGHT, '& > *': { flex: 1, width: '100%' } }}>
+              <WidgetShell
+                title={drillJob
+                  ? `Job Trend — ${drillJob}`
+                  : `Job Run Trend — ${days} Day${days !== 1 ? 's' : ''}`}
+                source={drillJob ? 'esp_job_stats_recent · click job again or × to reset' : 'ESP · esp_job_stats_recent'}
+                titleIcon={<TrendingUpIcon sx={{ color: '#1565c0', fontSize: 18 }} />}
+                actions={
+                  <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
+                    {drillJob && (
+                      <IconButton
+                        size="small"
+                        onClick={() => setDrillJob(null)}
+                        sx={{ p: 0.25, color: '#888', '&:hover': { color: '#333' } }}
+                        title="Back to platform / app trend"
+                      >
+                        <ArrowBackIcon sx={{ fontSize: 14 }} />
+                      </IconButton>
+                    )}
+                    <Chip
+                      label={`${days} Day${days !== 1 ? 's' : ''}`}
+                      size="small"
+                      sx={{
+                        fontSize: '10px', height: 20,
+                        bgcolor: '#1565c0',
+                        color: '#fff',
+                        fontWeight: 700,
+                        cursor: 'default',
+                      }}
+                    />
+                  </Box>
+                }
+              >
+                <Box sx={{ px: 1.5, pb: 1.5, pt: 0.5, flex: 1, width: '100%', minHeight: 0 }}>
+                  {drillJob ? (
+                    drillJobTrendLoading ? (
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 190 }}>
+                        <CircularProgress size={24} sx={{ color: '#1565c0' }} />
+                      </Box>
+                    ) : drillJobChart.rows.length > 0 ? (
+                      <TrendLineChart
+                        data={drillJobChart.rows}
+                        xKey="hour"
+                        lines={drillJobChart.days.flatMap((day, i) => [
+                          { key: `${day}_count`, label: `${day} Runs`, color: TREND_RUN_COLORS[i % TREND_RUN_COLORS.length], strokeWidth: 2 },
+                          { key: `${day}_fail`,  label: `${day} Fail`, color: TREND_FAIL_COLORS[i % TREND_FAIL_COLORS.length], dashed: true, strokeWidth: 1.5 },
+                        ])}
+                        height={190}
+                        margin={{ top: 8, right: 16, left: -10, bottom: 4 }}
+                      />
+                    ) : (
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 190 }}>
+                        <Typography sx={{ fontSize: '12px', color: '#bbb' }}>No run history for <strong>{drillJob}</strong></Typography>
+                      </Box>
+                    )
+                  ) : trendLoading ? (
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 190 }}>
+                      <CircularProgress size={24} sx={{ color: '#1565c0' }} />
+                    </Box>
+                  ) : trendChart.rows.length > 0 ? (
+                    <TrendLineChart
+                      data={trendChart.rows}
+                      xKey="hour"
+                      lines={trendChart.days.flatMap((day, i) => [
+                        { key: `${day}_count`, label: `${day} Runs`, color: TREND_RUN_COLORS[i % TREND_RUN_COLORS.length], strokeWidth: 2 },
+                        { key: `${day}_fail`,  label: `${day} Fail`, color: TREND_FAIL_COLORS[i % TREND_FAIL_COLORS.length], dashed: true, strokeWidth: 1.5 },
+                      ])}
+                      height={190}
+                      margin={{ top: 8, right: 16, left: -10, bottom: 4 }}
+                    />
+                  ) : (
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 190 }}>
+                      <Typography sx={{ fontSize: '12px', color: '#bbb' }}>No trend data available</Typography>
+                    </Box>
+                  )}
+                </Box>
+              </WidgetShell>
+            </Paper>
 
             {/* Agent — clickable bar list */}
             <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #1976d222', borderTop: '3px solid #1976d2', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', height: ESP_WIDGET_PANEL_HEIGHT, '& > *': { flex: 1, width: '100%' } }}>

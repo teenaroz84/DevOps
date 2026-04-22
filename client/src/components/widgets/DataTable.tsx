@@ -318,25 +318,26 @@ export function DataTable<T = any>({
       {/* ── Table ── */}
       <Box
         sx={{
-          overflowX: 'scroll',
+          overflowX: 'auto',
+          overflowY: 'hidden',
           borderRadius: 1.5,
           border: '1px solid #e8ecf1',
           scrollbarWidth: 'thin',
           '&::-webkit-scrollbar': { height: 10, width: 10 },
           '&::-webkit-scrollbar-thumb': { backgroundColor: '#c7d1db', borderRadius: 8 },
           '&::-webkit-scrollbar-track': { backgroundColor: '#eef3f8' },
-          ...(maxHeight ? { maxHeight, overflowY: 'auto' } : {}),
         }}
       >
-        <Table
-          size="small"
-          stickyHeader
-          sx={{
-            tableLayout: 'fixed',
-            width: computedTableWidth > 0 ? `max(100%, ${computedTableWidth}px)` : (resolvedTableMinWidth ? `max(100%, ${resolvedTableMinWidth})` : '100%'),
-            minWidth: resolvedTableMinWidth,
-          }}
-        >
+        <Box sx={maxHeight ? { maxHeight, overflowY: 'auto' } : undefined}>
+          <Table
+            size="small"
+            stickyHeader
+            sx={{
+              tableLayout: 'fixed',
+              width: computedTableWidth > 0 ? `max(100%, ${computedTableWidth}px)` : (resolvedTableMinWidth ? `max(100%, ${resolvedTableMinWidth})` : '100%'),
+              minWidth: resolvedTableMinWidth,
+            }}
+          >
           <TableHead>
             <TableRow>
               {safeColumns.map((col, colIdx) => {
@@ -471,7 +472,8 @@ export function DataTable<T = any>({
               ))
             )}
           </TableBody>
-        </Table>
+          </Table>
+        </Box>
       </Box>
 
       {/* ── Pagination footer ── */}
