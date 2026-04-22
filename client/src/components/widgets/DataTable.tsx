@@ -328,7 +328,15 @@ export function DataTable<T = any>({
           '&::-webkit-scrollbar-track': { backgroundColor: '#eef3f8' },
         }}
       >
-        <Box sx={maxHeight ? { maxHeight, overflowY: 'auto' } : undefined}>
+        <Box
+          sx={{
+            width: computedTableWidth > 0
+              ? `max(100%, ${computedTableWidth}px)`
+              : (resolvedTableMinWidth ? `max(100%, ${resolvedTableMinWidth})` : '100%'),
+            minWidth: resolvedTableMinWidth,
+            ...(maxHeight ? { maxHeight, overflowY: 'auto' } : {}),
+          }}
+        >
           <Table
             size="small"
             stickyHeader
