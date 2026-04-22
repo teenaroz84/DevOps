@@ -1,7 +1,6 @@
 import React from 'react'
 import { Box, Typography, CircularProgress, Paper, Chip, Autocomplete, TextField, Button, Checkbox, Select, MenuItem, FormControl, Tooltip, IconButton, Slider } from '@mui/material'
 import WorkIcon from '@mui/icons-material/Work'
-import ScheduleIcon from '@mui/icons-material/Schedule'
 import AccountTreeIcon from '@mui/icons-material/AccountTree'
 import StorageIcon from '@mui/icons-material/Storage'
 import TrendingUpIcon from '@mui/icons-material/TrendingUp'
@@ -42,26 +41,6 @@ interface AppData {
   job_run_table: Array<{ job_longname: string; command: string | null; argument: string | null; runs: number | null; start_date: string | null; start_time: string | null; end_date: string | null; end_time: string | null; exec_qtime: string | null; ccfail: string | null; comp_code: string | null }>
 }
 
-interface SLAViolationRow {
-  platform: string | null
-  batch_dt: string | null
-  appl_lib: string | null
-  job_name: string | null
-  run_criteria: string | null
-  sla_time: string | null
-  sla_type: string | null
-  job_start_time: string | null
-  job_end_time: string | null
-  sla_status: string | null
-  time_diff: string | null
-  application_desc: string | null
-  ccfail: string | null
-  bus_unit: string | null
-  sub_bus_unit: string | null
-  bus_summary: string | null
-  last_updated: string | null
-}
-
 const TREND_RUN_COLORS  = ['#1565c0', '#2e7d32', '#6a1b9a', '#00838f']
 const TREND_FAIL_COLORS = ['#e53935', '#f57c00', '#d81b60', '#ff6f00']
 
@@ -99,10 +78,6 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   const [trendData, setTrendData] = React.useState<Array<{ day: string; hour: number; job_count: number; job_fail_count: number }>>([])
   const [trendLoading, setTrendLoading] = React.useState(false)
   const [metadataDetail, setMetadataDetail] = React.useState<AppData['metadata_detail']>([])
-  const [jobRunTable, setJobRunTable] = React.useState<AppData['job_run_table']>([])
-  const [tableLoading, setTableLoading] = React.useState(false)
-  const [slaViolations, setSlaViolations] = React.useState<SLAViolationRow[]>([])
-  const [slaViolationsLoading, setSlaViolationsLoading] = React.useState(false)
   const [selectedJobs, setSelectedJobs] = React.useState<string[]>([])
   const [jobStatusFilter, setJobStatusFilter] = React.useState('All')
 
@@ -229,45 +204,6 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
     }
   }, [selectedPlatform, selected, useMock])
 
-  React.useEffect(() => {
-    if (!selectedPlatform || selected || useMock) return
-    setMetadataDetail([])
-    setJobRunTable([])
-    setTableLoading(false)
-  }, [selectedPlatform, selected, useMock])
-
-  React.useEffect(() => {
-    if (!selectedPlatform) {
-      setSlaViolations([])
-      setSlaViolationsLoading(false)
-      return
-    }
-
-    if (useMock) {
-      setSlaViolations([])
-      setSlaViolationsLoading(false)
-      return
-    }
-
-    let cancelled = false
-    setSlaViolationsLoading(true)
-    espService.getSlaViolations(selectedPlatform, selected || '')
-      .then((rows: any) => {
-        if (cancelled) return
-        setSlaViolations(Array.isArray(rows) ? rows : [])
-      })
-      .catch(() => {
-        if (!cancelled) setSlaViolations([])
-      })
-      .finally(() => {
-        if (!cancelled) setSlaViolationsLoading(false)
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [selectedPlatform, selected, useMock])
-
   // Load first 200 application names when platform changes; supports search-as-you-type
   const fetchApplibs = React.useCallback((platform: string, search: string, append = false) => {
     const offset = append ? platformApplications.length : 0
@@ -289,9 +225,15 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       setPlatformApplications([])
       setApplibTotal(0)
       setApplibHasMore(false)
+      setSelected('')
       setApplibSearch('')
       return
     }
+    setSelected('')
+    setApplibSearch('')
+    setPlatformApplications([])
+    setApplibTotal(0)
+    setApplibHasMore(false)
     fetchApplibs(selectedPlatform, '')
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPlatform, useMock])
@@ -370,28 +312,6 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
     }
   }, [selected, selectedPlatform, useMock, days])
 
-  // Load metadata detail + job run table whenever selection or mock mode changes
-  React.useEffect(() => {
-    if (!selected) return
-    setTableLoading(true)
-    setMetadataDetail([])
-    setJobRunTable([])
-    if (useMock) {
-      const mockApp = getMockAppData(selected)
-      setMetadataDetail(mockApp?.metadata_detail ?? [])
-      setJobRunTable(mockApp?.job_run_table ?? [])
-      setTableLoading(false)
-      return
-    }
-    Promise.all([
-      espService.getMetadata(selected).catch(() => []),
-      espService.getJobRunTable(selected, days).catch(() => []),
-    ]).then(([meta, runs]: any) => {
-      setMetadataDetail(Array.isArray(meta) ? meta : [])
-      setJobRunTable(Array.isArray(runs) ? runs : [])
-    }).finally(() => setTableLoading(false))
-  }, [selected, useMock, days])
-
   // Load trend data independently — uses platform or app selection
   React.useEffect(() => {
     const activeKey = selectedPlatform ?? selected
@@ -422,6 +342,22 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       .catch(() => setDrillJobTrend([]))
       .finally(() => setDrillJobTrendLoading(false))
   }, [drillJob, days])
+
+  // Keep metadata detail for widget-filter mapping (agent/job_type/user_job), even though detail table is hidden.
+  React.useEffect(() => {
+    if (!selected) {
+      setMetadataDetail([])
+      return
+    }
+    if (useMock) {
+      const mockApp = getMockAppData(selected)
+      setMetadataDetail(mockApp?.metadata_detail ?? [])
+      return
+    }
+    espService.getMetadata(selected)
+      .then((meta: any) => setMetadataDetail(Array.isArray(meta) ? meta : []))
+      .catch(() => setMetadataDetail([]))
+  }, [selected, useMock])
 
   // Transform trend data for recharts: keys ${day}_count and ${day}_fail per hour
   const buildTrendChart = (rows: Array<{ day: string; hour: number; job_count: number; job_fail_count: number }>) => {
@@ -482,43 +418,6 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   const filteredSucc        = React.useMemo(() => (data?.successor_jobs ?? [])
     .filter(r => !selectedJobs.length || selectedJobs.includes(r.jobname))
     .filter(r => !widgetFilteredJobnames || widgetFilteredJobnames.has(r.jobname)),        [data, selectedJobs, widgetFilteredJobnames])
-  const filteredMetaDetail  = React.useMemo(() => metadataDetail
-    .filter(r => !selectedJobs.length || selectedJobs.includes(r.jobname))
-    .filter(r => !widgetFilteredJobnames || widgetFilteredJobnames.has(r.jobname)),        [metadataDetail, selectedJobs, widgetFilteredJobnames])
-  const filteredJobRunTable = React.useMemo(() => jobRunTable
-    .filter(r => !selectedJobs.length || selectedJobs.includes(r.job_longname))
-    .filter(r => !widgetFilteredJobnames || widgetFilteredJobnames.has(r.job_longname)),   [jobRunTable, selectedJobs, widgetFilteredJobnames])
-
-  // Metadata detail columns (full esp_job_cmnd data)
-  const metaCols: ColumnDef[] = [
-    { key: 'jobname',   header: 'Job Name',       flex: 1,   noWrap: true },
-    { key: 'command',   header: 'Command',         flex: 1,   render: r => r.command   ?? '—' },
-    { key: 'argument',  header: 'Argument',        flex: 1.5, render: r => r.argument  ?? '—' },
-    { key: 'agent',     header: 'Agent',           flex: 1,   render: r => r.agent     ?? '—' },
-    { key: 'job_type',  header: 'Job Type',        width: 90, render: r => r.job_type  ?? '—' },
-    { key: 'comp_code', header: 'Cmpl Code',       width: 80, render: r => r.comp_code ?? '—' },
-    { key: 'runs',      header: 'Runs',            width: 60, render: r => r.runs != null ? r.runs : '—' },
-    { key: 'user_job',  header: 'User Job',        width: 100, render: r => r.user_job ?? '—' },
-  ]
-
-  // Job run table columns (esp_job_cmnd JOIN esp_job_stats_recent)
-  const jobRunTableCols: ColumnDef[] = [
-    { key: 'job_longname', header: 'Job Name',    flex: 1,   noWrap: true },
-    { key: 'start_date',   header: 'Start Date',  width: 90, render: r => r.start_date ?? '—' },
-    { key: 'start_time',   header: 'Start Time',  width: 80, render: r => r.start_time ? String(r.start_time).slice(0, 8) : '—' },
-    { key: 'end_date',     header: 'End Date',    width: 90, render: r => r.end_date   ?? '—' },
-    { key: 'end_time',     header: 'End Time',    width: 80, render: r => r.end_time   ? String(r.end_time).slice(0, 8) : '—' },
-    { key: 'exec_qtime',   header: 'Exec Time',   width: 80, render: r => r.exec_qtime ? String(r.exec_qtime).slice(0, 8) : '—' },
-    { key: 'runs',         header: 'Runs',        width: 55, render: r => r.runs != null ? r.runs : '—' },
-    { key: 'ccfail',       header: 'CC Fail',     width: 70, render: r => {
-      const v = r.ccfail
-      if (!v) return '—'
-      return <Typography component="span" sx={{ fontSize: '10px', fontWeight: 700, color: v === 'YES' ? '#c62828' : '#2e7d32' }}>{v}</Typography>
-    }},
-    { key: 'comp_code',    header: 'Comp Code',  width: 80, render: r => r.comp_code ?? '—' },
-    { key: 'command',      header: 'Command',     flex: 1,   render: r => r.command   ?? '—' },
-    { key: 'argument',     header: 'Argument',    flex: 1.5, render: r => r.argument  ?? '—' },
-  ]
 
   const jobListCols: ColumnDef[] = React.useMemo(() => {
     const applCol: ColumnDef = selectedPlatform ? {
@@ -652,44 +551,6 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
     }
   }, [SHOW_SLA_MISSED_JOBS_TAB, dashboardView])
 
-  const slaViolationCols: ColumnDef[] = [
-    { key: 'platform', header: 'Platform', width: 80, render: r => r.platform ?? '—' },
-    { key: 'batch_dt', header: 'Batch Dt', width: 92, render: r => r.batch_dt ?? '—' },
-    { key: 'appl_lib', header: 'Applib', width: 120, noWrap: true, render: r => r.appl_lib ?? '—' },
-    { key: 'job_name', header: 'Job Name', flex: 1, noWrap: true, render: r => r.job_name ?? '—' },
-    { key: 'run_criteria', header: 'Run Criteria', width: 100, render: r => r.run_criteria ?? '—' },
-    { key: 'sla_time', header: 'SLA Time', width: 82, render: r => r.sla_time ?? '—' },
-    { key: 'sla_type', header: 'SLA Type', width: 110, render: r => r.sla_type ?? '—' },
-    {
-      key: 'sla_status',
-      header: 'SLA Status',
-      width: 126,
-      render: r => {
-        const status = String(r.sla_status ?? '').toUpperCase()
-        const isRed = status.includes('RED')
-        const isAmber = status.includes('AMBER')
-        return (
-          <Chip
-            label={r.sla_status ?? '—'}
-            size="small"
-            sx={{
-              height: 18,
-              fontSize: '10px',
-              fontWeight: 700,
-              bgcolor: isRed ? '#fce4ec' : isAmber ? '#fff3e0' : '#eceff1',
-              color: isRed ? '#c62828' : isAmber ? '#e65100' : '#546e7a',
-              border: `1px solid ${isRed ? '#ef9a9a' : isAmber ? '#ffcc80' : '#cfd8dc'}`,
-            }}
-          />
-        )
-      },
-    },
-    { key: 'time_diff', header: 'Time Diff', width: 150, render: r => r.time_diff ?? '—' },
-    { key: 'job_start_time', header: 'Job Start', width: 160, render: r => r.job_start_time ? String(r.job_start_time).replace('T', ' ').slice(0, 19) : '—' },
-    { key: 'job_end_time', header: 'Job End', width: 160, render: r => r.job_end_time ? String(r.job_end_time).replace('T', ' ').slice(0, 19) : '—' },
-    { key: 'application_desc', header: 'Application Desc', width: 170, render: r => r.application_desc ?? '—' },
-  ]
-
   return (
     <Box sx={{ bgcolor: '#f5f6f8', minHeight: '100%', p: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
 
@@ -798,6 +659,10 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                       const val = (e.target.value as string) || null
                       if (!val) return
                       setSelected('')
+                      setApplibSearch('')
+                      setPlatformApplications([])
+                      setApplibTotal(0)
+                      setApplibHasMore(false)
                       setSelectedPlatform(val)
                     }}
                     displayEmpty
@@ -1353,38 +1218,8 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
             */}
           </Box>
 
-          {/* ── Row 4: SLA Violations ── */}
-          <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #c62828', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-            <WidgetShell
-              title="SLA Violations"
-              source={selected
-                ? `${selected} · latest missed SLA rows from job_sla_missed`
-                : `${data.appl_name} · latest missed SLA rows from job_sla_missed`}
-              titleIcon={<ScheduleIcon sx={{ color: '#c62828', fontSize: 18 }} />}
-            >
-              {slaViolationsLoading ? (
-                <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-                  <CircularProgress size={22} sx={{ color: '#c62828' }} />
-                </Box>
-              ) : (
-                <Box sx={{ px: 1.5, pb: 1 }}>
-                  <DataTable
-                    columns={slaViolationCols}
-                    rows={slaViolations}
-                    rowKey={(r) => `${r.platform}-${r.appl_lib}-${r.job_name}-${r.batch_dt}-${r.job_start_time}`}
-                    compact
-                    maxHeight={260}
-                    pageSize={200}
-                    accentColor="#c62828"
-                    emptyMessage="No SLA violations found for the current platform/applib selection"
-                  />
-                </Box>
-              )}
-            </WidgetShell>
-          </Paper>
-
-          {/* ── Row 5: Predecessor Jobs | Successor Jobs | Metadata Table ── */}
-          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 2fr', gap: 2 }}>
+          {/* ── Row 4: Predecessor Jobs | Successor Jobs ── */}
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
 
             <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
               <WidgetShell
@@ -1394,7 +1229,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
               >
                 <Box sx={{ flex: 1, overflowY: 'auto', px: 1.5, pb: 1 }}>
                   <DataTable
-                    columns={[depCols[0], { ...depCols[1], header: 'Predecessor' }]}
+                    columns={[depCols[0], depCols[1], { ...depCols[2], header: 'Predecessor' }]}
                     rows={filteredPred}
                     rowKey="jobname"
                     compact
@@ -1414,7 +1249,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
               >
                 <Box sx={{ flex: 1, overflowY: 'auto', px: 1.5, pb: 1 }}>
                   <DataTable
-                    columns={[depCols[0], { ...depCols[1], header: 'Successor' }]}
+                    columns={[depCols[0], depCols[1], { ...depCols[2], header: 'Successor' }]}
                     rows={filteredSucc}
                     rowKey="jobname"
                     compact
@@ -1425,93 +1260,30 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                 </Box>
               </WidgetShell>
             </Paper>
-
-            <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-              <WidgetShell
-                title="Job Commands (esp_job_cmnd)"
-                source={`${data.metadata.length} records`}
-                titleIcon={<TableChartIcon sx={{ color: '#37474f', fontSize: 18 }} />}
-              >
-                <Box sx={{ flex: 1, overflowY: 'auto', px: 1.5, pb: 1 }}>
-                  <DataTable
-                    columns={[
-                      { key: 'jobname',  header: 'Job Name',  flex: 1, noWrap: true },
-                      { key: 'command',  header: 'Command',   flex: 1, render: r => r.command  ?? '—' },
-                      { key: 'argument', header: 'Argument', flex: 1.5, render: r => r.argument ?? '—' },
-                    ]}
-                    rows={filteredMeta}
-                    rowKey="jobname"
-                    compact
-                    maxHeight={220}
-                    accentColor="#37474f"
-                    emptyMessage="No records"
-                  />
-                </Box>
-              </WidgetShell>
-            </Paper>
           </Box>
 
-          {/* ── Row 6: Metadata Detail ── */}
-          <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #37474f', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+          {/* ── Row 5: Job Commands ── */}
+          <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
             <WidgetShell
-              title="Metadata Table (esp_job_cmnd)"
-              source={selectedPlatform ? 'Disabled at platform level to avoid loading every job across all mapped applications' : `${metadataDetail.length} records · SELECT * FROM esp_job_cmnd`}
+              title="Job Commands (esp_job_cmnd)"
+              source={`${data.metadata.length} records`}
               titleIcon={<TableChartIcon sx={{ color: '#37474f', fontSize: 18 }} />}
             >
-              {selectedPlatform ? (
-                <Box sx={{ px: 2, py: 3 }}>
-                  <Typography sx={{ fontSize: '12px', color: '#666' }}>
-                    Choose a single application to load metadata rows. Platform view keeps this table off to avoid pulling the full esp_job_cmnd detail set for every mapped app.
-                  </Typography>
-                </Box>
-              ) : tableLoading ? (
-                <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress size={22} sx={{ color: '#37474f' }} /></Box>
-              ) : (
-                <Box sx={{ px: 1.5, pb: 1 }}>
-                  <DataTable
-                    columns={metaCols}
-                    rows={filteredMetaDetail}
-                    rowKey="jobname"
-                    compact
-                    maxHeight={280}
-                    pageSize={500}
-                    accentColor="#37474f"
-                    emptyMessage="No metadata records"
-                  />
-                </Box>
-              )}
-            </WidgetShell>
-          </Paper>
-
-          {/* ── Row 7: Job Run Table ── */}
-          <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #1565c0', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-            <WidgetShell
-              title="Job Run Table (esp_job_cmnd ⋈ esp_job_stats_recent)"
-              source={selectedPlatform ? 'Disabled at platform level to avoid loading a multi-application run-history join' : `${jobRunTable.length} records · JOIN on jobname = job_longname`}
-              titleIcon={<ScheduleIcon sx={{ color: '#1565c0', fontSize: 18 }} />}
-            >
-              {selectedPlatform ? (
-                <Box sx={{ px: 2, py: 3 }}>
-                  <Typography sx={{ fontSize: '12px', color: '#666' }}>
-                    Choose a single application to inspect run history. Platform view now keeps the joined run table off because that query can become too large when it spans every mapped application.
-                  </Typography>
-                </Box>
-              ) : tableLoading ? (
-                <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress size={22} sx={{ color: '#1565c0' }} /></Box>
-              ) : (
-                <Box sx={{ px: 1.5, pb: 1 }}>
-                  <DataTable
-                    columns={jobRunTableCols}
-                    rows={filteredJobRunTable}
-                    rowKey={(r) => `${r.job_longname}-${r.start_date}-${r.start_time}`}
-                    compact
-                    maxHeight={320}
-                    pageSize={500}
-                    accentColor="#1565c0"
-                    emptyMessage="No run records found"
-                  />
-                </Box>
-              )}
+              <Box sx={{ flex: 1, overflowY: 'auto', px: 1.5, pb: 1 }}>
+                <DataTable
+                  columns={[
+                    { key: 'jobname',  header: 'Job Name',  flex: 1, noWrap: true },
+                    { key: 'command',  header: 'Command',   flex: 1, render: r => r.command  ?? '—' },
+                    { key: 'argument', header: 'Argument', flex: 1.5, render: r => r.argument ?? '—' },
+                  ]}
+                  rows={filteredMeta}
+                  rowKey="jobname"
+                  compact
+                  maxHeight={220}
+                  accentColor="#37474f"
+                  emptyMessage="No records"
+                />
+              </Box>
             </WidgetShell>
           </Paper>
         </>

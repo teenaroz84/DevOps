@@ -230,6 +230,22 @@ export function DataTable<T = any>({
     ? `${tableMinWidth}px`
     : tableMinWidth
 
+  const parsedTableMinWidth = useMemo(() => {
+    if (typeof tableMinWidth === 'number') return tableMinWidth
+    if (typeof tableMinWidth === 'string') {
+      const parsed = parseInt(tableMinWidth, 10)
+      return isNaN(parsed) ? 0 : parsed
+    }
+    return 0
+  }, [tableMinWidth])
+
+  const totalColumnWidth = useMemo(
+    () => safeColumns.reduce((sum, col) => sum + (colWidths[col.key] ?? inferColumnWidth(col)), 0),
+    [safeColumns, colWidths, inferColumnWidth]
+  )
+
+  const computedTableWidth = Math.max(totalColumnWidth, parsedTableMinWidth)
+
   // ── CSV export ────────────────────────────────────────────
   const exportCsv = () => {
     if (displayRows.length === 0) return
@@ -313,7 +329,7 @@ export function DataTable<T = any>({
           stickyHeader
           sx={{
             tableLayout: 'fixed',
-            width: resolvedTableMinWidth ? `max(100%, ${resolvedTableMinWidth})` : '100%',
+            width: computedTableWidth > 0 ? `max(100%, ${computedTableWidth}px)` : (resolvedTableMinWidth ? `max(100%, ${resolvedTableMinWidth})` : '100%'),
             minWidth: resolvedTableMinWidth,
           }}
         >
