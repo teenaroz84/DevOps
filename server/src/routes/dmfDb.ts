@@ -11,6 +11,13 @@ async function safeQuery(sql: string, fallback: any[] = []): Promise<any[]> {
   try { const { rows } = await pool.query(sql); return rows; } catch (e: any) { console.error('DMF query error:', e.message); return fallback; }
 }
 
+/** Format a DB timestamp (Date object or string) as "YYYY-MM-DD HH:MM:SS" */
+function fmtDbTs(val: any): string {
+  if (!val) return '';
+  if (val instanceof Date) return val.toISOString().slice(0, 19).replace('T', ' ');
+  return String(val).slice(0, 19);
+}
+
 const STATUS_COLOR: Record<string, string> = {
   'SUCCESS':      '#2e7d32',
   'FAILED':       '#d32f2f',
@@ -263,8 +270,8 @@ router.get('/lineage/jobs', async (req: Request, res: Response) => {
         processTypeCode: r.proc_typ_cd || '',
         sourceName:      r.src_nm      || '',
         targetName:      r.tgt_nm      || '',
-        runStartTime:    r.run_strt_tm ? String(r.run_strt_tm).slice(0, 19) : '',
-        runEndTime:      r.run_end_tm  ? String(r.run_end_tm).slice(0, 19)  : '',
+        runStartTime:    fmtDbTs(r.run_strt_tm),
+        runEndTime:      fmtDbTs(r.run_end_tm),
         status:          (r.run_status || '').toUpperCase() === 'SUCCESS' ? 'success' : 'failed',
       })),
     });
@@ -701,8 +708,8 @@ router.get('/recent-failures', async (_req: Request, res: Response) => {
       etlProcess:       r.dataset_nm   || r.src_nm || 'Unknown',
       runId:            r.run_id       || '',
       batchId:          r.proc_typ_cd  || '',
-      startTime:        r.run_strt_tm  ? String(r.run_strt_tm).slice(0, 19) : '',
-      endTime:          r.run_end_tm   ? String(r.run_end_tm).slice(0, 19)  : '',
+      startTime:        fmtDbTs(r.run_strt_tm),
+      endTime:          fmtDbTs(r.run_end_tm),
       failedStage:      r.proc_typ_cd  || '',
       errorDescription: `Run ${r.run_id || 'Unknown'} failed`,
       details:          `Source: ${r.src_nm || 'N/A'} → Target: ${r.tgt_nm || 'N/A'}`,
