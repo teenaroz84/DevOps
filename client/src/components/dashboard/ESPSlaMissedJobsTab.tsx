@@ -123,6 +123,18 @@ function formatMinutes(minutes?: number | null): string {
   return `${hours} hr ${remainingMinutes} min`
 }
 
+/** Format duration in days + hours (used for longest delay where values can span multiple days) */
+function formatMinutesDaysHours(minutes?: number | null): string {
+  if (minutes == null || Number.isNaN(minutes)) return '—'
+  const rounded = Math.round(minutes)
+  const totalHours = Math.floor(rounded / 60)
+  const days = Math.floor(totalHours / 24)
+  const remainingHours = totalHours % 24
+  if (days <= 0) return remainingHours === 0 ? `${rounded} min` : `${remainingHours} hr`
+  if (remainingHours === 0) return `${days}d`
+  return `${days}d ${remainingHours} hr`
+}
+
 function buildSeriesChartRows<T extends SeriesPoint>(rows: T[], seriesKey: 'platform' | 'sla_type') {
   const days = [...new Set(rows.map(row => row.day).filter(Boolean) as string[])].sort()
   const totals = new Map<string, number>()
@@ -384,7 +396,7 @@ export const ESPSlaMissedJobsTab: React.FC<ESPSlaMissedJobsTabProps> = ({
                 { label: 'Distinct Applications Impacted', value: dashboard.metrics.distinct_applications_impacted, color: '#1565c0', bg: '#e3f2fd' },
                 { label: 'Distinct Business Units Impacted', value: dashboard.metrics.distinct_business_units_impacted, color: '#6a1b9a', bg: '#f3e5f5' },
                 { label: 'Avg Delay Duration', value: formatMinutes(dashboard.metrics.avg_delay_minutes), color: '#2e7d32', bg: '#e8f5e9' },
-                { label: 'Longest Delay Duration', value: formatMinutes(dashboard.metrics.longest_delay_minutes), color: '#37474f', bg: '#eceff1' },
+                { label: 'Longest Delay Duration', value: formatMinutesDaysHours(dashboard.metrics.longest_delay_minutes), color: '#37474f', bg: '#eceff1' },
               ]}
               columns={6}
             />
