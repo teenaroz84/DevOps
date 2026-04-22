@@ -112,6 +112,7 @@ router.get('/recent-tasks', async (req: Request, res: Response) => {
     const rows = await safeQuery(`
       SELECT DISTINCT ON (task_execution_id)
         task_execution_id,
+        task_id,
         task_name,
         execution_status,
         workspace_name,
@@ -142,6 +143,8 @@ router.get('/recent-errors', async (req: Request, res: Response) => {
       SELECT
         start_timestamp,
         task_name,
+        task_id,
+        task_execution_id,
         workspace_name,
         remote_engine_name,
         artifact_name,

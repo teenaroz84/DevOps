@@ -17,8 +17,8 @@ export interface AppData {
   user_jobs: NameCount[]
   job_list: Array<{ jobname: string; last_run_date: string | null; job_type?: string | null; run_status?: string | null }>
   job_run_trend: Array<{ day: string; hour: number; job_count: number; job_fail_count: number }>
-  successor_jobs: Array<{ jobname: string; successor_job: string }>
-  predecessor_jobs: Array<{ jobname: string; predecessor_job: string }>
+  successor_jobs: Array<{ jobname: string; successor_job: string; appl_name?: string | null }>
+  predecessor_jobs: Array<{ jobname: string; predecessor_job: string; appl_name?: string | null }>
   metadata: Array<{ jobname: string; command: string | null; argument: string | null }>
   metadata_detail: Array<{ jobname: string; command: string | null; argument: string | null; agent: string | null; job_type: string | null; comp_code: string | null; runs: number | null; user_job: string | null }>
   job_run_table: Array<{ job_longname: string; command: string | null; argument: string | null; runs: number | null; start_date: string | null; start_time: string | null; end_date: string | null; end_time: string | null; exec_qtime: string | null; ccfail: string | null; comp_code: string | null }>
@@ -361,8 +361,8 @@ export function getMockPlatformData(platformId: string): AppData | null {
       const dayCompare = left.day.localeCompare(right.day)
       return dayCompare !== 0 ? dayCompare : left.hour - right.hour
     }),
-    successor_jobs: apps.flatMap((app) => app.successor_jobs),
-    predecessor_jobs: apps.flatMap((app) => app.predecessor_jobs),
+    successor_jobs: apps.flatMap((app) => app.successor_jobs.map((row) => ({ ...row, appl_name: row.appl_name ?? app.appl_name }))),
+    predecessor_jobs: apps.flatMap((app) => app.predecessor_jobs.map((row) => ({ ...row, appl_name: row.appl_name ?? app.appl_name }))),
     metadata: apps.flatMap((app) => app.metadata),
     metadata_detail: apps.flatMap((app) => app.metadata_detail),
     job_run_table: apps.flatMap((app) => app.job_run_table),

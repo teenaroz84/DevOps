@@ -35,8 +35,8 @@ interface AppData {
   user_jobs: NameCount[]
   job_list: Array<{ jobname: string; last_run_date: string | null; job_type?: string | null; appl_name?: string; run_status?: string | null }>
   job_run_trend: Array<{ day: string; hour: number; job_count: number; job_fail_count: number }>
-  successor_jobs: Array<{ jobname: string; successor_job: string }>
-  predecessor_jobs: Array<{ jobname: string; predecessor_job: string }>
+  successor_jobs: Array<{ jobname: string; successor_job: string; appl_name?: string | null }>
+  predecessor_jobs: Array<{ jobname: string; predecessor_job: string; appl_name?: string | null }>
   metadata: Array<{ jobname: string; command: string | null; argument: string | null }>
   metadata_detail: Array<{ jobname: string; command: string | null; argument: string | null; agent: string | null; job_type: string | null; comp_code: string | null; runs: number | null; user_job: string | null }>
   job_run_table: Array<{ job_longname: string; command: string | null; argument: string | null; runs: number | null; start_date: string | null; start_time: string | null; end_date: string | null; end_time: string | null; exec_qtime: string | null; ccfail: string | null; comp_code: string | null }>
@@ -90,6 +90,7 @@ const getEspRunStatus = (row: { run_status?: string | null; last_run_date?: stri
 // ─── Main Component ───────────────────────────────────────
 export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void }> = ({ onOpenAgent }) => {
   const { useMock } = useMockData()
+  const SHOW_SLA_MISSED_JOBS_TAB = false
   const didAutoSelectPlatform = React.useRef(false)
   const [dashboardView, setDashboardView] = React.useState<'operations' | 'sla'>('operations')
   const [selected, setSelected] = React.useState<string>('')
@@ -639,9 +640,17 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
 
   const depCols: ColumnDef[] = [
     { key: 'jobname', header: 'Job Name', flex: 1, noWrap: true },
+    { key: 'appl_name', header: 'Applib Name', width: 140, noWrap: true,
+      render: (r: any) => r.appl_name ?? data?.appl_name ?? '—' },
     { key: 'col2',    header: 'Link',     width: 120, noWrap: true,
       render: (r: any) => r.successor_job ?? r.predecessor_job ?? '—' },
   ]
+
+  React.useEffect(() => {
+    if (!SHOW_SLA_MISSED_JOBS_TAB && dashboardView === 'sla') {
+      setDashboardView('operations')
+    }
+  }, [SHOW_SLA_MISSED_JOBS_TAB, dashboardView])
 
   const slaViolationCols: ColumnDef[] = [
     { key: 'platform', header: 'Platform', width: 80, render: r => r.platform ?? '—' },
@@ -691,9 +700,9 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       >
         <Box sx={{ display: 'flex', alignItems: 'center', backgroundColor: '#1a2535', px: 2, flexShrink: 0 }}>
           {[
-            { key: 'operations' as const, label: 'ESP', accent: '#1976d2' },
-            { key: 'sla' as const, label: 'SLA Missed Jobs', accent: '#c62828' },
-          ].map(tab => {
+            { key: 'operations' as const, label: 'ESP', accent: '#1976d2', visible: true },
+            { key: 'sla' as const, label: 'SLA Missed Jobs', accent: '#c62828', visible: SHOW_SLA_MISSED_JOBS_TAB },
+          ].filter(tab => tab.visible).map(tab => {
             const isActive = dashboardView === tab.key
             return (
               <Box

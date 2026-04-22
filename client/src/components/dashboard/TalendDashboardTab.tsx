@@ -220,7 +220,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
     {
       key: 'task_name', header: 'Task Name', flex: 1.2,
       render: row => (
-        <Tooltip title={`Artifact ID: ${row.artifact_id || 'N/A'}\nArtifact Name: ${row.artifact_name || 'N/A'}`} arrow>
+        <Tooltip title={`AArtifact Name: ${row.artifact_name || 'N/A'}`} arrow>
           <Box>
             <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#222' }}>{row.task_name || '—'}</Typography>
             <Typography sx={{ fontSize: '10px', color: '#999' }}>{row.artifact_name} v{row.artifact_version}</Typography>
@@ -244,7 +244,6 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
     { key: 'workspace_name',    header: 'Workspace',   width: 140, render: row => <Typography sx={{ fontSize: '11px', color: '#666' }}>{row.workspace_name || '—'}</Typography> },
     { key: 'remote_engine_name',header: 'Engine',      width: 160, render: row => <Typography sx={{ fontSize: '11px', color: '#666' }}>{row.remote_engine_name || '—'}</Typography> },
     { key: 'run_type',          header: 'Run Type',    width: 100,  render: row => <Typography sx={{ fontSize: '11px', color: '#888' }}>{row.run_type || '—'}</Typography> },
-    { key: 'count_of_attempts', header: 'Attempts',   width: 90,  align: 'right', render: row => <Typography sx={{ fontSize: '11px', color: '#888' }}>{row.count_of_attempts ?? '—'}</Typography> },
     { key: 'start_timestamp', header: 'Executed',  width: 140, render: row => <Typography sx={{ fontSize: '11px', color: '#888' }}>{fmtTs(row.start_timestamp)}</Typography> },
   ]
 
@@ -263,7 +262,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
     {
       key: 'task_name', header: 'Task / Artifact', flex: 1.1,
       render: row => (
-        <Tooltip title={`Artifact ID: ${row.artifact_id || 'N/A'}\nArtifact Name: ${row.artifact_name || 'N/A'}`} arrow>
+        <Tooltip title={`Artifact Name: ${row.artifact_name || 'N/A'}`} arrow>
           <Box>
             <Typography sx={{ fontSize: '11px', fontWeight: 600, color: '#333' }}>{row.task_name || '—'}</Typography>
             <Typography sx={{ fontSize: '10px', color: '#bbb' }}>{row.artifact_name}</Typography>
@@ -271,13 +270,13 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
         </Tooltip>
       ),
     },
-    { key: 'task_id', header: 'Task ID', width: 180, render: row => <Typography sx={{ fontSize: '11px', color: '#666' }}>{row.task_id || '—'}</Typography> },
-    { key: 'task_execution_id', header: 'Execution ID', width: 200, render: row => <Typography sx={{ fontSize: '10px', color: '#666', fontFamily: 'monospace' }}>{row.task_execution_id || '—'}</Typography> },
     {
       key: 'err_message_desc', header: 'Error Details', flex: 1.4,
       render: row => <ExpandableErrorText value={row.err_message_desc} />,
       disableSort: true,
     },
+    { key: 'task_id', header: 'Task ID', width: 180, render: row => <Typography sx={{ fontSize: '11px', color: '#666' }}>{row.task_id || '—'}</Typography> },
+    { key: 'task_execution_id', header: 'Execution ID', width: 200, render: row => <Typography sx={{ fontSize: '10px', color: '#666', fontFamily: 'monospace' }}>{row.task_execution_id || '—'}</Typography> },
     {
       key: 'fatal_count', header: 'Fatal', width: 70, align: 'right',
       render: row => (

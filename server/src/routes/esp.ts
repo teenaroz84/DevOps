@@ -259,14 +259,14 @@ router.get('/platform-detail/:platformId', async (req: Request, res: Response) =
          FROM (SELECT COALESCE(user_job, 'Null') AS name, COUNT(*)::int AS count
                FROM base GROUP BY user_job) uj) AS user_jobs,
 
-        (SELECT COALESCE(json_agg(s), '[]'::json)
-         FROM (SELECT DISTINCT d.jobname, d.release AS successor_job
+          (SELECT COALESCE(json_agg(s), '[]'::json)
+           FROM (SELECT DISTINCT d.jobname, d.appl_name, d.release AS successor_job
                FROM edoops.esp_job_dpndt d
                WHERE d.appl_name IN (SELECT appl_name FROM appl_names)
                ORDER BY d.jobname LIMIT 200) s) AS successors,
 
         (SELECT COALESCE(json_agg(p), '[]'::json)
-         FROM (SELECT DISTINCT d.jobname, d.release AS predecessor_job
+           FROM (SELECT DISTINCT d.jobname, d.appl_name, d.release AS predecessor_job
                FROM edoops.esp_job_dpndt d
                WHERE d.appl_name IN (SELECT appl_name FROM appl_names)
                ORDER BY d.jobname LIMIT 200) p) AS predecessors
@@ -1602,12 +1602,12 @@ router.get('/summary/:appl_name', async (req: Request, res: Response) => {
         [appl_name]).then(r => r.rows.map((x: any) => ({ day: String(x.day), hour: parseInt(x.hour), count: parseInt(x.count) }))), []),
 
       safe(() => pool.query(
-        `SELECT jobname, release AS successor_job FROM edoops.esp_job_dpndt WHERE appl_name = $1 ORDER BY jobname`,
-        [appl_name]).then(r => r.rows.map((x: any) => ({ jobname: x.jobname, successor_job: x.successor_job }))), []),
+        `SELECT jobname, appl_name, release AS successor_job FROM edoops.esp_job_dpndt WHERE appl_name = $1 ORDER BY jobname`,
+        [appl_name]).then(r => r.rows.map((x: any) => ({ jobname: x.jobname, appl_name: x.appl_name, successor_job: x.successor_job }))), []),
 
       safe(() => pool.query(
-        `SELECT jobname, release AS predecessor_job FROM edoops.esp_job_dpndt WHERE release = $1 ORDER BY jobname`,
-        [appl_name]).then(r => r.rows.map((x: any) => ({ jobname: x.jobname, predecessor_job: x.predecessor_job }))), []),
+        `SELECT jobname, appl_name, release AS predecessor_job FROM edoops.esp_job_dpndt WHERE release = $1 ORDER BY jobname`,
+        [appl_name]).then(r => r.rows.map((x: any) => ({ jobname: x.jobname, appl_name: x.appl_name, predecessor_job: x.predecessor_job }))), []),
 
       safe(() => pool.query(
         `SELECT jobname, command, argument FROM edoops.esp_job_cmnd WHERE appl_name = $1 ORDER BY jobname`,
