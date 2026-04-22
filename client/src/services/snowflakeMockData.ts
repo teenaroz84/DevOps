@@ -108,6 +108,18 @@ export const MOCK_SF_TOP_SLOW_QUERIES = [
   { pipeline: 'ML_FEAT_EXTRACT',    last_run: '9:28 AM', error_type: 'SPILL',       sla_ok: true,  fix: 'Warehouse upsize'    },
   { pipeline: 'ENRICH_CUSTOMER_V2', last_run: '5:28 AM', error_type: 'LOCK_WAIT',   sla_ok: true,  fix: 'Column pruning'      },
   { pipeline: 'SYNC_EXT_PARTNER',   last_run: '5:28 AM', error_type: 'ROW_ACCESS',  sla_ok: true,  fix: 'Row access policy'   },
+  { pipeline: 'FINANCE_MONTH_END_CLOSE',      last_run: '6:02 AM', error_type: 'TIMEOUT',    sla_ok: false, fix: 'Predicate pushdown'    },
+  { pipeline: 'CLAIMS_CROSSWALK_REFRESH',     last_run: '6:14 AM', error_type: 'SPILL',      sla_ok: false, fix: 'Temporary table tuning' },
+  { pipeline: 'CUSTOMER_360_SEGMENT_BUILD',   last_run: '6:31 AM', error_type: 'LOCK_WAIT',  sla_ok: true,  fix: 'Concurrency review'     },
+  { pipeline: 'RISK_SCORE_BATCH_V5',          last_run: '6:47 AM', error_type: 'ERROR',      sla_ok: false, fix: 'Query plan review'      },
+  { pipeline: 'OPERATIONS_SNAPSHOT_ROLLUP',   last_run: '7:05 AM', error_type: 'SLOW',       sla_ok: false, fix: 'Warehouse resize'       },
+  { pipeline: 'MEMBER_ELIGIBILITY_RECON',     last_run: '7:22 AM', error_type: 'SPILL',      sla_ok: true,  fix: 'Join simplification'    },
+  { pipeline: 'PROVIDER_NETWORK_ALIGNMENT',   last_run: '7:44 AM', error_type: 'TIMEOUT',    sla_ok: false, fix: 'Clustering review'      },
+  { pipeline: 'DIGITAL_EVENTS_SESSIONIZE',    last_run: '8:09 AM', error_type: 'LOCK_WAIT',  sla_ok: true,  fix: 'Task staggering'        },
+  { pipeline: 'BILLING_ADJUSTMENT_AUDIT',     last_run: '8:33 AM', error_type: 'ERROR',      sla_ok: false, fix: 'Retry and alerting'     },
+  { pipeline: 'PHARMACY_CLAIMS_P95_MONITOR',  last_run: '8:58 AM', error_type: 'SLOW',       sla_ok: true,  fix: 'Materialized view'      },
+  { pipeline: 'PRODUCT_USAGE_ENTITLEMENT',    last_run: '9:17 AM', error_type: 'ROW_ACCESS', sla_ok: true,  fix: 'Policy evaluation'      },
+  { pipeline: 'ENTERPRISE_USAGE_FACT_LOAD',   last_run: '9:46 AM', error_type: 'TIMEOUT',    sla_ok: false, fix: 'Partition strategy'     },
 ]
 
 export const MOCK_SF_ALERT = 'DLQ count is high – review poison pill batching'

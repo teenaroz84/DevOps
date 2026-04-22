@@ -329,10 +329,17 @@ export function DataTable<T = any>({
       </Box>
 
       {/* ── Table ── */}
+      {/* Single container handles both scroll axes.
+          - overflowX: auto  → horizontal scrollbar appears when table is wider than the card
+          - overflowY: auto  → vertical scrollbar appears when rows exceed maxHeight
+          One container = one scrollbar per axis = no dual-scroll.
+          MUI stickyHeader (position:sticky top:0 on <th>) works correctly inside
+          a single scrolling context. */}
       <Box
         sx={{
           overflowX: 'auto',
-          overflowY: 'hidden',
+          overflowY: maxHeight ? 'auto' : 'visible',
+          ...(maxHeight ? { maxHeight } : {}),
           borderRadius: 1.5,
           border: '1px solid #e8ecf1',
           scrollbarWidth: 'thin',
@@ -341,15 +348,6 @@ export function DataTable<T = any>({
           '&::-webkit-scrollbar-track': { backgroundColor: '#eef3f8' },
         }}
       >
-        <Box
-          sx={{
-            width: computedTableWidth > 0
-              ? `max(100%, ${computedTableWidth}px)`
-              : (resolvedTableMinWidth ? `max(100%, ${resolvedTableMinWidth})` : '100%'),
-            minWidth: resolvedTableMinWidth,
-            ...(maxHeight ? { maxHeight, overflowY: 'auto' } : {}),
-          }}
-        >
           <Table
             size="small"
             stickyHeader
@@ -494,7 +492,6 @@ export function DataTable<T = any>({
             )}
           </TableBody>
           </Table>
-        </Box>
       </Box>
 
       {/* ── Pagination footer ── */}

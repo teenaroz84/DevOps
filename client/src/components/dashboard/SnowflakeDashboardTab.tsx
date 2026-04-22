@@ -312,8 +312,8 @@ const CostEfficiencyScreen: React.FC<{ data: CostData; costDayLabel: string }> =
               margin={{ top: 5, right: 35, left: 0, bottom: 20 }}
             />
           </Box>
-          <Box sx={{ mt: 1, width: '100%', minWidth: 0, minHeight: 0, flex: 1, overflow: 'hidden', pb: 0.5 }}>
-            <DataTable columns={warehouseEffCols} rows={data.warehouseCostEfficiency} maxHeight={136} tableMinWidth={760} autoFitColumns={false} compact />
+          <Box sx={{ mt: 1, width: '100%', minWidth: 0, flex: 1, minHeight: 0 }}>
+            <DataTable columns={warehouseEffCols} rows={data.warehouseCostEfficiency} maxHeight={120} tableMinWidth={760} compact />
           </Box>
           <Box sx={{ mt: 0.75, borderTop: '1px solid #e8ecf1', pt: 0.75, display: 'flex', flexWrap: 'wrap', gap: 1.25, flexShrink: 0 }}>
             {([
@@ -533,8 +533,8 @@ const PlatformIntelligenceScreen: React.FC<{ data: PlatformData; queriesDayLabel
               </Box>
             ) : (
               <>
-                <Box sx={{ flex: 1, minHeight: 0, overflow: 'hidden', mb: 1 }}>
-                  <DataTable columns={queryCols} rows={data.topSlowQueries} maxHeight={236} tableMinWidth={840} autoFitColumns={false} compact />
+                <Box sx={{ flex: 1, minHeight: 0, mb: 1 }}>
+                  <DataTable columns={queryCols} rows={data.topSlowQueries} maxHeight={220} tableMinWidth={840} compact />
                 </Box>
                 <Box sx={{ borderTop: '1px solid #e8ecf1', pt: 1, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5, fontSize: '11px', color: '#666' }}>
                   <Box>
