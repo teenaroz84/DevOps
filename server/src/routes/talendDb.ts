@@ -135,7 +135,7 @@ router.get('/recent-tasks', async (req: Request, res: Response) => {
 });
 
 // ─── GET /api/talend/recent-errors ──────────────────────
-// Task executions that had fatal / error / warn / info log counts > 0
+// Task executions where execution_status is not success
 router.get('/recent-errors', async (req: Request, res: Response) => {
   try {
     const { clause: dc } = daysClause(req.query);
@@ -145,6 +145,7 @@ router.get('/recent-errors', async (req: Request, res: Response) => {
         task_name,
         task_id,
         task_execution_id,
+        execution_status,
         workspace_name,
         remote_engine_name,
         artifact_name,
@@ -156,14 +157,10 @@ router.get('/recent-errors', async (req: Request, res: Response) => {
           WHEN COALESCE(fatal_count, 0) > 0 THEN 'FATAL'
           WHEN COALESCE(error_count, 0) > 0 THEN 'ERROR'
           WHEN COALESCE(warn_count,  0) > 0 THEN 'WARN'
-          ELSE 'UNKNOWN'
+          ELSE 'INFO'
         END AS derived_level
       FROM edoops.talend_logs_dashboard
-      WHERE (
-        COALESCE(fatal_count, 0) > 0 OR
-        COALESCE(error_count, 0) > 0 OR
-        COALESCE(warn_count,  0) > 0 
-      ) ${dc}
+      WHERE execution_status NOT IN ('EXECUTION_SUCCESS', 'SUCCESS') ${dc}
       ORDER BY start_timestamp DESC NULLS LAST
     `);
     res.json(rows);

@@ -260,6 +260,18 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
       },
     },
     {
+      key: 'execution_status', header: 'Exec Status', width: 150,
+      render: row => {
+        const s = String(row.execution_status || '').toUpperCase()
+        const color = s.includes('FAIL') ? '#d32f2f' : s.includes('RUNNING') ? '#f57c00' : '#546e7a'
+        const bg    = s.includes('FAIL') ? '#ffebee'  : s.includes('RUNNING') ? '#fff3e0'  : '#eceff1'
+        return (
+          <Chip label={row.execution_status || '—'} size="small"
+            sx={{ height: 20, fontSize: '10px', fontWeight: 600, color, backgroundColor: bg, '& .MuiChip-label': { px: 1 } }} />
+        )
+      },
+    },
+    {
       key: 'task_name', header: 'Task / Artifact', flex: 1.1,
       render: row => (
         <Tooltip title={`Artifact Name: ${row.artifact_name || 'N/A'}`} arrow>
@@ -484,7 +496,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
             <WidgetShell
               title="Recent Errors & Fatal Logs"
               titleIcon={<ErrorOutlineIcon sx={{ color: '#c62828', fontSize: 18 }} />}
-              source="edoops.talend_logs_dashboard · fatal/error/warn/info count > 0 · latest 200"
+              source="edoops.talend_logs_dashboard · execution_status NOT IN (SUCCESS) · latest"
             >
               <Box sx={{ px: 1.5, pt: 1, pb: 0, display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
                 {['All', 'FATAL', 'ERROR', 'WARN'].map(l => (
