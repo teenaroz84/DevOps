@@ -312,10 +312,10 @@ const CostEfficiencyScreen: React.FC<{ data: CostData; costDayLabel: string }> =
               margin={{ top: 5, right: 35, left: 0, bottom: 20 }}
             />
           </Box>
-          <Box sx={{ mt: 1, width: '100%', minWidth: 0, minHeight: 0, flex: 1, overflow: 'visible', pb: 0.5 }}>
-            <DataTable columns={warehouseEffCols} rows={data.warehouseCostEfficiency} maxHeight={190} tableMinWidth={560} compact />
+          <Box sx={{ mt: 1, width: '100%', minWidth: 0, minHeight: 0, flex: 1, overflow: 'hidden', pb: 0.5 }}>
+            <DataTable columns={warehouseEffCols} rows={data.warehouseCostEfficiency} maxHeight={156} tableMinWidth={760} compact />
           </Box>
-          <Box sx={{ mt: 0.5, borderTop: '1px solid #e8ecf1', pt: 0.75, display: 'flex', flexWrap: 'wrap', gap: 1.25 }}>
+          <Box sx={{ mt: 0.75, borderTop: '1px solid #e8ecf1', pt: 0.75, display: 'flex', flexWrap: 'wrap', gap: 1.25, flexShrink: 0 }}>
             {([
               { key: 'good', icon: 'v', label: 'Efficient', color: '#2e7d32' },
               { key: 'warn', icon: '!', label: 'Needs Review', color: '#f57c00' },
@@ -534,7 +534,7 @@ const PlatformIntelligenceScreen: React.FC<{ data: PlatformData; queriesDayLabel
             ) : (
               <>
                 <Box sx={{ flex: 1, minHeight: 0, overflow: 'hidden', mb: 1 }}>
-                  <DataTable columns={queryCols} rows={data.topSlowQueries} maxHeight={280} compact />
+                  <DataTable columns={queryCols} rows={data.topSlowQueries} maxHeight={276} tableMinWidth={860} compact />
                 </Box>
                 <Box sx={{ borderTop: '1px solid #e8ecf1', pt: 1, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5, fontSize: '11px', color: '#666' }}>
                   <Box>
