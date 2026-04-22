@@ -330,22 +330,21 @@ export function DataTable<T = any>({
 
       {/* ── Table ── */}
       {/* Single container handles both scroll axes.
-          - overflowX: auto  → horizontal scrollbar appears when table is wider than the card
-          - overflowY: auto  → vertical scrollbar appears when rows exceed maxHeight
-          One container = one scrollbar per axis = no dual-scroll.
-          MUI stickyHeader (position:sticky top:0 on <th>) works correctly inside
-          a single scrolling context. */}
+          overflowX:'scroll' (not 'auto') forces the browser into classic scrollbar mode so
+          the horizontal track is always rendered and never fades (fixes macOS overlay-scroll
+          disappearing behaviour). overflowY:'auto' keeps the vertical bar opt-in. */}
       <Box
         sx={{
-          overflowX: 'auto',
+          overflowX: 'scroll',
           overflowY: maxHeight ? 'auto' : 'visible',
           ...(maxHeight ? { maxHeight } : {}),
           borderRadius: 1.5,
           border: '1px solid #e8ecf1',
           scrollbarWidth: 'thin',
-          '&::-webkit-scrollbar': { height: 10, width: 10 },
-          '&::-webkit-scrollbar-thumb': { backgroundColor: '#c7d1db', borderRadius: 8 },
-          '&::-webkit-scrollbar-track': { backgroundColor: '#eef3f8' },
+          '&::-webkit-scrollbar': { height: 8, width: 8 },
+          '&::-webkit-scrollbar-thumb': { backgroundColor: '#c7d1db', borderRadius: 8, '&:hover': { backgroundColor: '#90a4ae' } },
+          '&::-webkit-scrollbar-track': { backgroundColor: '#f1f4f8', borderRadius: 4 },
+          '&::-webkit-scrollbar-corner': { backgroundColor: '#f1f4f8' },
         }}
       >
           <Table

@@ -1020,8 +1020,8 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
               <WidgetShell
                 title={drillJob
                   ? `Job Trend — ${drillJob}`
-                  : `Job Run Trend — ${days} Day${days !== 1 ? 's' : ''}`}
-                source={drillJob ? 'esp_job_stats_recent · click job again or × to reset' : 'ESP · esp_job_stats_recent'}
+                  : `Job Run Trend`}
+                /* source={drillJob ? 'esp_job_stats_recent · click job again or × to reset' : 'ESP · esp_job_stats_recent'} */
                 titleIcon={<TrendingUpIcon sx={{ color: '#1565c0', fontSize: 18 }} />}
                 actions={
                   <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>

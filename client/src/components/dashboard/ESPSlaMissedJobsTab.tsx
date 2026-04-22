@@ -722,7 +722,7 @@ export const ESPSlaMissedJobsTab: React.FC<ESPSlaMissedJobsTabProps> = ({
         </Paper>
       </Box>
 
-      <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #37474f', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+     {/*  <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #37474f', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
         <WidgetShell
           title="Command Detail / Job Drilldown"
           source={selectedJobName ? `Selected job: ${selectedJobName}` : 'Select a job from the SLA widgets above'}
@@ -762,7 +762,7 @@ export const ESPSlaMissedJobsTab: React.FC<ESPSlaMissedJobsTabProps> = ({
             </Box>
           )}
         </WidgetShell>
-      </Paper>
+      </Paper> */}
     </Box>
   )
 }

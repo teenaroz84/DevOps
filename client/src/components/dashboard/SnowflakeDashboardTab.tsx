@@ -297,7 +297,7 @@ const CostEfficiencyScreen: React.FC<{ data: CostData; costDayLabel: string }> =
 
       {/* Row 2: Warehouse Cost Efficiency + Top Costly Queries/Jobs */}
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' }, gap: 2, alignItems: 'stretch', '& > *': { minWidth: 0 } }}>
-        <Paper elevation={0} sx={{ p: 2, minWidth: 0, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: `3px solid ${TRUIST.sky}`, borderRadius: 2, height: rowPanelHeight, display: 'flex', flexDirection: 'column' }}>
+        <Paper elevation={0} sx={{ p: 2, minWidth: 0, overflow: 'clip', border: '1px solid #e8ecf1', borderTop: `3px solid ${TRUIST.sky}`, borderRadius: 2, height: rowPanelHeight, display: 'flex', flexDirection: 'column' }}>
           <Typography sx={{ fontSize: '12px', fontWeight: 600, mb: 1, color: '#1a2535' }}>Warehouse Cost Efficiency</Typography>
           <Box sx={{ height: 180, minWidth: 0, overflow: 'hidden', flexShrink: 0 }}>
             <ComposedBarLineChart
@@ -312,7 +312,7 @@ const CostEfficiencyScreen: React.FC<{ data: CostData; costDayLabel: string }> =
               margin={{ top: 5, right: 35, left: 0, bottom: 20 }}
             />
           </Box>
-          <Box sx={{ mt: 1, width: '100%', minWidth: 0, flex: 1, minHeight: 0 }}>
+          <Box sx={{ mt: 1, width: '100%', minWidth: 0, flex: 1, minHeight: 0, pb: 1 }}>
             <DataTable columns={warehouseEffCols} rows={data.warehouseCostEfficiency} maxHeight={120} tableMinWidth={760} compact />
           </Box>
           <Box sx={{ mt: 0.75, borderTop: '1px solid #e8ecf1', pt: 0.75, display: 'flex', flexWrap: 'wrap', gap: 1.25, flexShrink: 0 }}>
@@ -521,11 +521,11 @@ const PlatformIntelligenceScreen: React.FC<{ data: PlatformData; queriesDayLabel
 
       {/* Row 2: Top Slow Queries + Task Reliability */}
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1.5fr 1fr' }, gap: 2, alignItems: 'stretch', '& > *': { minWidth: 0 } }}>
-        <Paper elevation={0} sx={{ minWidth: 0, border: '1px solid #e8ecf1', borderTop: `3px solid ${TRUIST.charcoal}`, borderRadius: 2, overflow: 'hidden', height: rowPanelHeight, display: 'flex', flexDirection: 'column' }}>
+        <Paper elevation={0} sx={{ minWidth: 0, border: '1px solid #e8ecf1', borderTop: `3px solid ${TRUIST.charcoal}`, borderRadius: 2, overflow: 'clip', height: rowPanelHeight, display: 'flex', flexDirection: 'column' }}>
           <Box sx={{ px: 2, py: 1.5, backgroundColor: '#fafafa', borderBottom: '1px solid #e8ecf1' }}>
             <Typography sx={{ fontSize: '13px', fontWeight: 700, color: '#1a2535' }}>Top Slow Queries</Typography>
           </Box>
-          <Box sx={{ width: '100%', minWidth: 0, minHeight: 0, flex: 1, overflow: 'hidden', p: 2, pt: 1.5, display: 'flex', flexDirection: 'column' }}>
+          <Box sx={{ width: '100%', minWidth: 0, minHeight: 0, flex: 1, p: 2, pt: 1.5, pb: 1, display: 'flex', flexDirection: 'column' }}>
             {analyticsLoading && data.topSlowQueries.length === 0 ? (
               <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
                 <CircularProgress size={18} sx={{ color: TRUIST.charcoal }} />
