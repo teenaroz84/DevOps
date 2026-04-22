@@ -342,7 +342,7 @@ router.get('/platform-job-list/:platformId', async (req: Request, res: Response)
              AND appl_name IS NOT NULL
              AND jobname IS NOT NULL
          ) cfg ON cfg.appl_name = c.appl_name AND cfg.jobname = c.jobname
-         WHERE 1=1${applClause}`,
+         WHERE 1=1${applClause.replace('appl_name', 'c.appl_name')}`,
         params.slice(0, applName ? 2 : 1)
       ),
       pool.query(`

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react'
-import { Box, Typography, Chip, Paper, CircularProgress, TextField, InputAdornment, Button, Slider } from '@mui/material'
+import { Box, Typography, Chip, Paper, CircularProgress, TextField, InputAdornment, Button, Slider, Tooltip } from '@mui/material'
 import IntegrationInstructionsIcon from '@mui/icons-material/IntegrationInstructions'
 import SearchIcon from '@mui/icons-material/Search'
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline'
@@ -218,14 +218,18 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
   // ── Task table columns ────────────────────────────────────
   const taskCols: ColumnDef[] = [
     {
-      key: 'task_name', header: 'Task Name', flex: 2,
+      key: 'task_name', header: 'Task Name', flex: 1.2,
       render: row => (
-        <Box>
-          <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#222' }}>{row.task_name || '—'}</Typography>
-          <Typography sx={{ fontSize: '10px', color: '#999' }}>{row.artifact_name} v{row.artifact_version}</Typography>
-        </Box>
+        <Tooltip title={`Artifact ID: ${row.artifact_id || 'N/A'}\nArtifact Name: ${row.artifact_name || 'N/A'}`} arrow>
+          <Box>
+            <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#222' }}>{row.task_name || '—'}</Typography>
+            <Typography sx={{ fontSize: '10px', color: '#999' }}>{row.artifact_name} v{row.artifact_version}</Typography>
+          </Box>
+        </Tooltip>
       ),
     },
+    { key: 'task_id', header: 'Task ID', width: 180, render: row => <Typography sx={{ fontSize: '11px', color: '#666' }}>{row.task_id || '—'}</Typography> },
+    { key: 'task_execution_id', header: 'Execution ID', width: 200, render: row => <Typography sx={{ fontSize: '10px', color: '#666', fontFamily: 'monospace' }}>{row.task_execution_id || '—'}</Typography> },
     {
       key: 'execution_status', header: 'Status', width: 110,
       render: row => {
@@ -237,17 +241,17 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
         )
       },
     },
-    { key: 'workspace_name',    header: 'Workspace',   width: 110, render: row => <Typography sx={{ fontSize: '11px', color: '#666' }}>{row.workspace_name || '—'}</Typography> },
-    { key: 'remote_engine_name',header: 'Engine',      width: 130, render: row => <Typography sx={{ fontSize: '11px', color: '#666' }}>{row.remote_engine_name || '—'}</Typography> },
-    { key: 'run_type',          header: 'Run Type',    width: 80,  render: row => <Typography sx={{ fontSize: '11px', color: '#888' }}>{row.run_type || '—'}</Typography> },
-    { key: 'count_of_attempts', header: 'Attempts',   width: 70,  align: 'right', render: row => <Typography sx={{ fontSize: '11px', color: '#888' }}>{row.count_of_attempts ?? '—'}</Typography> },
-    { key: 'start_timestamp', header: 'Executed',  width: 130, render: row => <Typography sx={{ fontSize: '11px', color: '#888' }}>{fmtTs(row.start_timestamp)}</Typography> },
+    { key: 'workspace_name',    header: 'Workspace',   width: 140, render: row => <Typography sx={{ fontSize: '11px', color: '#666' }}>{row.workspace_name || '—'}</Typography> },
+    { key: 'remote_engine_name',header: 'Engine',      width: 160, render: row => <Typography sx={{ fontSize: '11px', color: '#666' }}>{row.remote_engine_name || '—'}</Typography> },
+    { key: 'run_type',          header: 'Run Type',    width: 100,  render: row => <Typography sx={{ fontSize: '11px', color: '#888' }}>{row.run_type || '—'}</Typography> },
+    { key: 'count_of_attempts', header: 'Attempts',   width: 90,  align: 'right', render: row => <Typography sx={{ fontSize: '11px', color: '#888' }}>{row.count_of_attempts ?? '—'}</Typography> },
+    { key: 'start_timestamp', header: 'Executed',  width: 140, render: row => <Typography sx={{ fontSize: '11px', color: '#888' }}>{fmtTs(row.start_timestamp)}</Typography> },
   ]
 
   // ── Error log table columns ───────────────────────────────
   const errorCols: ColumnDef[] = [
     {
-      key: 'derived_level', header: 'Level', width: 70,
+      key: 'derived_level', header: 'Level', width: 80,
       render: row => {
         const cfg = LEVEL_COLOR[String(row.derived_level || '').toUpperCase()] || { color: '#546e7a', bg: '#eceff1' }
         return (
@@ -257,21 +261,25 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
       },
     },
     {
-      key: 'task_name', header: 'Task / Artifact', width: 180,
+      key: 'task_name', header: 'Task / Artifact', flex: 1.1,
       render: row => (
-        <Box>
-          <Typography sx={{ fontSize: '11px', fontWeight: 600, color: '#333' }}>{row.task_name || '—'}</Typography>
-          <Typography sx={{ fontSize: '10px', color: '#bbb' }}>{row.artifact_name}</Typography>
-        </Box>
+        <Tooltip title={`Artifact ID: ${row.artifact_id || 'N/A'}\nArtifact Name: ${row.artifact_name || 'N/A'}`} arrow>
+          <Box>
+            <Typography sx={{ fontSize: '11px', fontWeight: 600, color: '#333' }}>{row.task_name || '—'}</Typography>
+            <Typography sx={{ fontSize: '10px', color: '#bbb' }}>{row.artifact_name}</Typography>
+          </Box>
+        </Tooltip>
       ),
     },
+    { key: 'task_id', header: 'Task ID', width: 180, render: row => <Typography sx={{ fontSize: '11px', color: '#666' }}>{row.task_id || '—'}</Typography> },
+    { key: 'task_execution_id', header: 'Execution ID', width: 200, render: row => <Typography sx={{ fontSize: '10px', color: '#666', fontFamily: 'monospace' }}>{row.task_execution_id || '—'}</Typography> },
     {
-      key: 'err_message_desc', header: 'Error Details', width: 320,
+      key: 'err_message_desc', header: 'Error Details', flex: 1.4,
       render: row => <ExpandableErrorText value={row.err_message_desc} />,
       disableSort: true,
     },
     {
-      key: 'fatal_count', header: 'Fatal', width: 60, align: 'right',
+      key: 'fatal_count', header: 'Fatal', width: 70, align: 'right',
       render: row => (
         <Typography sx={{ fontSize: '11px', fontWeight: row.fatal_count > 0 ? 700 : 400, color: row.fatal_count > 0 ? '#c62828' : '#ccc' }}>
           {row.fatal_count ?? 0}
@@ -279,7 +287,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
       ),
     },
     {
-      key: 'error_count', header: 'Error', width: 60, align: 'right',
+      key: 'error_count', header: 'Error', width: 70, align: 'right',
       render: row => (
         <Typography sx={{ fontSize: '11px', fontWeight: row.error_count > 0 ? 700 : 400, color: row.error_count > 0 ? '#e53935' : '#ccc' }}>
           {row.error_count ?? 0}
@@ -287,16 +295,16 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
       ),
     },
     {
-      key: 'warn_count', header: 'Warn', width: 60, align: 'right',
+      key: 'warn_count', header: 'Warn', width: 70, align: 'right',
       render: row => (
         <Typography sx={{ fontSize: '11px', fontWeight: row.warn_count > 0 ? 700 : 400, color: row.warn_count > 0 ? '#f57c00' : '#ccc' }}>
           {row.warn_count ?? 0}
         </Typography>
       ),
     },
-    { key: 'workspace_name',    header: 'Workspace', width: 110, render: row => <Typography sx={{ fontSize: '10px', color: '#888' }}>{row.workspace_name || '—'}</Typography> },
-    { key: 'remote_engine_name', header: 'Engine',   width: 130, render: row => <Typography sx={{ fontSize: '10px', color: '#888' }}>{row.remote_engine_name || '—'}</Typography> },
-    { key: 'start_timestamp',   header: 'Time',      width: 130, render: row => <Typography sx={{ fontSize: '10px', color: '#aaa' }}>{fmtTs(row.start_timestamp)}</Typography> },
+    { key: 'workspace_name',    header: 'Workspace', width: 140, render: row => <Typography sx={{ fontSize: '10px', color: '#888' }}>{row.workspace_name || '—'}</Typography> },
+    { key: 'remote_engine_name', header: 'Engine',   width: 160, render: row => <Typography sx={{ fontSize: '10px', color: '#888' }}>{row.remote_engine_name || '—'}</Typography> },
+    { key: 'start_timestamp',   header: 'Time',      width: 140, render: row => <Typography sx={{ fontSize: '10px', color: '#aaa' }}>{fmtTs(row.start_timestamp)}</Typography> },
   ]
 
   return (
@@ -463,6 +471,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
                   compact
                   accentColor="#e65100"
                   maxHeight={280}
+                  tableMinWidth={1200}
                 />
               </Box>
             </WidgetShell>
@@ -502,7 +511,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
                   compact
                   accentColor="#c62828"
                   maxHeight={420}
-                  tableMinWidth={1320}
+                  tableMinWidth={1600}
                 />
               </Box>
             </WidgetShell>

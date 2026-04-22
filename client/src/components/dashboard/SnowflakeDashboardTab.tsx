@@ -5,7 +5,7 @@
  *   2. Cost & Efficiency Overview
  */
 import React, { useState, useEffect } from 'react'
-import { Box, Typography, Paper, Chip, Button, CircularProgress, Slider } from '@mui/material'
+import { Box, Typography, Paper, Chip, Button, CircularProgress, Slider, Tooltip } from '@mui/material'
 import AcUnitIcon from '@mui/icons-material/AcUnit'
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney'
 import QueryStatsIcon from '@mui/icons-material/QueryStats'
@@ -91,100 +91,6 @@ const ERROR_COLOR: Record<string, string> = {
   SLOW:       '#fb8c00',
 }
 
-// ── Scatter plot (SVG) ────────────────────────────────────
-
-const BUCKETS = ['<30m', '30-60m', '60-90m', '90-120m', '>120m']
-
-const ScatterPlot: React.FC<{ items: typeof MOCK_SF_COST_SCATTER }> = ({ items }) => {
-  const W = 260, H = 140, PL = 36, PR = 8, PT = 10, PB = 34
-  const costs = items.map(item => Number(item.cost) || 0)
-  const minCost = costs.length > 0 ? Math.min(...costs) : 0
-  const maxCost = costs.length > 0 ? Math.max(...costs) : 1
-  const paddedMin = Math.max(0, minCost - (maxCost - minCost || 1) * 0.1)
-  const paddedMax = maxCost + (maxCost - minCost || 1) * 0.15
-  const xStep = (W - PL - PR) / (BUCKETS.length - 1)
-  const plotHeight = H - PT - PB
-
-  const yScale = (c: number) => {
-    const range = Math.max(1, paddedMax - paddedMin)
-    const linear = Math.max(0, Math.min(1, (c - paddedMin) / range))
-    // Use sqrt transform to spread clustered low values away from the x-axis.
-    const eased = Math.sqrt(linear)
-    const y = PT + plotHeight * (1 - eased)
-    return Math.max(PT + 2, Math.min(H - PB - 3, y))
-  }
-  const DOT_COLORS = ['#e53935', '#f57c00', '#fdd835', '#43a047', '#1e88e5', '#8e24aa', '#00acc1', '#795548']
-  const yTicks = Array.from({ length: 4 }, (_, index) => {
-    const ratio = index / 3
-    return paddedMin + (paddedMax - paddedMin) * ratio
-  }).reverse()
-
-  // const plottedPoints = items
-  //   .map((d, i) => {
-  //     const normalizedBucket = String(d.bucket).replace(/–/g, '-').trim()
-  //     const xi = BUCKETS.indexOf(normalizedBucket)
-  //     const safeXi = xi < 0 ? 0 : xi
-  //     const x = PL + safeXi * xStep + (Math.sin(i * 2.3) * 6)
-  //     const y = yScale(d.cost)
-  //     return { x, y, idx: safeXi }
-  //   })
-  //   .sort((a, b) => (a.idx - b.idx) || (a.x - b.x))
-
-  // const trendPath = (() => {
-  //   if (plottedPoints.length === 0) return ''
-  //   if (plottedPoints.length === 1) {
-  //     const only = plottedPoints[0]
-  //     return `M ${only.x.toFixed(2)} ${only.y.toFixed(2)}`
-  //   }
-
-  //   const first = plottedPoints[0]
-  //   const last = plottedPoints[plottedPoints.length - 1]
-  //   let d = `M ${first.x.toFixed(2)} ${first.y.toFixed(2)}`
-
-  //   for (let i = 1; i < plottedPoints.length; i += 1) {
-  //     const prev = plottedPoints[i - 1]
-  //     const curr = plottedPoints[i]
-  //     const midX = (prev.x + curr.x) / 2
-  //     const midY = (prev.y + curr.y) / 2
-  //     d += ` Q ${prev.x.toFixed(2)} ${prev.y.toFixed(2)} ${midX.toFixed(2)} ${midY.toFixed(2)}`
-  //   }
-
-  //   d += ` T ${last.x.toFixed(2)} ${last.y.toFixed(2)}`
-  //   return d
-  // })()
-
-  return (
-    <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ overflow: 'visible' }}>
-      {yTicks.map(v => (
-        <line key={v} x1={PL} x2={W - PR} y1={yScale(v)} y2={yScale(v)} stroke="#dde4ec" strokeWidth={0.35} />
-      ))}
-      <line x1={PL} x2={W - PR} y1={H - PB} y2={H - PB} stroke="#8ea1b3" strokeWidth={1} />
-      {/* {plottedPoints.length > 1 && (
-        <path d={trendPath} fill="none" stroke="#546e7a" strokeWidth={1.1} strokeLinecap="round" strokeLinejoin="round" opacity={0.8} />
-      )} */}
-      {yTicks.map(v => (
-        <text key={`yl${v}`} x={PL - 3} y={yScale(v) + 3} textAnchor="end" fontSize={7} fill="#999">{v.toFixed(v < 10 ? 2 : 1)}</text>
-      ))}
-      {BUCKETS.map((b, i) => (
-        <text key={b} x={PL + i * xStep} y={H - PB + 12} textAnchor="middle" fontSize={7} fill="#999">{b}</text>
-      ))}
-      {items.map((d, i) => {
-        const normalizedBucket = String(d.bucket).replace(/–/g, '-').trim()
-        const xi = BUCKETS.indexOf(normalizedBucket)
-        const x = PL + (xi < 0 ? 0 : xi) * xStep + (Math.sin(i * 2.3) * 6)
-        const y = yScale(d.cost)
-        const r = Math.max(2.5, Math.min(5.5, Math.sqrt(Math.max(1, d.runs)) / 8))
-        return (
-          <g key={i}>
-            <circle cx={x} cy={y} r={r} fill={DOT_COLORS[i % DOT_COLORS.length]} opacity={0.82} style={{ cursor: 'pointer' }} />
-            <title>{`${d.name}\nCredits: ${d.cost.toFixed(2)}\nQuery Count: ${d.runs.toLocaleString()}`}</title>
-          </g>
-        )
-      })}
-    </svg>
-  )
-}
-
 // ── Types ──────────────────────────────────────────────────
 
 type CostSummaryShape = {
@@ -262,6 +168,16 @@ const CostEfficiencyScreen: React.FC<{ data: CostData; costDayLabel: string }> =
   const rowPanelHeight = 430
 
   const runtimeMin = (ms: number) => `${Math.round(ms / 60000)}m`
+  const efficiencyLabel = (v: 'good' | 'warn' | 'bad') => {
+    if (v === 'good') return 'Efficient'
+    if (v === 'warn') return 'Needs Review'
+    return 'Inefficient'
+  }
+  const efficiencyDescription = (v: 'good' | 'warn' | 'bad') => {
+    if (v === 'good') return 'Low credits per query and healthy runtime'
+    if (v === 'warn') return 'Moderate cost or runtime, watch for drift'
+    return 'High cost per query or consistently long runtime'
+  }
   const efficiencyIcon = (v: 'good' | 'warn' | 'bad') => {
     if (v === 'good') return 'v'
     if (v === 'warn') return '!'
@@ -272,14 +188,32 @@ const CostEfficiencyScreen: React.FC<{ data: CostData; costDayLabel: string }> =
     if (v === 'warn') return '#f57c00'
     return '#c62828'
   }
+  const topCostlyTrend = data.topCostlyJobs.map((item: any, index: number) => ({
+    name: item.pipeline || `Job ${index + 1}`,
+    credits_used: Number(item.run_spend ?? 0),
+    avg_runtime_ms: Number(item.run_cost ?? 0),
+  }))
+  const warehouseEfficiencyBars = data.warehouseCostEfficiency.map((item) => ({
+    warehouse: item.warehouse_name,
+    total_credits: Number(item.total_credits ?? 0),
+    query_count: Number(item.query_count ?? 0),
+    credits_per_query: Number(item.credits_per_query ?? 0),
+    avg_runtime_min: Math.round((Number(item.avg_runtime_ms ?? 0) / 60000) * 10) / 10,
+  }))
 
   const warehouseEffCols: ColumnDef[] = [
     { key: 'warehouse_name', header: 'Query / Job', width: 170 },
     {
       key: 'total_credits',
-      header: 'Cost',
+      header: 'Credits',
       width: 90,
-      render: (row) => <Typography sx={{ fontSize: '12px', fontWeight: 600 }}>{fmtK(row.total_credits * 1000)}</Typography>,
+      render: (row) => <Typography sx={{ fontSize: '12px', fontWeight: 600 }}>{Number(row.total_credits ?? 0).toLocaleString()}</Typography>,
+    },
+    {
+      key: 'query_count',
+      header: 'Query Count',
+      width: 110,
+      render: (row) => <Typography sx={{ fontSize: '12px' }}>{Number(row.query_count ?? 0).toLocaleString()}</Typography>,
     },
     {
       key: 'avg_runtime_ms',
@@ -292,28 +226,17 @@ const CostEfficiencyScreen: React.FC<{ data: CostData; costDayLabel: string }> =
       header: 'Efficiency',
       width: 90,
       render: (row) => (
-        <Typography sx={{ fontSize: '12px', fontWeight: 700, color: efficiencyColor(row.efficiency) }}>
-          {efficiencyIcon(row.efficiency)}
-        </Typography>
+        <Tooltip
+          title={`${efficiencyLabel(row.efficiency)}: ${efficiencyDescription(row.efficiency)}`}
+          arrow
+          placement="top"
+        >
+          <Typography sx={{ fontSize: '12px', fontWeight: 700, color: efficiencyColor(row.efficiency), cursor: 'help' }}>
+            {efficiencyIcon(row.efficiency)}
+          </Typography>
+        </Tooltip>
       ),
     },
-  ]
-
-  const costCols: ColumnDef[] = [
-    { key: 'pipeline',    header: 'Pipeline',  width: 180 },
-    { key: 'run_cost',    header: 'Run Cost',  width: 90,
-      render: (row) => <Typography sx={{ fontSize: '12px', fontWeight: 600 }}>{fmtK(row.run_cost)}</Typography> },
-    { key: 'run_spend',   header: 'Run Spend', width: 90,
-      render: (row) => <Typography sx={{ fontSize: '12px' }}>{fmtK(row.run_spend)}</Typography> },
-    { key: 'success_pct', header: 'Success %', width: 140,
-      render: (row) => (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Box sx={{ flex: 1, height: 8, backgroundColor: '#e0e0e0', borderRadius: 4, overflow: 'hidden' }}>
-            <Box sx={{ width: `${row.success_pct}%`, height: '100%', backgroundColor: row.success_pct > 70 ? '#1976d2' : row.success_pct > 40 ? '#fb8c00' : '#e53935', borderRadius: 4 }} />
-          </Box>
-          <Typography sx={{ fontSize: '11px', minWidth: 28 }}>{row.success_pct}%</Typography>
-        </Box>
-      ) },
   ]
 
   return (
@@ -377,10 +300,32 @@ const CostEfficiencyScreen: React.FC<{ data: CostData; costDayLabel: string }> =
         <Paper elevation={0} sx={{ p: 2, minWidth: 0, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: `3px solid ${TRUIST.sky}`, borderRadius: 2, height: rowPanelHeight, display: 'flex', flexDirection: 'column' }}>
           <Typography sx={{ fontSize: '12px', fontWeight: 600, mb: 1, color: '#1a2535' }}>Warehouse Cost Efficiency</Typography>
           <Box sx={{ height: 180, minWidth: 0, overflow: 'hidden', flexShrink: 0 }}>
-            <ScatterPlot items={data.scatter} />
+            <ComposedBarLineChart
+              data={warehouseEfficiencyBars}
+              xKey="warehouse"
+              bars={[
+                { key: 'total_credits', label: 'Credits', color: '#1976d2' },
+                { key: 'query_count', label: 'Query Count', color: '#43a047' },
+              ]}
+              lines={[{ key: 'credits_per_query', label: 'Credits / Query', color: '#e65100', yAxisId: 'right' }]}
+              height={180}
+              margin={{ top: 5, right: 35, left: 0, bottom: 20 }}
+            />
           </Box>
           <Box sx={{ mt: 1, width: '100%', minWidth: 0, minHeight: 0, flex: 1, overflow: 'visible', pb: 0.5 }}>
             <DataTable columns={warehouseEffCols} rows={data.warehouseCostEfficiency} maxHeight={190} tableMinWidth={560} compact />
+          </Box>
+          <Box sx={{ mt: 0.5, borderTop: '1px solid #e8ecf1', pt: 0.75, display: 'flex', flexWrap: 'wrap', gap: 1.25 }}>
+            {([
+              { key: 'good', icon: 'v', label: 'Efficient', color: '#2e7d32' },
+              { key: 'warn', icon: '!', label: 'Needs Review', color: '#f57c00' },
+              { key: 'bad', icon: 'x', label: 'Inefficient', color: '#c62828' },
+            ] as const).map(item => (
+              <Box key={item.key} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <Typography sx={{ fontSize: '11px', fontWeight: 700, color: item.color }}>{item.icon}</Typography>
+                <Typography sx={{ fontSize: '10px', color: '#607d8b' }}>{item.label}</Typography>
+              </Box>
+            ))}
           </Box>
         </Paper>
 
@@ -389,7 +334,21 @@ const CostEfficiencyScreen: React.FC<{ data: CostData; costDayLabel: string }> =
             <Typography sx={{ fontSize: '13px', fontWeight: 700, color: '#1a2535' }}>Top Costly Queries / Jobs</Typography>
           </Box>
           <Box sx={{ width: '100%', minWidth: 0, minHeight: 0, flex: 1, overflow: 'hidden', p: 2, pt: 1.5 }}>
-            <DataTable columns={costCols} rows={data.topCostlyJobs} maxHeight={320} compact />
+            {topCostlyTrend.length > 0 ? (
+              <TrendLineChart
+                data={topCostlyTrend}
+                xKey="name"
+                lines={[
+                  { key: 'credits_used', label: 'Credits Used', color: '#1976d2' },
+                  { key: 'avg_runtime_ms', label: 'Avg Runtime (ms)', color: '#f57c00' },
+                ]}
+                height={320}
+              />
+            ) : (
+              <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Typography sx={{ color: '#9aa5b1', fontSize: '12px' }}>No top costly query/job trend data</Typography>
+              </Box>
+            )}
           </Box>
         </Paper>
       </Box>
@@ -457,13 +416,38 @@ const PlatformIntelligenceScreen: React.FC<{ data: PlatformData; queriesDayLabel
     { key: 'pipeline',   header: 'Pipeline',      width: 180 },
     { key: 'last_run',   header: 'Last Run',       width: 80 },
     { key: 'error_type', header: 'Error Type',     width: 110,
-      render: (row) => (
-        <Box sx={{ width: 64, height: 14, backgroundColor: ERROR_COLOR[row.error_type] ?? '#bbb', borderRadius: 2 }} />
-      ) },
+      render: (row) => {
+        const errorType = row.error_type || 'UNKNOWN'
+        const errorDescriptions: Record<string, string> = {
+          'TIMEOUT': 'Query exceeded time limit',
+          'SPILL': 'Query memory spilled to disk',
+          'LOCK_WAIT': 'Query waiting for lock',
+          'ROW_ACCESS': 'Row-level access issue',
+          'ERROR': 'Query execution error',
+          'SLOW': 'Query slower than expected',
+        }
+        return (
+          <Tooltip title={errorDescriptions[errorType] || errorType} arrow placement="top">
+            <Box sx={{ width: 64, height: 14, backgroundColor: ERROR_COLOR[errorType] ?? '#bbb', borderRadius: 2, cursor: 'help' }} />
+          </Tooltip>
+        )
+      } },
     { key: 'sla_ok',     header: 'SLA Status',    width: 90,
-      render: (row) => row.sla_ok
-        ? <CheckCircleIcon sx={{ fontSize: 16, color: '#2e7d32' }} />
-        : <CancelIcon sx={{ fontSize: 16, color: '#c62828' }} /> },
+      render: (row) => {
+        const slaStatus = row.sla_ok 
+          ? 'SLA Compliance: Within service level agreement'
+          : 'SLA Violation: Exceeded service level agreement'
+        return (
+          <Tooltip title={slaStatus} arrow placement="top">
+            <Box sx={{ cursor: 'help' }}>
+              {row.sla_ok
+                ? <CheckCircleIcon sx={{ fontSize: 16, color: '#2e7d32' }} />
+                : <CancelIcon sx={{ fontSize: 16, color: '#c62828' }} />
+              }
+            </Box>
+          </Tooltip>
+        )
+      } },
     { key: 'fix',        header: 'Suggested Fix', width: 160 },
   ]
 
@@ -541,14 +525,45 @@ const PlatformIntelligenceScreen: React.FC<{ data: PlatformData; queriesDayLabel
           <Box sx={{ px: 2, py: 1.5, backgroundColor: '#fafafa', borderBottom: '1px solid #e8ecf1' }}>
             <Typography sx={{ fontSize: '13px', fontWeight: 700, color: '#1a2535' }}>Top Slow Queries</Typography>
           </Box>
-          <Box sx={{ width: '100%', minWidth: 0, minHeight: 0, flex: 1, overflow: 'hidden', p: 2, pt: 1.5 }}>
+          <Box sx={{ width: '100%', minWidth: 0, minHeight: 0, flex: 1, overflow: 'hidden', p: 2, pt: 1.5, display: 'flex', flexDirection: 'column' }}>
             {analyticsLoading && data.topSlowQueries.length === 0 ? (
               <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
                 <CircularProgress size={18} sx={{ color: TRUIST.charcoal }} />
                 <Typography sx={{ fontSize: '12px', color: '#607d8b' }}>Loading slow query patterns...</Typography>
               </Box>
             ) : (
-              <DataTable columns={queryCols} rows={data.topSlowQueries} maxHeight={320} compact />
+              <>
+                <Box sx={{ flex: 1, minHeight: 0, overflow: 'hidden', mb: 1 }}>
+                  <DataTable columns={queryCols} rows={data.topSlowQueries} maxHeight={280} compact />
+                </Box>
+                <Box sx={{ borderTop: '1px solid #e8ecf1', pt: 1, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5, fontSize: '11px', color: '#666' }}>
+                  <Box>
+                    <Typography sx={{ fontSize: '10px', fontWeight: 700, color: '#1a2535', mb: 0.5, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Error Type Legend</Typography>
+                    {[
+                      { type: 'TIMEOUT', desc: 'Query timed out', color: '#e53935' },
+                      { type: 'SPILL', desc: 'Memory spilled to disk', color: '#fb8c00' },
+                      { type: 'LOCK_WAIT', desc: 'Waiting for lock', color: '#fdd835' },
+                    ].map(item => (
+                      <Box key={item.type} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
+                        <Box sx={{ width: 12, height: 8, backgroundColor: item.color, borderRadius: 1 }} />
+                        <Typography sx={{ fontSize: '10px', color: '#666' }}>{item.type}: {item.desc}</Typography>
+                      </Box>
+                    ))}
+                  </Box>
+                  <Box>
+                    <Typography sx={{ fontSize: '10px', fontWeight: 700, color: '#1a2535', mb: 0.5, textTransform: 'uppercase', letterSpacing: '0.5px' }}>SLA Status Indicator</Typography>
+                    {[
+                      { icon: '✓', desc: 'SLA Compliant - Within agreement', color: '#2e7d32' },
+                      { icon: '✕', desc: 'SLA Violated - Exceeded limit', color: '#c62828' },
+                    ].map((item, i) => (
+                      <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
+                        <Typography sx={{ fontSize: '12px', fontWeight: 700, color: item.color }}>{item.icon}</Typography>
+                        <Typography sx={{ fontSize: '10px', color: '#666' }}>{item.desc}</Typography>
+                      </Box>
+                    ))}
+                  </Box>
+                </Box>
+              </>
             )}
           </Box>
         </Paper>
