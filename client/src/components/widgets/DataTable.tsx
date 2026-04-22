@@ -17,7 +17,7 @@
  *     maxHeight={360}
  *   />
  */
-import React, { useState, useRef, useCallback } from 'react'
+import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react'
 import {
   Box,
   Table,
@@ -101,8 +101,37 @@ export function DataTable<T = any>({
   tableMinWidth,
   pageSize,
 }: DataTableProps<T>) {
+  const safeColumns = useMemo(
+    () => columns.filter((col): col is ColumnDef<T> => Boolean(col && typeof col.key === 'string' && col.key.length > 0)),
+    [columns]
+  )
   const cellPy = compact ? 0.6 : 1
   const resolvedHeaderBg = headerBg ?? '#f0f4f8'
+  const sampledRows = useMemo(() => rows.slice(0, 200), [rows])
+
+  const inferColumnWidth = useCallback((col: ColumnDef<T>) => {
+    const headerChars = String(col.header ?? '').length
+    const contentChars = sampledRows.reduce((maxChars, row) => {
+      const raw = (row as any)?.[col.key]
+      const len = raw == null ? 0 : String(raw).length
+      return Math.max(maxChars, len)
+    }, 0)
+
+    const maxChars = Math.max(headerChars, contentChars)
+    const autoWidth = Math.min(420, Math.max(90, Math.ceil(maxChars * 7 + 42)))
+
+    if (typeof col.width === 'number') {
+      return Math.max(col.width, autoWidth)
+    }
+    if (typeof col.width === 'string') {
+      const numeric = parseInt(col.width, 10)
+      if (!isNaN(numeric)) return Math.max(numeric, autoWidth)
+    }
+    if (col.flex) {
+      return Math.max(160, autoWidth)
+    }
+    return autoWidth
+  }, [sampledRows])
 
   // ── Sort ─────────────────────────────────────────────────
   const [sortKey, setSortKey] = useState<string | null>(null)
@@ -117,11 +146,24 @@ export function DataTable<T = any>({
   // ── Column widths (resize) ────────────────────────────────
   const [colWidths, setColWidths] = useState<Record<string, number>>(() => {
     const init: Record<string, number> = {}
-    columns.forEach(col => {
+    safeColumns.forEach(col => {
       init[col.key] = typeof col.width === 'number' ? col.width : col.flex ? 160 : 110
     })
     return init
   })
+
+  useEffect(() => {
+    setColWidths(prev => {
+      const next: Record<string, number> = {}
+      safeColumns.forEach(col => {
+        const inferred = inferColumnWidth(col)
+        // Keep manual resize if user expanded wider than inferred; still auto-grow if inferred is larger.
+        next[col.key] = Math.max(prev[col.key] ?? 0, inferred)
+      })
+      return next
+    })
+  }, [safeColumns, sampledRows, inferColumnWidth])
+
   const resizingRef = useRef<{ key: string; startX: number; startWidth: number } | null>(null)
 
   const handleResizeMouseDown = useCallback((e: React.MouseEvent, key: string) => {
@@ -156,7 +198,7 @@ export function DataTable<T = any>({
   const needle = filterText.trim().toLowerCase()
   const filtered = needle
     ? rows.filter(row =>
-        columns.some(col => {
+        safeColumns.some(col => {
           const val = (row as any)[col.key]
           return val != null && String(val).toLowerCase().includes(needle)
         })
@@ -191,11 +233,11 @@ export function DataTable<T = any>({
   // ── CSV export ────────────────────────────────────────────
   const exportCsv = () => {
     if (displayRows.length === 0) return
-    const headers = columns.map(c => c.header)
+    const headers = safeColumns.map(c => c.header)
     const csvRows = [
       headers.join(','),
       ...displayRows.map(row =>
-        columns.map(col => {
+        safeColumns.map(col => {
           const val = (row as any)[col.key]
           const str = val == null ? '' : String(val).replace(/"/g, '""')
           return `"${str}"`
@@ -277,7 +319,7 @@ export function DataTable<T = any>({
         >
           <TableHead>
             <TableRow>
-              {columns.map((col, colIdx) => {
+              {safeColumns.map((col, colIdx) => {
                 const w = colWidths[col.key]
                 const isSorted = sortKey === col.key
                 return (
@@ -301,7 +343,9 @@ export function DataTable<T = any>({
                       maxWidth: w,
                       cursor: col.disableSort ? 'default' : 'pointer',
                       userSelect: 'none',
-                      position: 'relative',
+                      position: 'sticky',
+                      top: 0,
+                      zIndex: 3,
                       overflow: 'hidden',
                       ...(colIdx === 0 ? {
                         borderLeft: `3px solid ${accentColor}`,
@@ -351,7 +395,7 @@ export function DataTable<T = any>({
           <TableBody>
             {displayRows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={columns.length} sx={{ border: 0 }}>
+                <TableCell colSpan={safeColumns.length || 1} sx={{ border: 0 }}>
                   <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 4, gap: 1 }}>
                     <TableRowsIcon sx={{ fontSize: 28, color: '#d0d5dd' }} />
                     <Typography sx={{ fontSize: '12px', color: '#aab', fontWeight: 500 }}>
@@ -376,7 +420,7 @@ export function DataTable<T = any>({
                     '&:last-child td': { border: 0 },
                   }}
                 >
-                  {columns.map((col, colIdx) => (
+                  {safeColumns.map((col, colIdx) => (
                     <TableCell
                       key={col.key}
                       align={col.align ?? 'left'}

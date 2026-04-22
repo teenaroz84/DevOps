@@ -765,7 +765,7 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
   }, [useMock, selectedAsOfDate])
 
   useEffect(() => {
-    if (useMock || subTab !== 'cost') return
+    if (useMock) return
 
     let alive = true
     setCostLoading(true)
@@ -807,7 +807,7 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
     return () => {
       alive = false
     }
-  }, [useMock, subTab, selectedAsOfDate])
+  }, [useMock, selectedAsOfDate])
 
   const SUB_TABS: { key: SubTab; label: string; icon: React.ReactElement; accent: string }[] = [
     { key: 'platform', label: 'Platform Intelligence', icon: <QueryStatsIcon />,  accent: TRUIST.purple },
