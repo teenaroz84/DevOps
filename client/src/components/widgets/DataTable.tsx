@@ -74,6 +74,8 @@ interface DataTableProps<T = any> {
   accentColor?: string
   /** Optional minimum width for the inner table to enable horizontal scrolling */
   tableMinWidth?: number | string
+  /** When false, preserve explicit/default column widths instead of expanding based on content */
+  autoFitColumns?: boolean
   /**
    * When set, enables pagination once rows exceed this threshold.
    * E.g. pageSize={500} shows pages of 500 rows when total > 500.
@@ -99,6 +101,7 @@ export function DataTable<T = any>({
   rowTooltip,
   accentColor = APP_COLORS.primary,
   tableMinWidth,
+  autoFitColumns = true,
   pageSize,
 }: DataTableProps<T>) {
   const safeColumns = useMemo(
@@ -110,6 +113,16 @@ export function DataTable<T = any>({
   const sampledRows = useMemo(() => rows.slice(0, 200), [rows])
 
   const inferColumnWidth = useCallback((col: ColumnDef<T>) => {
+    if (!autoFitColumns) {
+      if (typeof col.width === 'number') return col.width
+      if (typeof col.width === 'string') {
+        const numeric = parseInt(col.width, 10)
+        if (!isNaN(numeric)) return numeric
+      }
+      if (col.flex) return 160
+      return 110
+    }
+
     const headerChars = String(col.header ?? '').length
     const contentChars = sampledRows.reduce((maxChars, row) => {
       const raw = (row as any)?.[col.key]
@@ -131,7 +144,7 @@ export function DataTable<T = any>({
       return Math.max(160, autoWidth)
     }
     return autoWidth
-  }, [sampledRows])
+  }, [autoFitColumns, sampledRows])
 
   // ── Sort ─────────────────────────────────────────────────
   const [sortKey, setSortKey] = useState<string | null>(null)
