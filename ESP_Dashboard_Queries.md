@@ -422,6 +422,305 @@ ORDER BY count DESC
 
 ---
 
+### 15. SLA Violations List
+**Endpoint:** `GET /api/esp/sla-violations?platformId=<id>&applName=<name>&limit=N`  
+**Widget:** SLA Violations data table  
+**Default limit:** 250, max 1000. `applName` is optional.
+
+```sql
+SELECT
+  s.jslmis_pltf_nm,
+  s.jslmis_batch_dt,
+  s.jslmis_appl_lib,
+  s.jslmis_job_nm,
+  s.jslmis_run_criteria,
+  s.jslmis_sla_time,
+  s.jslmis_sla_typ,
+  s.jslmis_job_start_time,
+  s.jslmis_job_end_time,
+  s.jslmis_sla_status,
+  s.jslmis_time_diff,
+  s.jslmis_application_desc,
+  s.jslmis_ccfail,
+  s.jslmis_bus_unit,
+  s.jslmis_sub_bus_unit,
+  s.jslmis_bus_summary,
+  s.jslmis_last_updt_dttm
+FROM edoops.job_sla_missed s
+WHERE s.jslmis_pltf_nm IN (
+  SELECT DISTINCT pltf_name FROM edoops.esp_job_config WHERE pltf_name = $1
+)
+[AND s.jslmis_appl_lib = $2]   -- only when applName is supplied
+ORDER BY s.jslmis_batch_dt DESC NULLS LAST,
+         s.jslmis_job_start_time DESC NULLS LAST,
+         s.jslmis_job_nm ASC
+LIMIT 250
+```
+
+**Response:** `[{ platform, batch_dt, appl_lib, job_name, run_criteria, sla_time, sla_type, job_start_time, job_end_time, sla_status, time_diff, application_desc, ccfail, bus_unit, sub_bus_unit, bus_summary, last_updated }]`
+
+---
+
+### 16. SLA Missed Dashboard (KPIs + All Widgets)
+**Endpoint:** `GET /api/esp/sla-missed-dashboard?platformId=<id>&applName=<name>`  
+**Table:** `edoops.job_sla_missed`  
+**Filter:** `jslmis_pltf_nm` matched via `esp_job_config`. Optional `jslmis_appl_lib`.  
+All sub-queries run in parallel via `Promise.all`.
+
+#### KPI Cards
+```sql
+WITH base AS MATERIALIZED (
+  SELECT * FROM edoops.job_sla_missed s WHERE <whereClause>
+)
+SELECT
+  COUNT(*) FILTER (WHERE jslmis_batch_dt = CURRENT_DATE)::int
+    AS total_sla_missed_jobs_today,
+  COUNT(*) FILTER (WHERE jslmis_job_end_time IS NULL)::int
+    AS open_missed_jobs_right_now,
+  COUNT(DISTINCT jslmis_application_desc) FILTER (WHERE jslmis_batch_dt = CURRENT_DATE)::int
+    AS distinct_applications_impacted,
+  COUNT(DISTINCT jslmis_bus_unit) FILTER (WHERE jslmis_batch_dt = CURRENT_DATE)::int
+    AS distinct_business_units_impacted,
+  ROUND(AVG(CASE WHEN jslmis_job_start_time IS NOT NULL
+    THEN EXTRACT(EPOCH FROM (COALESCE(jslmis_job_end_time, CURRENT_TIMESTAMP) - jslmis_job_start_time)) / 60
+  END)::numeric, 2) AS avg_delay_minutes,
+  ROUND(MAX(CASE WHEN jslmis_job_start_time IS NOT NULL
+    THEN EXTRACT(EPOCH FROM (COALESCE(jslmis_job_end_time, CURRENT_TIMESTAMP) - jslmis_job_start_time)) / 60
+  END)::numeric, 2) AS longest_delay_minutes
+FROM base
+```
+
+**KPIs returned:** `total_sla_missed_jobs_today`, `open_missed_jobs_right_now`, `distinct_applications_impacted`, `distinct_business_units_impacted`, `avg_delay_minutes`, `longest_delay_minutes`
+
+#### Daily SLA Misses (14-day trend)
+```sql
+SELECT s.jslmis_batch_dt AS day, COUNT(*)::int AS sla_misses
+FROM edoops.job_sla_missed s
+WHERE <whereClause> AND s.jslmis_batch_dt >= CURRENT_DATE - INTERVAL '14 days'
+GROUP BY s.jslmis_batch_dt
+ORDER BY s.jslmis_batch_dt
+```
+
+#### Hourly SLA Misses (7-day window)
+```sql
+SELECT EXTRACT(HOUR FROM s.jslmis_job_start_time)::int AS job_start_hour,
+       COUNT(*)::int AS sla_misses
+FROM edoops.job_sla_missed s
+WHERE <whereClause>
+  AND s.jslmis_job_start_time IS NOT NULL
+  AND s.jslmis_batch_dt >= CURRENT_DATE - INTERVAL '7 days'
+GROUP BY EXTRACT(HOUR FROM s.jslmis_job_start_time)
+ORDER BY job_start_hour
+```
+
+#### Platform Trend (7-day)
+```sql
+SELECT s.jslmis_batch_dt AS day, s.jslmis_pltf_nm AS platform, COUNT(*)::int AS sla_misses
+FROM edoops.job_sla_missed s
+WHERE <whereClause> AND s.jslmis_batch_dt >= CURRENT_DATE - INTERVAL '7 days'
+GROUP BY s.jslmis_batch_dt, s.jslmis_pltf_nm
+ORDER BY s.jslmis_batch_dt, s.jslmis_pltf_nm
+```
+
+#### SLA Type Trend (7-day)
+```sql
+SELECT s.jslmis_batch_dt AS day,
+       COALESCE(s.jslmis_sla_typ, 'Unknown') AS sla_type,
+       COUNT(*)::int AS sla_misses
+FROM edoops.job_sla_missed s
+WHERE <whereClause> AND s.jslmis_batch_dt >= CURRENT_DATE - INTERVAL '7 days'
+GROUP BY s.jslmis_batch_dt, COALESCE(s.jslmis_sla_typ, 'Unknown')
+ORDER BY s.jslmis_batch_dt, sla_type
+```
+
+#### Top 10 Applications (7-day)
+```sql
+SELECT COALESCE(s.jslmis_application_desc, 'Unknown') AS name,
+       COUNT(*)::int AS sla_misses
+FROM edoops.job_sla_missed s
+WHERE <whereClause> AND s.jslmis_batch_dt >= CURRENT_DATE - INTERVAL '7 days'
+GROUP BY COALESCE(s.jslmis_application_desc, 'Unknown')
+ORDER BY sla_misses DESC, name
+LIMIT 10
+```
+
+#### Top 10 Business Units (7-day)
+```sql
+SELECT COALESCE(s.jslmis_bus_unit, 'Unknown') AS name,
+       COUNT(*)::int AS sla_misses
+FROM edoops.job_sla_missed s
+WHERE <whereClause> AND s.jslmis_batch_dt >= CURRENT_DATE - INTERVAL '7 days'
+GROUP BY COALESCE(s.jslmis_bus_unit, 'Unknown')
+ORDER BY sla_misses DESC, name
+LIMIT 10
+```
+
+#### Misses by Platform (7-day)
+```sql
+SELECT COALESCE(s.jslmis_pltf_nm, 'Unknown') AS name, COUNT(*)::int AS sla_misses
+FROM edoops.job_sla_missed s
+WHERE <whereClause> AND s.jslmis_batch_dt >= CURRENT_DATE - INTERVAL '7 days'
+GROUP BY COALESCE(s.jslmis_pltf_nm, 'Unknown')
+ORDER BY sla_misses DESC, name
+```
+
+#### Misses by SLA Type (7-day)
+```sql
+SELECT COALESCE(s.jslmis_sla_typ, 'Unknown') AS name, COUNT(*)::int AS sla_misses
+FROM edoops.job_sla_missed s
+WHERE <whereClause> AND s.jslmis_batch_dt >= CURRENT_DATE - INTERVAL '7 days'
+GROUP BY COALESCE(s.jslmis_sla_typ, 'Unknown')
+ORDER BY sla_misses DESC, name
+```
+
+#### Misses by Run Criteria (Top 10, 7-day)
+```sql
+SELECT COALESCE(s.jslmis_run_criteria, 'Unknown') AS name, COUNT(*)::int AS sla_misses
+FROM edoops.job_sla_missed s
+WHERE <whereClause> AND s.jslmis_batch_dt >= CURRENT_DATE - INTERVAL '7 days'
+GROUP BY COALESCE(s.jslmis_run_criteria, 'Unknown')
+ORDER BY sla_misses DESC, name
+LIMIT 10
+```
+
+#### Top Repeated Jobs (30-day)
+```sql
+SELECT s.jslmis_job_nm, COUNT(*)::int AS sla_miss_count
+FROM edoops.job_sla_missed s
+WHERE <whereClause> AND s.jslmis_batch_dt >= CURRENT_DATE - INTERVAL '30 days'
+GROUP BY s.jslmis_job_nm
+ORDER BY sla_miss_count DESC, s.jslmis_job_nm
+LIMIT 10
+```
+
+#### Open Queue (currently running, no end time)
+```sql
+SELECT <all detail fields>,
+       ROUND(EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - s.jslmis_job_start_time)) / 60, 2)
+         AS running_minutes
+FROM edoops.job_sla_missed s
+WHERE <whereClause> AND s.jslmis_job_end_time IS NULL
+ORDER BY s.jslmis_job_start_time ASC NULLS LAST
+LIMIT 25
+```
+
+#### Longest Running (Top 10 by duration)
+```sql
+SELECT <all detail fields>,
+       ROUND(EXTRACT(EPOCH FROM (COALESCE(s.jslmis_job_end_time, CURRENT_TIMESTAMP) - s.jslmis_job_start_time)) / 60, 2)
+         AS duration_minutes
+FROM edoops.job_sla_missed s
+WHERE <whereClause> AND s.jslmis_job_start_time IS NOT NULL
+ORDER BY duration_minutes DESC NULLS LAST
+LIMIT 10
+```
+
+#### Recently Updated (Top 10)
+```sql
+SELECT <all detail fields>
+FROM edoops.job_sla_missed s
+WHERE <whereClause>
+ORDER BY s.jslmis_last_updt_dttm DESC NULLS LAST
+LIMIT 10
+```
+
+#### No End Time (Top 50)
+```sql
+SELECT <all detail fields>
+FROM edoops.job_sla_missed s
+WHERE <whereClause> AND s.jslmis_job_end_time IS NULL
+ORDER BY s.jslmis_job_start_time ASC NULLS LAST
+LIMIT 50
+```
+
+#### Percent by Platform (7-day)
+```sql
+SELECT COALESCE(s.jslmis_pltf_nm, 'Unknown') AS name,
+       COUNT(*)::int AS sla_misses,
+       ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) AS pct_of_total
+FROM edoops.job_sla_missed s
+WHERE <whereClause> AND s.jslmis_batch_dt >= CURRENT_DATE - INTERVAL '7 days'
+GROUP BY COALESCE(s.jslmis_pltf_nm, 'Unknown')
+ORDER BY sla_misses DESC, name
+```
+
+#### Percent by Business Unit (7-day)
+```sql
+SELECT COALESCE(s.jslmis_bus_unit, 'Unknown') AS name,
+       COUNT(*)::int AS sla_misses,
+       ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) AS pct_of_total
+FROM edoops.job_sla_missed s
+WHERE <whereClause> AND s.jslmis_batch_dt >= CURRENT_DATE - INTERVAL '7 days'
+GROUP BY COALESCE(s.jslmis_bus_unit, 'Unknown')
+ORDER BY sla_misses DESC, name
+```
+
+#### Daily Open vs Closed (14-day)
+```sql
+SELECT s.jslmis_batch_dt AS day,
+       SUM(CASE WHEN s.jslmis_job_end_time IS NULL THEN 1 ELSE 0 END)::int AS open_jobs,
+       SUM(CASE WHEN s.jslmis_job_end_time IS NOT NULL THEN 1 ELSE 0 END)::int AS closed_jobs
+FROM edoops.job_sla_missed s
+WHERE <whereClause> AND s.jslmis_batch_dt >= CURRENT_DATE - INTERVAL '14 days'
+GROUP BY s.jslmis_batch_dt
+ORDER BY s.jslmis_batch_dt
+```
+
+#### Avg Duration by Application (Top 10, 7-day)
+```sql
+SELECT COALESCE(s.jslmis_application_desc, 'Unknown') AS name,
+       ROUND(AVG(EXTRACT(EPOCH FROM (COALESCE(s.jslmis_job_end_time, CURRENT_TIMESTAMP) - s.jslmis_job_start_time)) / 60)::numeric, 2)
+         AS avg_duration_minutes
+FROM edoops.job_sla_missed s
+WHERE <whereClause>
+  AND s.jslmis_job_start_time IS NOT NULL
+  AND s.jslmis_batch_dt >= CURRENT_DATE - INTERVAL '7 days'
+GROUP BY COALESCE(s.jslmis_application_desc, 'Unknown')
+ORDER BY avg_duration_minutes DESC NULLS LAST, name
+LIMIT 10
+```
+
+**Full response shape:**
+```json
+{
+  "metrics": { "total_sla_missed_jobs_today": 0, "open_missed_jobs_right_now": 0, "distinct_applications_impacted": 0, "distinct_business_units_impacted": 0, "avg_delay_minutes": null, "longest_delay_minutes": null },
+  "daily_misses": [], "hourly_misses": [], "platform_trend": [], "sla_type_trend": [],
+  "top_applications": [], "top_business_units": [],
+  "misses_by_platform": [], "misses_by_sla_type": [], "misses_by_run_criteria": [],
+  "top_repeated_jobs": [],
+  "open_queue": [], "longest_running": [], "recently_updated": [], "no_end_time": [],
+  "percent_by_platform": [], "percent_by_business_unit": [],
+  "daily_open_closed": [], "avg_duration_by_application": []
+}
+```
+
+---
+
+### 17. SLA Missed Job Detail
+**Endpoint:** `GET /api/esp/sla-missed-job-detail?platformId=<id>&jobName=<name>&applName=<name>&limit=N`  
+**Widget:** Drill-down history for a specific job  
+**Default limit:** 100, max 500. `platformId` and `applName` are optional.
+
+```sql
+SELECT
+  s.jslmis_pltf_nm, s.jslmis_batch_dt, s.jslmis_appl_lib,
+  s.jslmis_application_desc, s.jslmis_job_nm, s.jslmis_run_criteria,
+  s.jslmis_sla_time, s.jslmis_sla_typ, s.jslmis_sla_status,
+  s.jslmis_job_start_time, s.jslmis_job_end_time, s.jslmis_time_diff,
+  s.jslmis_bus_unit, s.jslmis_sub_bus_unit, s.jslmis_bus_summary,
+  s.jslmis_last_updt_dttm
+FROM edoops.job_sla_missed s
+WHERE s.jslmis_job_nm = $1
+  [AND s.jslmis_pltf_nm IN (SELECT DISTINCT pltf_name FROM edoops.esp_job_config WHERE pltf_name = $1)]
+  [AND s.jslmis_appl_lib = $N]
+ORDER BY s.jslmis_last_updt_dttm DESC NULLS LAST
+LIMIT 100
+```
+
+**Response:** `[{ platform, batch_dt, appl_lib, application_desc, job_name, run_criteria, sla_time, sla_type, sla_status, job_start_time, job_end_time, time_diff, bus_unit, sub_bus_unit, bus_summary, last_updated }]`
+
+---
+
 ## Implementation Notes
 
 - **Connection**: `getPgPool()` from `server/src/db/postgres.ts`
