@@ -319,7 +319,7 @@ router.get('/incident-trend', async (req: Request, res: Response) => {
     const params = platform ? [platform] : [];
     const result = await pool.query(`
       SELECT
-        day,
+        TO_CHAR(day, 'YYYY-MM-DD') AS day,
         SUM(CASE WHEN is_open THEN 1 ELSE 0 END)::int   AS open_count,
         SUM(CASE WHEN NOT is_open THEN 1 ELSE 0 END)::int AS closed_count,
         COUNT(*)::int                                     AS total_count
@@ -337,7 +337,7 @@ router.get('/incident-trend', async (req: Request, res: Response) => {
       ORDER BY day
     `, params);
     res.json(result.rows.map((r: any) => ({
-      day:          String(r.day).split('T')[0],
+      day:          r.day ?? null,
       open:         r.open_count,
       closed:       r.closed_count,
       total:        r.total_count,
