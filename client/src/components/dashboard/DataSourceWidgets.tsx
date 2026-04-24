@@ -1076,15 +1076,29 @@ export const IncidentTrendWidget: React.FC<{ platform?: string | null; days?: nu
   const { useMock } = useMockData()
 
   const formatDayLabel = (value: string | number) => {
-    if (typeof value !== 'string' || !value) return String(value ?? '')
-    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/)
-    if (!match) return value
-    const [, year, month, day] = match
-    const monthIndex = Number(month) - 1
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-    const monthLabel = monthNames[monthIndex]
-    if (!monthLabel) return value
-    return `${monthLabel} ${Number(day)} ${year}`
+    if (typeof value !== 'string' || !value) return String(value ?? '')
+
+    const isoMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})/)
+    if (isoMatch) {
+      const [, year, month, day] = isoMatch
+      const monthLabel = monthNames[Number(month) - 1]
+      if (monthLabel) return `${monthLabel} ${Number(day)} ${year}`
+    }
+
+    const utcStringMatch = value.match(/(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+([A-Z][a-z]{2})\s+(\d{1,2})\s+(\d{4})/)
+    if (utcStringMatch) {
+      const [, monthLabel, day, year] = utcStringMatch
+      return `${monthLabel} ${Number(day)} ${year}`
+    }
+
+    const parsed = new Date(value)
+    if (!Number.isNaN(parsed.getTime())) {
+      const monthLabel = monthNames[parsed.getMonth()]
+      return `${monthLabel} ${parsed.getDate()} ${parsed.getFullYear()}`
+    }
+
+    return value
   }
 
   useEffect(() => {
