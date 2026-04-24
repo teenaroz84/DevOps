@@ -49,28 +49,9 @@ const BAR_COLORS = ['#1976d2', '#f57c00', '#c62828', '#2e7d32', '#6a1b9a', '#008
 const ESP_PLATFORM_RECENT_JOB_LIMIT = 500
 const ESP_WIDGET_PANEL_HEIGHT = 260
 const isSpecialEspJob = (jobname: string) => /JSDELAY|RETRIG/i.test(jobname)
-const LAST_RUN_FILTER_OPTIONS = ['All', 'Today', 'Last 3 Days', 'Last 7 Days', 'Last 30 Days', 'Older Than 30 Days', 'Never Run'] as const
 const normalizeRunStatusLabel = (value?: string | null) => {
   const trimmed = typeof value === 'string' ? value.trim() : ''
   return trimmed || 'UNKNOWN'
-}
-const matchesLastRunFilter = (lastRunDate: string | null | undefined, filter: (typeof LAST_RUN_FILTER_OPTIONS)[number]) => {
-  if (filter === 'All') return true
-  if (!lastRunDate) return filter === 'Never Run'
-
-  const timestamp = new Date(lastRunDate).getTime()
-  if (Number.isNaN(timestamp)) return false
-
-  const now = Date.now()
-  const daysSince = (now - timestamp) / 86_400_000
-
-  if (filter === 'Never Run') return false
-  if (filter === 'Today') return daysSince < 1
-  if (filter === 'Last 3 Days') return daysSince < 3
-  if (filter === 'Last 7 Days') return daysSince < 7
-  if (filter === 'Last 30 Days') return daysSince < 30
-  if (filter === 'Older Than 30 Days') return daysSince >= 30
-  return true
 }
 const normalizeJobTypeLabel = (value?: string | null) => {
   const trimmed = typeof value === 'string' ? value.trim() : ''
@@ -92,7 +73,6 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   const [metadataDetail, setMetadataDetail] = React.useState<AppData['metadata_detail']>([])
   const [selectedJobs, setSelectedJobs] = React.useState<string[]>([])
   const [statusFilter, setStatusFilter] = React.useState<string>('All')
-  const [lastRunFilter, setLastRunFilter] = React.useState<(typeof LAST_RUN_FILTER_OPTIONS)[number]>('All')
 
 
   // ── Drill-down state ─────────────────────────────────────
@@ -122,7 +102,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   const [days, setDays] = React.useState(15)
 
   // Reset job filter + drill-down when application or platform changes
-  React.useEffect(() => { setSelectedJobs([]); setDrillJob(null); setWidgetFilter(null); setStatusFilter('All'); setLastRunFilter('All') }, [selected, selectedPlatform])
+  React.useEffect(() => { setSelectedJobs([]); setDrillJob(null); setWidgetFilter(null); setStatusFilter('All') }, [selected, selectedPlatform])
 
   // Load platform summary once on mount (and when mock changes).
   // Only auto-select the first platform on initial load so applib picks are not overridden.
@@ -451,7 +431,6 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   const filteredJobList     = React.useMemo(() => (data?.job_list ?? [])
     .filter(r => !selectedJobs.length || selectedJobs.includes(r.jobname))
     .filter(r => statusFilter === 'All' || normalizeRunStatusLabel(r.run_status) === statusFilter)
-    .filter(r => matchesLastRunFilter(r.last_run_date, lastRunFilter))
     .filter(r => !widgetFilteredJobnames || widgetFilteredJobnames.has(r.jobname))
     .sort((left, right) => {
       if (!left.last_run_date && !right.last_run_date) return left.jobname.localeCompare(right.jobname)
@@ -459,7 +438,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       if (!right.last_run_date) return -1
       const tsDiff = new Date(right.last_run_date).getTime() - new Date(left.last_run_date).getTime()
       return tsDiff !== 0 ? tsDiff : left.jobname.localeCompare(right.jobname)
-    }),        [data, selectedJobs, statusFilter, lastRunFilter, widgetFilteredJobnames])
+    }),        [data, selectedJobs, statusFilter, widgetFilteredJobnames])
   const filteredMeta        = React.useMemo(() => (data?.metadata ?? [])
     .filter(r => !selectedJobs.length || selectedJobs.includes(r.jobname))
     .filter(r => !widgetFilteredJobnames || widgetFilteredJobnames.has(r.jobname)),        [data, selectedJobs, widgetFilteredJobnames])
@@ -904,58 +883,8 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
             </Box>
           )}
 
-          {dashboardView === 'operations' && (
-            <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'stretch', sm: 'center' }, gap: 0.75, flex: '0 1 220px', minWidth: { xs: '100%', sm: 200 } }}>
-              <Typography sx={{ fontSize: '11px', color: '#666', fontWeight: 500, whiteSpace: 'nowrap' }}>Status:</Typography>
-              <FormControl size="small" sx={{ width: '100%', minWidth: 0 }}>
-                <Select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value as string)}
-                  disabled={loading || !data}
-                  sx={{
-                    fontSize: '12px', fontWeight: 600, width: '100%', minWidth: 0, bgcolor: '#fff',
-                    '& .MuiOutlinedInput-notchedOutline': { borderColor: '#1976d240' },
-                    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#1976d2' },
-                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#1976d2' },
-                  }}
-                >
-                  {statusOptions.map(status => (
-                    <MenuItem key={status} value={status} sx={{ fontSize: '12px' }}>
-                      {status}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Box>
-          )}
-
-          {dashboardView === 'operations' && (
-            <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'stretch', sm: 'center' }, gap: 0.75, flex: '0 1 220px', minWidth: { xs: '100%', sm: 200 } }}>
-              <Typography sx={{ fontSize: '11px', color: '#666', fontWeight: 500, whiteSpace: 'nowrap' }}>Last Run:</Typography>
-              <FormControl size="small" sx={{ width: '100%', minWidth: 0 }}>
-                <Select
-                  value={lastRunFilter}
-                  onChange={(e) => setLastRunFilter(e.target.value as (typeof LAST_RUN_FILTER_OPTIONS)[number])}
-                  disabled={loading || !data}
-                  sx={{
-                    fontSize: '12px', fontWeight: 600, width: '100%', minWidth: 0, bgcolor: '#fff',
-                    '& .MuiOutlinedInput-notchedOutline': { borderColor: '#1976d240' },
-                    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#1976d2' },
-                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#1976d2' },
-                  }}
-                >
-                  {LAST_RUN_FILTER_OPTIONS.map(option => (
-                    <MenuItem key={option} value={option} sx={{ fontSize: '12px' }}>
-                      {option}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Box>
-          )}
-
           {/* Clear Filters */}
-          {((dashboardView === 'operations' && (selectedJobs.length > 0 || statusFilter !== 'All' || lastRunFilter !== 'All')) || selected || (selectedPlatform && platformSummary.length > 0 && selectedPlatform !== platformSummary[0].platform)) && (
+          {((dashboardView === 'operations' && (selectedJobs.length > 0 || statusFilter !== 'All')) || selected || (selectedPlatform && platformSummary.length > 0 && selectedPlatform !== platformSummary[0].platform)) && (
             <Button
               size="small"
               onClick={() => {
@@ -967,7 +896,6 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                 }
                 if (dashboardView === 'operations') setSelectedJobs([])
                 setStatusFilter('All')
-                setLastRunFilter('All')
                 setSelected('')
                 setApplibSearch('')
                 setPlatformApplications([])
@@ -1088,6 +1016,41 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
               >
                 <Box sx={{ px: 1.5, pt: 1, pb: 0, display: 'flex', justifyContent: 'flex-end' }}>
                   <Typography sx={{ fontSize: '10px', color: '#aaa' }}>{filteredJobList.length} jobs</Typography>
+                </Box>
+                <Box sx={{ px: 1.5, pb: 1, display: 'flex', gap: 0.75, alignItems: 'center', flexWrap: 'wrap' }}>
+                  {statusOptions.map(status => {
+                    const isActive = statusFilter === status
+                    const colors = status === 'SUCCESS'
+                      ? { color: '#2e7d32', bg: '#e8f5e9', border: '#a5d6a7' }
+                      : status === 'FAILED'
+                        ? { color: '#c62828', bg: '#ffebee', border: '#ef9a9a' }
+                        : status === 'NEVER RUN'
+                          ? { color: '#ef6c00', bg: '#fff3e0', border: '#ffcc80' }
+                          : status === 'UNKNOWN'
+                            ? { color: '#616161', bg: '#f5f5f5', border: '#e0e0e0' }
+                            : { color: '#1565c0', bg: '#e3f2fd', border: '#90caf9' }
+                    const count = status === 'All'
+                      ? (data?.job_list ?? []).length
+                      : (data?.job_list ?? []).filter(job => normalizeRunStatusLabel(job.run_status) === status).length
+                    return (
+                      <Chip
+                        key={status}
+                        label={`${status} (${count})`}
+                        size="small"
+                        onClick={() => setStatusFilter(status)}
+                        sx={{
+                          height: 22,
+                          fontSize: '10px',
+                          cursor: 'pointer',
+                          fontWeight: isActive ? 700 : 500,
+                          color: isActive ? colors.color : '#777',
+                          bgcolor: isActive ? colors.bg : '#fafafa',
+                          border: `1px solid ${isActive ? colors.border : '#e0e0e0'}`,
+                          '& .MuiChip-label': { px: 1 },
+                        }}
+                      />
+                    )
+                  })}
                 </Box>
                 <Box sx={{ flex: 1, overflowY: 'auto', px: 1.5, pb: 1 }}>
                   <DataTable
