@@ -849,10 +849,21 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
               size="small"
               onClick={() => {
                 const first = platformSummary[0]?.platform ?? null
+                const targetPlatform = first ?? selectedPlatform
+                if (applibSearchRef.current) {
+                  clearTimeout(applibSearchRef.current)
+                  applibSearchRef.current = null
+                }
                 if (dashboardView === 'operations') setSelectedJobs([])
                 setSelected('')
                 setApplibSearch('')
+                setPlatformApplications([])
+                setApplibTotal(0)
+                setApplibHasMore(false)
                 setSelectedPlatform(first)
+                if (!useMock && targetPlatform && targetPlatform === selectedPlatform) {
+                  fetchApplibs(targetPlatform, '')
+                }
               }}
               sx={{ fontSize: '10px', color: '#d32f2f', textTransform: 'none', height: 26, whiteSpace: 'nowrap', px: 1.25, border: '1px solid #ef9a9a', borderRadius: 1, ml: { xs: 0, lg: 'auto' }, '&:hover': { bgcolor: '#fce4ec' } }}
             >
