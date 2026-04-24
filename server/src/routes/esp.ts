@@ -448,7 +448,7 @@ router.get('/platform-run-trend/:platformId', async (req: Request, res: Response
         WHERE s.end_date >= CURRENT_DATE - INTERVAL '${days} days'
       )
       SELECT
-        end_date AS day,
+        TO_CHAR(end_date, 'YYYY-MM-DD') AS day,
         EXTRACT(HOUR FROM et)::int AS hour,
         COUNT(jobname)::int AS job_count,
         SUM(CASE WHEN ccfail = 'YES' THEN 1 ELSE 0 END)::int AS job_fail_count
@@ -457,7 +457,7 @@ router.get('/platform-run-trend/:platformId', async (req: Request, res: Response
       ORDER BY end_date, EXTRACT(HOUR FROM et)
     `, [pltName]);
     res.json(result.rows.map((r: any) => ({
-      day:            r.day ? String(r.day).split('T')[0] : null,
+      day:            r.day ?? null,
       hour:           parseInt(r.hour, 10),
       job_count:      parseInt(r.job_count, 10),
       job_fail_count: parseInt(r.job_fail_count, 10),
