@@ -357,40 +357,18 @@ router.get('/platform-job-list/:platformId', async (req: Request, res: Response)
         params.slice(0, applName ? 2 : 1)
       ),
       pool.query(`
-        WITH filtered_jobs AS (
-          SELECT DISTINCT ON (c.jobname)
-            c.jobname, c.appl_name, c.jobtype AS job_type, c.last_run_date
-          FROM edoops.esp_job_cmnd c
-          JOIN (
-            SELECT DISTINCT appl_name, jobname
-            FROM edoops.esp_job_config
-            WHERE pltf_name = $1
-              AND appl_name IS NOT NULL
-              AND jobname IS NOT NULL
-          ) cfg ON cfg.appl_name = c.appl_name AND cfg.jobname = c.jobname
-          WHERE 1=1${applClause.replace('appl_name', 'c.appl_name')}
-          ORDER BY c.jobname, c.last_run_date DESC NULLS LAST
-        ),
-        latest_status AS (
-          SELECT DISTINCT ON (s.job_longname, s.appl_name)
-            s.job_longname, s.appl_name, s.ccfail
-          FROM edoops.esp_job_stats_recent s
-          JOIN filtered_jobs f ON f.jobname = s.job_longname AND f.appl_name = s.appl_name
-          ORDER BY s.job_longname, s.appl_name,
-                   s.end_date DESC NULLS LAST, s.end_time DESC NULLS LAST,
-                   s.start_date DESC NULLS LAST, s.start_time DESC NULLS LAST
-        )
-        SELECT
-          f.jobname, f.appl_name, f.job_type, f.last_run_date,
-          CASE
-            WHEN UPPER(TRIM(ls.ccfail)) = 'YES' THEN 'FAILED'
-            WHEN UPPER(TRIM(ls.ccfail)) = 'NO'  THEN 'SUCCESS'
-            WHEN f.last_run_date IS NULL THEN 'NEVER RUN'
-            ELSE 'UNKNOWN'
-          END AS run_status
-        FROM filtered_jobs f
-        LEFT JOIN latest_status ls ON ls.job_longname = f.jobname AND ls.appl_name = f.appl_name
-        ORDER BY f.last_run_date DESC NULLS LAST, f.jobname
+        SELECT DISTINCT ON (c.jobname)
+          c.jobname, c.appl_name, c.jobtype AS job_type, c.last_run_date
+        FROM edoops.esp_job_cmnd c
+        JOIN (
+          SELECT DISTINCT appl_name, jobname
+          FROM edoops.esp_job_config
+          WHERE pltf_name = $1
+            AND appl_name IS NOT NULL
+            AND jobname IS NOT NULL
+        ) cfg ON cfg.appl_name = c.appl_name AND cfg.jobname = c.jobname
+        WHERE 1=1${applClause.replace('appl_name', 'c.appl_name')}
+        ORDER BY c.jobname, c.last_run_date DESC NULLS LAST
         LIMIT ${limitParam} OFFSET ${offsetParam}
       `, params),
     ]);
@@ -399,7 +377,7 @@ router.get('/platform-job-list/:platformId', async (req: Request, res: Response)
     res.json({
       jobs: jobsResult.rows.map((x: any) => ({
         jobname: x.jobname, appl_name: x.appl_name,
-        job_type: x.job_type ?? null, last_run_date: x.last_run_date, run_status: x.run_status ?? null,
+        job_type: x.job_type ?? null, last_run_date: x.last_run_date,
       })),
       total,
       limited: total > limit || offset > 0,
@@ -1539,7 +1517,10 @@ router.get('/summary/:appl_name', async (req: Request, res: Response) => {
     const pool = getPgPool();
     const appl_name = decodeURIComponent(req.params.appl_name);
     const days = parseDays(req.query);
-    console.log('[ESP] summary → appl_name:', appl_name, 'days:', days);
+    const platformId = typeof req.query.platformId === 'string' ? req.query.platformId.trim() : '';
+    const pf = platformId ? ' AND cfg.pltf_name = $2' : '';
+    const bp = platformId ? [appl_name, platformId] : [appl_name];
+    console.log('[ESP] summary → appl_name:', appl_name, 'days:', days, 'platformId:', platformId);
 
     // Helper: run query safely; return fallback on any DB error
     const safe = async <T>(fn: () => Promise<T>, fallback: T): Promise<T> => {
@@ -1557,44 +1538,44 @@ router.get('/summary/:appl_name', async (req: Request, res: Response) => {
       safe(() => pool.query(
         `SELECT COUNT(DISTINCT c.jobname) AS cnt FROM edoops.esp_job_cmnd c
          JOIN edoops.esp_job_config cfg ON cfg.appl_name = c.appl_name AND cfg.jobname = c.jobname
-         WHERE c.appl_name = $1`,
-        [appl_name]).then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
+         WHERE c.appl_name = $1${pf}`,
+        bp).then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
 
       safe(() => pool.query(
         `SELECT COUNT(DISTINCT c.jobname) AS cnt FROM edoops.esp_job_cmnd c
          JOIN edoops.esp_job_config cfg ON cfg.appl_name = c.appl_name AND cfg.jobname = c.jobname
-         WHERE c.appl_name = $1 AND c.last_run_date IS NOT NULL AND c.last_run_date::timestamp < NOW() - INTERVAL '2 days'`,
-        [appl_name]).then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
+         WHERE c.appl_name = $1${pf} AND c.last_run_date IS NOT NULL AND c.last_run_date::timestamp < NOW() - INTERVAL '2 days'`,
+        bp).then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
 
       safe(() => pool.query(
         `SELECT COUNT(DISTINCT c.jobname) AS cnt FROM edoops.esp_job_cmnd c
          JOIN edoops.esp_job_config cfg ON cfg.appl_name = c.appl_name AND cfg.jobname = c.jobname
-         WHERE c.appl_name = $1 AND (c.jobname LIKE '%JSDELAY%' OR c.jobname LIKE '%RETRIG%')`,
-        [appl_name]).then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
+         WHERE c.appl_name = $1${pf} AND (c.jobname LIKE '%JSDELAY%' OR c.jobname LIKE '%RETRIG%')`,
+        bp).then(r => parseInt(r.rows[0]?.cnt || '0', 10)), 0),
 
       safe(() => pool.query(
         `SELECT COALESCE(c.agent, 'Null') AS name, COUNT(*) AS count FROM edoops.esp_job_cmnd c
          JOIN edoops.esp_job_config cfg ON cfg.appl_name = c.appl_name AND cfg.jobname = c.jobname
-         WHERE c.appl_name = $1 GROUP BY c.agent ORDER BY count DESC`,
-        [appl_name]).then(r => r.rows.map((x: any) => ({ name: x.name, count: parseInt(x.count) }))), []),
+         WHERE c.appl_name = $1${pf} GROUP BY c.agent ORDER BY count DESC`,
+        bp).then(r => r.rows.map((x: any) => ({ name: x.name, count: parseInt(x.count) }))), []),
 
       safe(() => pool.query(
         `SELECT COALESCE(c.jobtype, 'Null') AS name, COUNT(*) AS count FROM edoops.esp_job_cmnd c
          JOIN edoops.esp_job_config cfg ON cfg.appl_name = c.appl_name AND cfg.jobname = c.jobname
-         WHERE c.appl_name = $1 GROUP BY c.jobtype ORDER BY count DESC`,
-        [appl_name]).then(r => r.rows.map((x: any) => ({ name: x.name, count: parseInt(x.count) }))), []),
+         WHERE c.appl_name = $1${pf} GROUP BY c.jobtype ORDER BY count DESC`,
+        bp).then(r => r.rows.map((x: any) => ({ name: x.name, count: parseInt(x.count) }))), []),
 
       safe(() => pool.query(
         `SELECT COALESCE(CAST(c.cmpl_cd AS TEXT), 'Null') AS name, COUNT(*) AS count FROM edoops.esp_job_cmnd c
          JOIN edoops.esp_job_config cfg ON cfg.appl_name = c.appl_name AND cfg.jobname = c.jobname
-         WHERE c.appl_name = $1 GROUP BY c.cmpl_cd ORDER BY count DESC`,
-        [appl_name]).then(r => r.rows.map((x: any) => ({ name: x.name, count: parseInt(x.count) }))), []),
+         WHERE c.appl_name = $1${pf} GROUP BY c.cmpl_cd ORDER BY count DESC`,
+        bp).then(r => r.rows.map((x: any) => ({ name: x.name, count: parseInt(x.count) }))), []),
 
       safe(() => pool.query(
         `SELECT COALESCE(c.user_job, 'Null') AS name, COUNT(*) AS count FROM edoops.esp_job_cmnd c
          JOIN edoops.esp_job_config cfg ON cfg.appl_name = c.appl_name AND cfg.jobname = c.jobname
-         WHERE c.appl_name = $1 GROUP BY c.user_job ORDER BY count DESC`,
-        [appl_name]).then(r => r.rows.map((x: any) => ({ name: x.name, count: parseInt(x.count) }))), []),
+         WHERE c.appl_name = $1${pf} GROUP BY c.user_job ORDER BY count DESC`,
+        bp).then(r => r.rows.map((x: any) => ({ name: x.name, count: parseInt(x.count) }))), []),
 
       safe(() => pool.query(
         `SELECT
@@ -1611,7 +1592,7 @@ router.get('/summary/:appl_name', async (req: Request, res: Response) => {
            SELECT DISTINCT ON (c.jobname) c.jobname, c.jobtype, c.last_run_date, c.appl_name
            FROM edoops.esp_job_cmnd c
            JOIN edoops.esp_job_config cfg ON cfg.appl_name = c.appl_name AND cfg.jobname = c.jobname
-           WHERE c.appl_name = $1
+           WHERE c.appl_name = $1${pf}
            ORDER BY c.jobname, c.last_run_date DESC NULLS LAST
          ) c
          LEFT JOIN LATERAL (
@@ -1623,15 +1604,15 @@ router.get('/summary/:appl_name', async (req: Request, res: Response) => {
            LIMIT 1
          ) latest ON true
          ORDER BY c.last_run_date DESC NULLS LAST, c.jobname`,
-        [appl_name]).then(r => r.rows.map((x: any) => ({ jobname: x.jobname, job_type: x.job_type ?? null, last_run_date: x.last_run_date, run_status: x.run_status ?? null }))), []),
+        bp).then(r => r.rows.map((x: any) => ({ jobname: x.jobname, job_type: x.job_type ?? null, last_run_date: x.last_run_date, run_status: x.run_status ?? null }))), []),
 
       safe(() => pool.query(
         `SELECT DATE(c.last_run_date::timestamp) AS day, EXTRACT(HOUR FROM c.last_run_date::timestamp)::int AS hour, COUNT(*)::int AS count
          FROM edoops.esp_job_cmnd c
          JOIN edoops.esp_job_config cfg ON cfg.appl_name = c.appl_name AND cfg.jobname = c.jobname
-         WHERE c.appl_name = $1 AND c.last_run_date >= NOW() - INTERVAL '${days} days'
+         WHERE c.appl_name = $1${pf} AND c.last_run_date >= NOW() - INTERVAL '${days} days'
          GROUP BY DATE(c.last_run_date::timestamp), EXTRACT(HOUR FROM c.last_run_date::timestamp) ORDER BY DATE(c.last_run_date::timestamp), EXTRACT(HOUR FROM c.last_run_date::timestamp)`,
-        [appl_name]).then(r => r.rows.map((x: any) => ({ day: String(x.day), hour: parseInt(x.hour), count: parseInt(x.count) }))), []),
+        bp).then(r => r.rows.map((x: any) => ({ day: String(x.day), hour: parseInt(x.hour), count: parseInt(x.count) }))), []),
 
       safe(() => pool.query(
         `SELECT DISTINCT d.jobname, d.appl_name, d.release AS successor_job FROM edoops.esp_job_dpndt d
@@ -1650,8 +1631,8 @@ router.get('/summary/:appl_name', async (req: Request, res: Response) => {
       safe(() => pool.query(
         `SELECT c.jobname, c.command, c.argument FROM edoops.esp_job_cmnd c
          JOIN edoops.esp_job_config cfg ON cfg.appl_name = c.appl_name AND cfg.jobname = c.jobname
-         WHERE c.appl_name = $1 ORDER BY c.jobname`,
-        [appl_name]).then(r => r.rows.map((x: any) => ({ jobname: x.jobname, command: x.command ?? null, argument: x.argument ?? null }))), []),
+         WHERE c.appl_name = $1${pf} ORDER BY c.jobname`,
+        bp).then(r => r.rows.map((x: any) => ({ jobname: x.jobname, command: x.command ?? null, argument: x.argument ?? null }))), []),
     ]);
 
     res.json({

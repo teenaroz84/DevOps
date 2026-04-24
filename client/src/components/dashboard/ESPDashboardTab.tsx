@@ -15,7 +15,7 @@ import {
 import type { ColumnDef } from '../widgets'
 import { espService } from '../../services'
 import { useMockData } from '../../context/MockDataContext'
-import { MOCK_ESP_PLATFORM_SUMMARY, getMockAppData } from '../../services/espMockData'
+import { MOCK_ESP_PLATFORM_SUMMARY, getMockAppData, getMockPlatformData, getMockPlatformApplications } from '../../services/espMockData'
 import { AGENTS } from '../../config/agentConfig'
 import { APP_COLORS, TRUIST } from '../../theme/truistPalette'
 import { ESPSlaMissedJobsTab } from './ESPSlaMissedJobsTab'
@@ -32,7 +32,7 @@ interface AppData {
   job_types: NameCount[]
   completion_codes: NameCount[]
   user_jobs: NameCount[]
-  job_list: Array<{ jobname: string; last_run_date: string | null; job_type?: string | null; appl_name?: string; run_status?: string | null }>
+  job_list: Array<{ jobname: string; last_run_date: string | null; job_type?: string | null; appl_name?: string }>
   job_run_trend: Array<{ day: string; hour: number; job_count: number; job_fail_count: number }>
   successor_jobs: Array<{ jobname: string; successor_job: string; appl_name?: string | null }>
   predecessor_jobs: Array<{ jobname: string; predecessor_job: string; appl_name?: string | null }>
@@ -53,18 +53,7 @@ const normalizeJobTypeLabel = (value?: string | null) => {
   const trimmed = typeof value === 'string' ? value.trim() : ''
   return trimmed || 'Misc'
 }
-const JOB_STATUS_COLOR: Record<string, { color: string; bg: string; border: string }> = {
-  SUCCESS: { color: '#2e7d32', bg: '#e8f5e9', border: '#a5d6a7' },
-  FAILED: { color: '#c62828', bg: '#fce4ec', border: '#ef9a9a' },
-  'NEVER RUN': { color: '#b45309', bg: '#fffbeb', border: '#fde68a' },
-  UNKNOWN: { color: '#546e7a', bg: '#eceff1', border: '#cfd8dc' },
-}
-const getEspRunStatus = (row: { run_status?: string | null; last_run_date?: string | null }) => {
-  const normalized = String(row.run_status ?? '').trim().toUpperCase()
-  if (normalized) return normalized
-  if (!row.last_run_date) return 'NEVER RUN'
-  return 'SUCCESS'
-}
+
 
 // ─── Main Component ───────────────────────────────────────
 export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void }> = ({ onOpenAgent }) => {
@@ -79,7 +68,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   const [trendLoading, setTrendLoading] = React.useState(false)
   const [metadataDetail, setMetadataDetail] = React.useState<AppData['metadata_detail']>([])
   const [selectedJobs, setSelectedJobs] = React.useState<string[]>([])
-  const [jobStatusFilter, setJobStatusFilter] = React.useState('All')
+
 
   // ── Drill-down state ─────────────────────────────────────
   // drillJob: jobname clicked in job list → shows per-job trend
@@ -108,7 +97,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   const [days, setDays] = React.useState(2)
 
   // Reset job filter + drill-down when application or platform changes
-  React.useEffect(() => { setSelectedJobs([]); setDrillJob(null); setWidgetFilter(null); setJobStatusFilter('All') }, [selected, selectedPlatform])
+  React.useEffect(() => { setSelectedJobs([]); setDrillJob(null); setWidgetFilter(null) }, [selected, selectedPlatform])
 
   // Load platform summary once on mount (and when mock changes).
   // Only auto-select the first platform on initial load so applib picks are not overridden.
@@ -151,6 +140,26 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
     )
     return () => ctrl.abort()
   }, [useMock])
+
+  // When platform selected in mock mode, load mock platform data.
+  React.useEffect(() => {
+    if (!useMock || !selectedPlatform || selected) return
+    const mockData = getMockPlatformData(selectedPlatform)
+    setData(mockData)
+    setLoading(false)
+    const apps = getMockPlatformApplications(selectedPlatform)
+    setPlatformApplications(apps)
+    setApplibTotal(apps.length)
+    setApplibHasMore(false)
+  }, [useMock, selectedPlatform, selected])
+
+  // When application selected in mock mode, load mock app data.
+  React.useEffect(() => {
+    if (!useMock || !selected) return
+    const mockData = getMockAppData(selected)
+    setData(mockData)
+    setLoading(false)
+  }, [useMock, selected])
 
   // When platform selected (and no applib), load platform-wide data.
   // Aggregates load first so widgets appear immediately; job list is fetched separately.
@@ -276,7 +285,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       return
     }
     Promise.all([
-      espService.getAppSummary(selected, days),
+      espService.getAppSummary(selected, days, selectedPlatform ?? undefined),
       selectedPlatform ? espService.getPlatformJobList(selectedPlatform, 2000, 0, selected) : Promise.resolve(null),
     ])
       .then(([res, jobRes]: any) => {
@@ -401,14 +410,13 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   const filteredJobList     = React.useMemo(() => (data?.job_list ?? [])
     .filter(r => !selectedJobs.length || selectedJobs.includes(r.jobname))
     .filter(r => !widgetFilteredJobnames || widgetFilteredJobnames.has(r.jobname))
-    .filter(r => jobStatusFilter === 'All' || getEspRunStatus(r) === jobStatusFilter)
     .sort((left, right) => {
       if (!left.last_run_date && !right.last_run_date) return left.jobname.localeCompare(right.jobname)
       if (!left.last_run_date) return 1
       if (!right.last_run_date) return -1
       const tsDiff = new Date(right.last_run_date).getTime() - new Date(left.last_run_date).getTime()
       return tsDiff !== 0 ? tsDiff : left.jobname.localeCompare(right.jobname)
-    }),        [data, selectedJobs, widgetFilteredJobnames, jobStatusFilter])
+    }),        [data, selectedJobs, widgetFilteredJobnames])
   const filteredMeta        = React.useMemo(() => (data?.metadata ?? [])
     .filter(r => !selectedJobs.length || selectedJobs.includes(r.jobname))
     .filter(r => !widgetFilteredJobnames || widgetFilteredJobnames.has(r.jobname)),        [data, selectedJobs, widgetFilteredJobnames])
@@ -426,11 +434,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       width: 120,
       noWrap: true,
       render: r => r.appl_name ? (
-        <Typography
-          component="span"
-          onClick={(e: React.MouseEvent) => { e.stopPropagation(); setSelected(r.appl_name); setSelectedPlatform(null) }}
-          sx={{ fontSize: '11px', color: '#1976d2', cursor: 'pointer', '&:hover': { textDecoration: 'underline' }, fontWeight: 600 }}
-        >
+        <Typography component="span" sx={{ fontSize: '11px', fontWeight: 600 }}>
           {r.appl_name}
         </Typography>
       ) : '—',
@@ -479,49 +483,23 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       {
         key: 'last_run_date',
         header: 'Last Run',
-        width: 130,
+        width: 140,
         render: r => {
           if (!r.last_run_date) {
             return (
-              <Chip label="Never run" size="small" sx={{ height: 18, fontSize: '10px', fontWeight: 600, bgcolor: '#fffbeb', color: '#b45309', border: '1px solid #fde68a' }} />
+              <Tooltip title="Never run" placement="top" arrow>
+                <Typography component="span" sx={{ fontSize: '11px', color: '#9e9e9e' }}>—</Typography>
+              </Tooltip>
             )
           }
-          const daysSince = (Date.now() - new Date(r.last_run_date).getTime()) / 86_400_000
-          const stale = daysSince > 3
+          const daysSince = Math.floor((Date.now() - new Date(r.last_run_date).getTime()) / 86_400_000)
+          const hoverText = daysSince === 0 ? 'Today' : daysSince === 1 ? '1 day ago' : `${daysSince} days ago`
           return (
-            <Chip
-              label={new Date(r.last_run_date).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-              size="small"
-              sx={{
-                height: 18, fontSize: '10px', fontWeight: 600,
-                bgcolor: stale ? '#fce4ec' : '#e8f5e9',
-                color:   stale ? '#c62828' : '#2e7d32',
-                border:  stale ? '1px solid #ef9a9a' : '1px solid #a5d6a7',
-              }}
-            />
-          )
-        },
-      },
-      {
-        key: 'run_status',
-        header: 'Status',
-        width: 110,
-        render: r => {
-          const status = getEspRunStatus(r)
-          const cfg = JOB_STATUS_COLOR[status] ?? JOB_STATUS_COLOR.UNKNOWN
-          return (
-            <Chip
-              label={status}
-              size="small"
-              sx={{
-                height: 18,
-                fontSize: '10px',
-                fontWeight: 700,
-                color: cfg.color,
-                bgcolor: cfg.bg,
-                border: `1px solid ${cfg.border}`,
-              }}
-            />
+            <Tooltip title={hoverText} placement="top" arrow>
+              <Typography component="span" sx={{ fontSize: '11px', color: 'inherit' }}>
+                {new Date(r.last_run_date).toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              </Typography>
+            </Tooltip>
           )
         },
       },
@@ -938,30 +916,8 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                       : `${filteredJobList.length}${filteredJobList.length !== data.job_list.length ? ` / ${data.job_list.length}` : ''} jobs`}
                 titleIcon={<WorkIcon sx={{ color: '#1976d2', fontSize: 18 }} />}
               >
-                <Box sx={{ px: 1.5, pt: 1, pb: 0, display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
-                  {['All', 'SUCCESS', 'FAILED', 'NEVER RUN'].map((status) => {
-                    const cfg = JOB_STATUS_COLOR[status] ?? JOB_STATUS_COLOR.UNKNOWN
-                    const active = jobStatusFilter === status
-                    return (
-                      <Chip
-                        key={status}
-                        label={status}
-                        size="small"
-                        onClick={() => setJobStatusFilter(status)}
-                        sx={{
-                          fontSize: '10px',
-                          height: 22,
-                          cursor: 'pointer',
-                          fontWeight: active ? 700 : 400,
-                          backgroundColor: active ? cfg.bg : '#f5f5f5',
-                          color: active ? cfg.color : '#aaa',
-                          border: active ? `1px solid ${cfg.color}40` : '1px solid transparent',
-                          '& .MuiChip-label': { px: 1 },
-                        }}
-                      />
-                    )
-                  })}
-                  <Typography sx={{ fontSize: '10px', color: '#aaa', ml: 'auto' }}>{filteredJobList.length} jobs</Typography>
+                <Box sx={{ px: 1.5, pt: 1, pb: 0, display: 'flex', justifyContent: 'flex-end' }}>
+                  <Typography sx={{ fontSize: '10px', color: '#aaa' }}>{filteredJobList.length} jobs</Typography>
                 </Box>
                 <Box sx={{ flex: 1, overflowY: 'auto', px: 1.5, pb: 1 }}>
                   <DataTable

@@ -106,8 +106,8 @@ export const espService = {
   getApplications: () => apiClient.get('/api/esp/applications'),
 
   /** Returns all widget data for the given appl_name */
-  getAppSummary: (applName: string, days = 2) =>
-    apiClient.get(`/api/esp/summary/${encodeURIComponent(applName)}?days=${days}`),
+  getAppSummary: (applName: string, days = 2, platformId?: string) =>
+    apiClient.get(`/api/esp/summary/${encodeURIComponent(applName)}?days=${days}${platformId ? `&platformId=${encodeURIComponent(platformId)}` : ''}`),
 
   /**
    * Returns job run trend from esp_job_stats_recent.
