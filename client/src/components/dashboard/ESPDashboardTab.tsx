@@ -54,6 +54,14 @@ const normalizeRunStatusLabel = (value?: string | null) => {
   const trimmed = typeof value === 'string' ? value.trim() : ''
   return trimmed || 'UNKNOWN'
 }
+const formatTrendDayLabel = (day: string) => {
+  const normalized = day.length >= 10 ? day.slice(0, 10) : day
+  const match = normalized.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!match) return normalized
+  const [, , month, date] = match
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  return `${monthNames[Number(month) - 1]} ${Number(date)}`
+}
 const normalizeJobTypeLabel = (value?: string | null) => {
   const trimmed = typeof value === 'string' ? value.trim() : ''
   return trimmed || 'Misc'
@@ -401,8 +409,35 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       .map(([hour, vals]) => ({ hour: `${hour}:00`, ...vals }));
     return { rows: chartRows, days };
   };
+  const buildDailyTrendSummary = (rows: Array<{ day: string; hour: number; job_count: number; job_fail_count: number }>) => {
+    if (!rows.length) return { rows: [], tickInterval: 0 }
+    const byDay = new Map<string, { day: string; runs: number; fails: number }>()
+    rows.forEach(({ day, job_count, job_fail_count }) => {
+      const normalized = normalizeDay(day)
+      const existing = byDay.get(normalized)
+      if (existing) {
+        existing.runs += job_count
+        existing.fails += job_fail_count
+      } else {
+        byDay.set(normalized, {
+          day: normalized,
+          runs: job_count,
+          fails: job_fail_count,
+        })
+      }
+    })
+    const summaryRows = Array.from(byDay.values())
+      .sort((left, right) => left.day.localeCompare(right.day))
+      .map(row => ({ ...row, dayLabel: formatTrendDayLabel(row.day) }))
+    return {
+      rows: summaryRows,
+      tickInterval: Math.max(Math.ceil(summaryRows.length / 10) - 1, 0),
+    }
+  }
   const trendChart     = React.useMemo(() => buildTrendChart(trendData), [trendData])
   const drillJobChart  = React.useMemo(() => buildTrendChart(drillJobTrend), [drillJobTrend])
+  const dailyPlatformTrendChart = React.useMemo(() => buildDailyTrendSummary(trendData), [trendData])
+  const useDailyPlatformTrend = !!selectedPlatform && !selected && days > 7
 
   // Available job options for the job selector dropdown
   const jobOptions = React.useMemo(() => (data?.job_list ?? []).map(j => j.jobname), [data])
@@ -935,6 +970,26 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 190 }}>
                   <CircularProgress size={24} sx={{ color: '#1565c0' }} />
                 </Box>
+              ) : useDailyPlatformTrend ? (
+                dailyPlatformTrendChart.rows.length > 0 ? (
+                  <TrendLineChart
+                    data={dailyPlatformTrendChart.rows}
+                    xKey="dayLabel"
+                    lines={[
+                      { key: 'runs', label: 'Runs', color: '#1565c0', strokeWidth: 2.5 },
+                      { key: 'fails', label: 'Fails', color: '#e53935', dashed: true, strokeWidth: 1.75 },
+                    ]}
+                    height={190}
+                    margin={{ top: 8, right: 16, left: -10, bottom: 16 }}
+                    xAxisInterval={dailyPlatformTrendChart.tickInterval}
+                    xAxisAngle={-35}
+                    xAxisHeight={56}
+                  />
+                ) : (
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 190 }}>
+                    <Typography sx={{ fontSize: '12px', color: '#bbb' }}>No trend data available</Typography>
+                  </Box>
+                )
               ) : trendChart.rows.length > 0 ? (
                 <TrendLineChart
                   data={trendChart.rows}
@@ -1157,6 +1212,26 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 190 }}>
                       <CircularProgress size={24} sx={{ color: '#1565c0' }} />
                     </Box>
+                  ) : useDailyPlatformTrend ? (
+                    dailyPlatformTrendChart.rows.length > 0 ? (
+                      <TrendLineChart
+                        data={dailyPlatformTrendChart.rows}
+                        xKey="dayLabel"
+                        lines={[
+                          { key: 'runs', label: 'Runs', color: '#1565c0', strokeWidth: 2.5 },
+                          { key: 'fails', label: 'Fails', color: '#e53935', dashed: true, strokeWidth: 1.75 },
+                        ]}
+                        height={190}
+                        margin={{ top: 8, right: 16, left: -10, bottom: 16 }}
+                        xAxisInterval={dailyPlatformTrendChart.tickInterval}
+                        xAxisAngle={-35}
+                        xAxisHeight={56}
+                      />
+                    ) : (
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 190 }}>
+                        <Typography sx={{ fontSize: '12px', color: '#bbb' }}>No trend data available</Typography>
+                      </Box>
+                    )
                   ) : trendChart.rows.length > 0 ? (
                     <TrendLineChart
                       data={trendChart.rows}

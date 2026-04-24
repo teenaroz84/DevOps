@@ -62,6 +62,10 @@ interface TrendLineChartProps {
   /** Optional fixed domain for Y axis as [min, max] */
   yDomain?: [number | 'auto', number | 'auto']
   margin?: { top?: number; right?: number; bottom?: number; left?: number }
+  xAxisTickFormatter?: (value: string | number) => string
+  xAxisInterval?: number | 'preserveStart' | 'preserveEnd' | 'preserveStartEnd' | 'equidistantPreserveStart'
+  xAxisAngle?: number
+  xAxisHeight?: number
   tooltipContent?: (args: {
     active?: boolean
     label?: string | number
@@ -77,6 +81,10 @@ export const TrendLineChart: React.FC<TrendLineChartProps> = ({
   showGrid = true,
   yDomain,
   margin = { top: 10, right: 20, left: -10, bottom: 10 },
+  xAxisTickFormatter,
+  xAxisInterval,
+  xAxisAngle = 0,
+  xAxisHeight,
   tooltipContent,
 }) => {
   return (
@@ -86,7 +94,16 @@ export const TrendLineChart: React.FC<TrendLineChartProps> = ({
           {showGrid && (
             <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" vertical={false} />
           )}
-          <XAxis dataKey={xKey} tick={{ fontSize: 11 }} stroke="#bbb" />
+          <XAxis
+            dataKey={xKey}
+            tick={{ fontSize: 11 }}
+            stroke="#bbb"
+            tickFormatter={xAxisTickFormatter}
+            interval={xAxisInterval}
+            angle={xAxisAngle}
+            textAnchor={xAxisAngle === 0 ? 'middle' : 'end'}
+            height={xAxisHeight}
+          />
           <YAxis
             tick={{ fontSize: 11 }}
             stroke="#bbb"
@@ -229,7 +246,10 @@ export const ComposedBarLineChart: React.FC<ComposedBarLineChartProps> = ({
                   dataKey={b.key}
                   position="top"
                   style={{ fontSize: 11, fontWeight: 700, fill: b.color }}
-                  formatter={(v: number) => v > 0 ? v.toLocaleString() : ''}
+                  formatter={(value) => {
+                    const numericValue = typeof value === 'number' ? value : Number(value)
+                    return Number.isFinite(numericValue) && numericValue > 0 ? numericValue.toLocaleString() : ''
+                  }}
                 />
               )}
             </Bar>
