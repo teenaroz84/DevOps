@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { Box, Typography, Chip, Paper, TextField, InputAdornment, Button, Autocomplete, CircularProgress, Snackbar, Alert, TablePagination, Slider } from '@mui/material'
+import { Box, Typography, Chip, Paper, TextField, InputAdornment, Button, Autocomplete, CircularProgress, Snackbar, Alert, TablePagination, Slider, Tooltip } from '@mui/material'
 import BugReportIcon from '@mui/icons-material/BugReport'
 import SearchIcon from '@mui/icons-material/Search'
 import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber'
 import StreamIcon from '@mui/icons-material/Stream'
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney'
 import TrendingUpIcon from '@mui/icons-material/TrendingUp'
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 import PipelineIcon from '@mui/icons-material/AccountTree'
 import BuildCircleIcon from '@mui/icons-material/BuildCircle'
 import { DrillDownModal, DrillDownData } from './DrillDownModal'
@@ -26,6 +27,18 @@ import {
   MOCK_SERVICENOW_BY_ASSIGNMENT_GROUP,
   MOCK_SERVICENOW_INCIDENT_TREND,
 } from '../../services/servicenowMockData'
+
+/** Small clickable info icon for widget headers — shows a tooltip explaining the widget's data scope */
+const WidgetInfo: React.FC<{ text: string }> = ({ text }) => (
+  <Tooltip
+    title={<Typography sx={{ fontSize: '11px', lineHeight: 1.5, maxWidth: 280 }}>{text}</Typography>}
+    arrow
+    placement="left"
+    enterTouchDelay={0}
+  >
+    <InfoOutlinedIcon sx={{ fontSize: 14, color: '#90a4ae', cursor: 'help', '&:hover': { color: '#1976d2' } }} />
+  </Tooltip>
+)
 
 const SEV_CONFIG: Record<string, { color: string; bg: string; dot: string }> = {
   critical: { color: '#c62828', bg: '#fce4ec', dot: '#e53935' },
@@ -504,7 +517,7 @@ const INCIDENT_COLORS: Record<string, string> = {
   P5: '#757575',
 }
 
-export const IncidentsWidget: React.FC<{ platform?: string | null; days?: number }> = ({ platform, days = 7 }) => {
+export const IncidentsWidget: React.FC<{ platform?: string | null }> = ({ platform }) => {
   const [incidents, setIncidents] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -521,10 +534,10 @@ export const IncidentsWidget: React.FC<{ platform?: string | null; days?: number
       setLoading(false)
       return
     }
-    servicenowService.getIncidents(platform ?? undefined, days)
+    servicenowService.getIncidents(platform ?? undefined)
       .then(d => { setIncidents(Array.isArray(d) ? d : []); setLoading(false) })
       .catch(err => { setError(err.message || 'Failed to fetch incidents'); setLoading(false) })
-  }, [useMock, platform, days])
+  }, [useMock, platform])
 
   const totalIncidents = incidents.reduce((sum, i) => sum + (i.incident_count || 0), 0)
 
@@ -540,6 +553,7 @@ export const IncidentsWidget: React.FC<{ platform?: string | null; days?: number
         title="Open Incidents by Priority"
         titleIcon={<WarningAmberIcon sx={{ color: '#c62828', fontSize: 18 }} />}
         source="PostgreSQL · edoops.service_now_inc · current open state · all time"
+        actions={<WidgetInfo text="Shows the count of currently open incidents grouped by priority (P1–P5). Filters only active incidents using state — closed, resolved, and cancelled are excluded. The days slider does not affect this widget. Count always reflects the live open state." />}
         loading={loading}
         error={error ?? undefined}
       >
@@ -564,7 +578,7 @@ export const IncidentsWidget: React.FC<{ platform?: string | null; days?: number
                     if (!platform && count > DRILLDOWN_LIMIT) { setHint(true); return }
                     setDrillDown({
                       type: 'sn_priority',
-                      data: { priority: item.label, count, source: 'Open Incidents', platform: platform ?? undefined, days },
+                      data: { priority: item.label, count, source: 'Open Incidents', platform: platform ?? undefined },
                     })
                   }
                 }}
@@ -625,6 +639,7 @@ export const MissedIncidentsWidget: React.FC<{ platform?: string | null; days?: 
         title="Top Incidents by SLA"
         titleIcon={<WarningAmberIcon sx={{ color: TRUIST.darkGray, fontSize: 18 }} />}
         source={`PostgreSQL · edoops.service_now_inc · opened in last ${days}d`}
+        actions={<WidgetInfo text={`Shows all incidents opened in the last ${days} days, grouped by priority with SLA breach status. The SLA breach is calculated from the incident's opened date vs. the resolution SLA target for that priority. Use the days slider to change the opened date window.`} />}
         loading={loading}
         error={error ?? undefined}
       >
@@ -777,7 +792,8 @@ export const IncidentListWidget: React.FC<{ platform?: string | null; days?: num
     <WidgetShell
       title="All Incidents"
       titleIcon={<WarningAmberIcon sx={{ color: '#1565c0', fontSize: 18 }} />}
-      source={`PostgreSQL · edoops.service_now_inc · opened in last ${days}d · most recent status per incident`}
+      source={`PostgreSQL · edoops.service_now_inc · active during last ${days}d · most recent status per incident`}
+      actions={<WidgetInfo text={`Shows all incidents that were active at any point in the last ${days} days. This includes: (1) every currently open incident regardless of age, (2) any incident closed within the window (via closed date), and (3) any incident resolved within the window (via resolved date). One row per unique incident — most recent status shown. Use the slider to widen or narrow the activity window.`} />}
       loading={loading}
       error={error ?? undefined}
     >
@@ -851,6 +867,7 @@ export const CapabilityWidget: React.FC<{ platform?: string | null; days?: numbe
       title="Incidents by Capability"
       titleIcon={<BugReportIcon sx={{ color: '#1565c0', fontSize: 18 }} />}
       source={`PostgreSQL · edoops.service_now_inc · opened in last ${days}d`}
+      actions={<WidgetInfo text={`Shows the top 10 capabilities by incident count for incidents opened in the last ${days} days. All statuses are included. Use the days slider to change the opened date window.`} />}
       loading={loading}
       error={error ?? undefined}
     >
@@ -905,6 +922,7 @@ export const AssignmentGroupWidget: React.FC<{ platform?: string | null; days?: 
       title="Incidents by Assignment Group"
       titleIcon={<ConfirmationNumberIcon sx={{ color: TRUIST.dusk, fontSize: 18 }} />}
       source={`PostgreSQL · edoops.service_now_inc · opened in last ${days}d`}
+      actions={<WidgetInfo text={`Shows the top 10 assignment groups by incident count for incidents opened in the last ${days} days. All statuses are included. Use the days slider to change the opened date window.`} />}
       loading={loading}
       error={error ?? undefined}
     >
@@ -1078,6 +1096,7 @@ export const IncidentTrendWidget: React.FC<{ platform?: string | null; days?: nu
       title="Incident Volume by Day"
       titleIcon={<TrendingUpIcon sx={{ color: '#c62828', fontSize: 18 }} />}
       source={`PostgreSQL · edoops.service_now_inc · last ${days}d · most recent per incident per day`}
+      actions={<WidgetInfo text={`Daily breakdown of incidents over the last ${days} days — bars show open vs closed count per day, line shows total. Filtered by last-updated date (not opened date) to capture day-by-day state transitions. Use the days slider to widen or narrow the trend window.`} />}
       loading={loading}
       error={error ?? undefined}
     >
@@ -1232,7 +1251,7 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
       {/* ── Row 1: Open incidents by priority + Top incidents by SLA ── */}
       <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, alignItems: 'stretch' }}>
         <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #c62828', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
-          <IncidentsWidget platform={selectedPlatform} days={days} />
+          <IncidentsWidget platform={selectedPlatform} />
         </Paper>
         <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: `3px solid ${TRUIST.darkGray}`, boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
           <MissedIncidentsWidget platform={selectedPlatform} days={days} />

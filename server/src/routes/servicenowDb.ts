@@ -16,9 +16,9 @@ function parseDays(query: any): number {
   return Math.min(Math.max(n, 1), SN_MAX_DAYS);
 }
 
-// Open incidents are identified by sninc_state.
+// Known sninc_state values: 'new', 'In Progress', 'On Hold' (open) | 'Closed', 'Resolved', 'Canceled' (inactive)
 const OPEN_INCIDENT_FILTER = `
-  COALESCE(LOWER(TRIM(sn.sninc_state)), '') NOT IN ('closed', 'resolved', 'cancelled', 'canceled', 'complete', 'completed')
+  COALESCE(LOWER(TRIM(sn.sninc_state)), '') NOT IN ('closed', 'resolved', 'canceled')
 `;
 
 // GET /api/servicenow/incidents?platform=<value>
@@ -126,6 +126,9 @@ router.get('/incident-list', async (req: Request, res: Response) => {
     const platformClause = platform ? `AND latest.sninc_applkp_pltf_nm = $1` : '';
     const params = platform ? [platform] : [];
     const result = await pool.query(`
+      -- Active-during-period: incident existed and was open at any point in the window.
+      -- Includes: all currently open incidents + any incident closed (sninc_closed_at)
+      -- or resolved (sninc_resolved_at / sninc_last_updt_dttm) within the period.
       SELECT sninc_inc_num, priority_field, sninc_state, sninc_capability, sninc_short_desc, sninc_assignment_grp
       FROM (
         SELECT DISTINCT ON (sn.sninc_inc_num)
@@ -139,7 +142,16 @@ router.get('/incident-list', async (req: Request, res: Response) => {
         FROM   edoops.service_now_inc sn
         JOIN   edoops.sla_glossary    sg
           ON   sn.sninc_priority = sg.snow_priority
-        WHERE  sn.sninc_opened_at::timestamp >= NOW() - INTERVAL '${days} days'
+        WHERE  (
+          -- Still open (active right now, regardless of age)
+          COALESCE(LOWER(TRIM(sn.sninc_state)), '') NOT IN ('closed','resolved','canceled')
+          OR
+          -- Closed within the window (sninc_closed_at is set when state = 'closed')
+          sn.sninc_closed_at::timestamp >= NOW() - INTERVAL '${days} days'
+          OR
+          -- Resolved within the window (sninc_resolved_at when available, else last update)
+          COALESCE(sn.sninc_resolved_at, sn.sninc_last_updt_dttm)::timestamp >= NOW() - INTERVAL '${days} days'
+        )
         ORDER BY sn.sninc_inc_num, sn.sninc_last_updt_dttm DESC
       ) latest
       WHERE  1=1
@@ -179,11 +191,10 @@ router.get('/emergency-changes', async (req: Request, res: Response) => {
 });
 
 // GET /api/servicenow/incident-detail?priority=P1&platform=<value>
-// Full incident records for a given priority; optionally filtered by platform
+// Full open incident records for a given priority — no date filter, matches Open Incidents by Priority KPI
 router.get('/incident-detail', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
-    const days = parseDays(req.query);
     const priority = req.query.priority as string | undefined;
     const platform = req.query.platform as string | undefined;
     const priorities = priority ? [priority] : ['P1', 'P2', 'P3', 'P4', 'P5'];
@@ -222,7 +233,6 @@ router.get('/incident-detail', async (req: Request, res: Response) => {
         JOIN   edoops.sla_glossary    sg
           ON   sn.sninc_priority = sg.snow_priority
         WHERE  ${OPEN_INCIDENT_FILTER}
-          AND sn.sninc_opened_at::timestamp >= NOW() - INTERVAL '${days} days'
         ORDER BY sn.sninc_inc_num, sn.sninc_last_updt_dttm DESC
       ) latest
       WHERE  priority_field = ANY($1)
@@ -322,7 +332,7 @@ router.get('/incident-trend', async (req: Request, res: Response) => {
         SELECT DISTINCT ON (sn.sninc_inc_num, DATE(sn.sninc_last_updt_dttm::timestamp))
                DATE(sn.sninc_last_updt_dttm::timestamp) AS day,
                COALESCE(LOWER(TRIM(sn.sninc_state)), '') NOT IN
-                 ('closed','resolved','cancelled','canceled','complete','completed') AS is_open
+                 ('closed','resolved','canceled') AS is_open
         FROM   edoops.service_now_inc sn
         WHERE  sn.sninc_last_updt_dttm::timestamp >= NOW() - INTERVAL '${days} days'
           ${platformClause}
