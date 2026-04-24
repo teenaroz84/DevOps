@@ -368,23 +368,42 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       .catch(() => setMetadataDetail([]))
   }, [selected, useMock])
 
-  // Transform trend data for recharts: keys ${day}_count and ${day}_fail per hour
+  // Transform trend data for recharts: normalize 'day' to 'YYYY-MM-DD' for chart keys
+  const normalizeDay = (day: string) => {
+    // Handles 'YYYY-MM-DD 00:00:00' or ISO strings
+    if (!day) return '';
+    if (day.length >= 10) return day.slice(0, 10);
+    return day;
+  };
+
   const buildTrendChart = (rows: Array<{ day: string; hour: number; job_count: number; job_fail_count: number }>) => {
-    if (!rows.length) return { rows: [], days: [] as string[] }
-    const days = [...new Set(rows.map(t => t.day))].sort()
-    const byHour: Record<number, Record<string, number>> = {}
+    if (!rows.length) return { rows: [], days: [] as string[] };
+    const days = [...new Set(rows.map(t => normalizeDay(t.day)))].sort();
+    const byHour: Record<number, Record<string, number>> = {};
     rows.forEach(({ day, hour, job_count, job_fail_count }) => {
-      if (!byHour[hour]) byHour[hour] = {}
-      byHour[hour][`${day}_count`] = job_count
-      byHour[hour][`${day}_fail`] = job_fail_count
-    })
+      const normDay = normalizeDay(day);
+      if (!byHour[hour]) byHour[hour] = {};
+      byHour[hour][`${normDay}_count`] = job_count;
+      byHour[hour][`${normDay}_fail`] = job_fail_count;
+    });
     const chartRows = Object.entries(byHour)
       .sort(([a], [b]) => Number(a) - Number(b))
-      .map(([hour, vals]) => ({ hour: `${hour}:00`, ...vals }))
-    return { rows: chartRows, days }
-  }
-  const trendChart     = React.useMemo(() => buildTrendChart(trendData),    [trendData])
-  const drillJobChart  = React.useMemo(() => buildTrendChart(drillJobTrend), [drillJobTrend])
+      .map(([hour, vals]) => ({ hour: `${hour}:00`, ...vals }));
+    return { rows: chartRows, days };
+  };
+  React.useEffect(() => {
+    // Debug: log trend data and chart transformation
+    // eslint-disable-next-line no-console
+    console.log('[ESP] trendData', trendData);
+  }, [trendData]);
+
+  const trendChart     = React.useMemo(() => {
+    const chart = buildTrendChart(trendData);
+    // eslint-disable-next-line no-console
+    console.log('[ESP] trendChart', chart);
+    return chart;
+  }, [trendData]);
+  const drillJobChart  = React.useMemo(() => buildTrendChart(drillJobTrend), [drillJobTrend]);
 
   // Available job options for the job selector dropdown
   const jobOptions = React.useMemo(() => (data?.job_list ?? []).map(j => j.jobname), [data])
@@ -862,6 +881,39 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
           <Typography sx={{ fontSize: '13px', color: '#aaa' }}>
             No data available for <strong>{selected}</strong>
           </Typography>
+        </Paper>
+      )}
+
+      {/* ── Platform-level trend (no applib selected yet) ── */}
+      {dashboardView === 'operations' && !loading && !data && selectedPlatform && !selected && (
+        <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', height: ESP_WIDGET_PANEL_HEIGHT, '& > *': { flex: 1, width: '100%' } }}>
+          <WidgetShell
+            title="Job Run Trend"
+            titleIcon={<TrendingUpIcon sx={{ color: '#1565c0', fontSize: 18 }} />}
+          >
+            <Box sx={{ px: 1.5, pb: 1.5, pt: 0.5, flex: 1, width: '100%', minHeight: 0 }}>
+              {trendLoading ? (
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 190 }}>
+                  <CircularProgress size={24} sx={{ color: '#1565c0' }} />
+                </Box>
+              ) : trendChart.rows.length > 0 ? (
+                <TrendLineChart
+                  data={trendChart.rows}
+                  xKey="hour"
+                  lines={trendChart.days.flatMap((day, i) => [
+                    { key: `${day}_count`, label: `${day} Runs`, color: TREND_RUN_COLORS[i % TREND_RUN_COLORS.length], strokeWidth: 2 },
+                    { key: `${day}_fail`,  label: `${day} Fail`, color: TREND_FAIL_COLORS[i % TREND_FAIL_COLORS.length], dashed: true, strokeWidth: 1.5 },
+                  ])}
+                  height={190}
+                  margin={{ top: 8, right: 16, left: -10, bottom: 4 }}
+                />
+              ) : (
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 190 }}>
+                  <Typography sx={{ fontSize: '12px', color: '#bbb' }}>No trend data available</Typography>
+                </Box>
+              )}
+            </Box>
+          </WidgetShell>
         </Paper>
       )}
 
