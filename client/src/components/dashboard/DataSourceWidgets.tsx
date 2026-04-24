@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { Box, Typography, Chip, Paper, TextField, InputAdornment, Button, Autocomplete, CircularProgress, Snackbar, Alert, TablePagination, Slider, Tooltip } from '@mui/material'
+import { Box, Typography, Chip, Paper, TextField, InputAdornment, Button, Autocomplete, CircularProgress, TablePagination, Slider, Tooltip } from '@mui/material'
 import BugReportIcon from '@mui/icons-material/BugReport'
 import SearchIcon from '@mui/icons-material/Search'
 import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber'
@@ -46,9 +46,6 @@ const SEV_CONFIG: Record<string, { color: string; bg: string; dot: string }> = {
   medium:   { color: '#f57c00', bg: '#fff8e1', dot: '#fdd835' },
   low:      { color: '#2e7d32', bg: '#e8f5e9', dot: '#66bb6a' },
 }
-
-/** Block drilldown when no platform is selected and total incidents exceed this threshold */
-const DRILLDOWN_LIMIT = 10000
 
 const fmt = (iso: string) =>
   new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -521,8 +518,6 @@ export const IncidentsWidget: React.FC<{ platform?: string | null }> = ({ platfo
   const [incidents, setIncidents] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [drillDown, setDrillDown] = useState<DrillDownData | null>(null)
-  const [hint, setHint] = useState(false)
   const { useMock } = useMockData()
 
   useEffect(() => {
@@ -572,16 +567,6 @@ export const IncidentsWidget: React.FC<{ platform?: string | null }> = ({ platfo
                 ]}
                 columns={Math.min(incidents.length + 1, 6)}
                 compact
-                onCardClick={(item, idx) => {
-                  if (idx < incidents.length) {
-                    const count = item.value as number
-                    if (!platform && count > DRILLDOWN_LIMIT) { setHint(true); return }
-                    setDrillDown({
-                      type: 'sn_priority',
-                      data: { priority: item.label, count, source: 'Open Incidents', platform: platform ?? undefined },
-                    })
-                  }
-                }}
               />
             </Box>
             {donutData.length > 0 && (
@@ -597,13 +582,7 @@ export const IncidentsWidget: React.FC<{ platform?: string | null }> = ({ platfo
           </>
         )}
       </WidgetShell>
-      <DrillDownModal open={!!drillDown} onClose={() => setDrillDown(null)} drillDown={drillDown} />
-      <Snackbar open={hint} autoHideDuration={5000} onClose={() => setHint(false)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
-        <Alert severity="info" onClose={() => setHint(false)} sx={{ fontSize: '13px' }}>
-          Too many records to display. Select a <strong>platform</strong> using the filter above to drill down into incidents.
-        </Alert>
-      </Snackbar>
+      {/* DrillDownModal disabled — incident data under review */}
     </>
   )
 }
@@ -614,8 +593,6 @@ export const MissedIncidentsWidget: React.FC<{ platform?: string | null; days?: 
   const [data, setData] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [drillDown, setDrillDown] = useState<DrillDownData | null>(null)
-  const [hint, setHint] = useState(false)
   const { useMock } = useMockData()
 
   useEffect(() => {
@@ -658,16 +635,6 @@ export const MissedIncidentsWidget: React.FC<{ platform?: string | null; days?: 
                 ]}
                 columns={3}
                 compact
-                onCardClick={(item, idx) => {
-                  if (idx < data.length) {
-                    const count = item.value as number
-                    if (!platform && count > DRILLDOWN_LIMIT) { setHint(true); return }
-                    setDrillDown({
-                      type: 'sn_priority',
-                      data: { priority: item.label, count, source: 'Top Incident SLA', platform: platform ?? undefined, days },
-                    })
-                  }
-                }}
               />
             </Box>
             <Box sx={{ px: 2, pb: 1.5, display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -676,14 +643,7 @@ export const MissedIncidentsWidget: React.FC<{ platform?: string | null; days?: 
                 const color = INCIDENT_COLORS[r.priority_field] || '#757575'
                 return (
                   <Box key={r.priority_field}
-                    onClick={() => {
-                      if (!platform && r.incident_count > DRILLDOWN_LIMIT) { setHint(true); return }
-                      setDrillDown({
-                        type: 'sn_priority',
-                        data: { priority: r.priority_field, count: r.incident_count, source: 'Top Incident SLA', platform: platform ?? undefined, days },
-                      })
-                    }}
-                    sx={{ cursor: 'pointer', borderRadius: 1, p: 0.5, '&:hover': { backgroundColor: '#f5f5f5' } }}
+                    sx={{ borderRadius: 1, p: 0.5 }}
                   >
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.4 }}>
                       <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#333' }}>{r.priority_field}</Typography>
@@ -707,13 +667,7 @@ export const MissedIncidentsWidget: React.FC<{ platform?: string | null; days?: 
           </>
         )}
       </WidgetShell>
-      <DrillDownModal open={!!drillDown} onClose={() => setDrillDown(null)} drillDown={drillDown} />
-      <Snackbar open={hint} autoHideDuration={5000} onClose={() => setHint(false)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
-        <Alert severity="info" onClose={() => setHint(false)} sx={{ fontSize: '13px' }}>
-          Too many records to display. Select a <strong>platform</strong> using the filter above to drill down into incidents.
-        </Alert>
-      </Snackbar>
+      {/* DrillDownModal disabled — incident data under review */}
     </>
   )
 }
