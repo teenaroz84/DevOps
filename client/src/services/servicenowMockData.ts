@@ -53,24 +53,45 @@ export const MOCK_SERVICENOW_MISSED_INCIDENTS = [
 
 // Query 3: Detailed P3/P4 incident list (used by IncidentListWidget)
 export const MOCK_SERVICENOW_INCIDENT_LIST = [
-  { sninc_inc_num: 'INC0089101', priority_field: 'P3', sninc_capability: 'BI Reporting',      sninc_short_desc: 'DMF batch job step failure in nightly ingestion run',          sninc_assignment_grp: 'DataOps Platform'   },
-  { sninc_inc_num: 'INC0089102', priority_field: 'P3', sninc_capability: 'Data Integration',  sninc_short_desc: 'Talend job timeout on ESP scheduler queue — retry exhausted',   sninc_assignment_grp: 'DataOps Platform'   },
-  { sninc_inc_num: 'INC0089103', priority_field: 'P3', sninc_capability: 'ESP Scheduler',     sninc_short_desc: 'ESP scheduled jobs missed overnight window (3 jobs skipped)',   sninc_assignment_grp: 'DataOps Platform'   },
-  { sninc_inc_num: 'INC0089104', priority_field: 'P3', sninc_capability: 'BI Reporting',      sninc_short_desc: 'Snowflake query latency above SLA threshold for BI reports',    sninc_assignment_grp: 'Cloud Analytics'    },
-  { sninc_inc_num: 'INC0089105', priority_field: 'P3', sninc_capability: 'Data Integration',  sninc_short_desc: 'PostgreSQL connection pool exhausted during peak load',          sninc_assignment_grp: 'Database Team'      },
-  { sninc_inc_num: 'INC0089106', priority_field: 'P3', sninc_capability: 'DMF Orchestration', sninc_short_desc: 'DMF enrichment step failed for BIUK source dataset',            sninc_assignment_grp: 'DataOps Platform'   },
-  { sninc_inc_num: 'INC0089107', priority_field: 'P3', sninc_capability: 'Monitoring',        sninc_short_desc: 'CloudWatch alarm misconfigured — batch latency not alerting',   sninc_assignment_grp: 'Platform Ops'       },
-  { sninc_inc_num: 'INC0089108', priority_field: 'P3', sninc_capability: 'BI Reporting',      sninc_short_desc: 'Report render timeout on Executive Dashboard for date range >90d', sninc_assignment_grp: 'BI Dev Team'        },
-  { sninc_inc_num: 'INC0089109', priority_field: 'P4', sninc_capability: 'Data Integration',  sninc_short_desc: 'Talend log table growing beyond expected partition size',         sninc_assignment_grp: 'DataOps Platform'   },
-  { sninc_inc_num: 'INC0089110', priority_field: 'P4', sninc_capability: 'ESP Scheduler',     sninc_short_desc: 'ESP calendar definition missing holiday exception for Q2',       sninc_assignment_grp: 'DataOps Platform'   },
-  { sninc_inc_num: 'INC0089111', priority_field: 'P4', sninc_capability: 'BI Reporting',      sninc_short_desc: 'Minor discrepancy in weekly KPI rollup figures (< 0.1%)',        sninc_assignment_grp: 'BI Dev Team'        },
-  { sninc_inc_num: 'INC0089112', priority_field: 'P4', sninc_capability: 'Monitoring',        sninc_short_desc: 'Grafana dashboard stale after Prometheus scrape interval change', sninc_assignment_grp: 'Platform Ops'       },
-  { sninc_inc_num: 'INC0089113', priority_field: 'P4', sninc_capability: 'DMF Orchestration', sninc_short_desc: 'DMF lineage metadata not refreshed after schema change',         sninc_assignment_grp: 'DataOps Platform'   },
-  { sninc_inc_num: 'INC0089114', priority_field: 'P4', sninc_capability: 'Cloud Analytics',   sninc_short_desc: 'Snowflake credit usage 12% over forecast for the billing period', sninc_assignment_grp: 'Cloud Analytics'    },
-  { sninc_inc_num: 'INC0089115', priority_field: 'P5', sninc_capability: 'Documentation',     sninc_short_desc: 'Wiki article for DMF lineage process is outdated',               sninc_assignment_grp: 'DataOps Platform'   },
-  { sninc_inc_num: 'INC0089116', priority_field: 'P5', sninc_capability: 'BI Reporting',      sninc_short_desc: 'Request to add new bookmark folder in BI portal',                sninc_assignment_grp: 'BI Dev Team'        },
-  { sninc_inc_num: 'INC0089117', priority_field: 'P5', sninc_capability: 'Monitoring',        sninc_short_desc: 'Update Grafana panel title to match new naming convention',       sninc_assignment_grp: 'Platform Ops'       },
+  { sninc_inc_num: 'INC0089001', priority_field: 'P1', sninc_state: 'In Progress',  sninc_capability: 'BI Reporting',      sninc_short_desc: 'Critical ETL pipeline failure: BI reports stale for 6+ hours',      sninc_assignment_grp: 'DataOps Platform'   },
+  { sninc_inc_num: 'INC0089002', priority_field: 'P1', sninc_state: 'In Progress',  sninc_capability: 'Data Warehouse',    sninc_short_desc: 'Snowflake cluster unavailable — all downstream queries failing',      sninc_assignment_grp: 'Cloud Analytics'    },
+  { sninc_inc_num: 'INC0089003', priority_field: 'P1', sninc_state: 'New',          sninc_capability: 'Data Integration',  sninc_short_desc: 'Full data ingestion pipeline down — DMF run status: FAILED',          sninc_assignment_grp: 'DataOps Platform'   },
+  { sninc_inc_num: 'INC0089021', priority_field: 'P2', sninc_state: 'In Progress',  sninc_capability: 'ESP Scheduler',     sninc_short_desc: 'ESP batch window overrun by 2h — 12 jobs pending execution',          sninc_assignment_grp: 'DataOps Platform'   },
+  { sninc_inc_num: 'INC0089022', priority_field: 'P2', sninc_state: 'Resolved',     sninc_capability: 'BI Reporting',      sninc_short_desc: 'Dashboard refresh rate degraded — Snowflake query cache stale',        sninc_assignment_grp: 'Cloud Analytics'    },
+  { sninc_inc_num: 'INC0089023', priority_field: 'P2', sninc_state: 'Closed',       sninc_capability: 'Data Integration',  sninc_short_desc: 'Talend remote engine disconnected — 4 jobs stuck in running state',    sninc_assignment_grp: 'DataOps Platform'   },
+  { sninc_inc_num: 'INC0089024', priority_field: 'P2', sninc_state: 'In Progress',  sninc_capability: 'Database Layer',    sninc_short_desc: 'PostgreSQL connection pool at 95% capacity during peak hours',         sninc_assignment_grp: 'Database Team'      },
+  { sninc_inc_num: 'INC0089025', priority_field: 'P2', sninc_state: 'Resolved',     sninc_capability: 'Monitoring',        sninc_short_desc: 'CloudWatch alert suppressed — missed batch latency spike overnight',    sninc_assignment_grp: 'Platform Ops'       },
+  { sninc_inc_num: 'INC0089101', priority_field: 'P3', sninc_state: 'New',          sninc_capability: 'BI Reporting',      sninc_short_desc: 'DMF batch job step failure in nightly ingestion run',                  sninc_assignment_grp: 'DataOps Platform'   },
+  { sninc_inc_num: 'INC0089102', priority_field: 'P3', sninc_state: 'In Progress',  sninc_capability: 'Data Integration',  sninc_short_desc: 'Talend job timeout on ESP scheduler queue — retry exhausted',          sninc_assignment_grp: 'DataOps Platform'   },
+  { sninc_inc_num: 'INC0089103', priority_field: 'P3', sninc_state: 'Closed',       sninc_capability: 'ESP Scheduler',     sninc_short_desc: 'ESP scheduled jobs missed overnight window (3 jobs skipped)',          sninc_assignment_grp: 'DataOps Platform'   },
+  { sninc_inc_num: 'INC0089104', priority_field: 'P3', sninc_state: 'Resolved',     sninc_capability: 'BI Reporting',      sninc_short_desc: 'Snowflake query latency above SLA threshold for BI reports',           sninc_assignment_grp: 'Cloud Analytics'    },
+  { sninc_inc_num: 'INC0089105', priority_field: 'P3', sninc_state: 'In Progress',  sninc_capability: 'Data Integration',  sninc_short_desc: 'PostgreSQL connection pool exhausted during peak load',                 sninc_assignment_grp: 'Database Team'      },
+  { sninc_inc_num: 'INC0089106', priority_field: 'P3', sninc_state: 'New',          sninc_capability: 'DMF Orchestration', sninc_short_desc: 'DMF enrichment step failed for BIUK source dataset',                   sninc_assignment_grp: 'DataOps Platform'   },
+  { sninc_inc_num: 'INC0089107', priority_field: 'P3', sninc_state: 'Closed',       sninc_capability: 'Monitoring',        sninc_short_desc: 'CloudWatch alarm misconfigured — batch latency not alerting',          sninc_assignment_grp: 'Platform Ops'       },
+  { sninc_inc_num: 'INC0089108', priority_field: 'P3', sninc_state: 'Resolved',     sninc_capability: 'BI Reporting',      sninc_short_desc: 'Report render timeout on Executive Dashboard for date range >90d',      sninc_assignment_grp: 'BI Dev Team'        },
+  { sninc_inc_num: 'INC0089109', priority_field: 'P4', sninc_state: 'Closed',       sninc_capability: 'Data Integration',  sninc_short_desc: 'Talend log table growing beyond expected partition size',               sninc_assignment_grp: 'DataOps Platform'   },
+  { sninc_inc_num: 'INC0089110', priority_field: 'P4', sninc_state: 'In Progress',  sninc_capability: 'ESP Scheduler',     sninc_short_desc: 'ESP calendar definition missing holiday exception for Q2',             sninc_assignment_grp: 'DataOps Platform'   },
+  { sninc_inc_num: 'INC0089111', priority_field: 'P4', sninc_state: 'Resolved',     sninc_capability: 'BI Reporting',      sninc_short_desc: 'Minor discrepancy in weekly KPI rollup figures (< 0.1%)',               sninc_assignment_grp: 'BI Dev Team'        },
+  { sninc_inc_num: 'INC0089112', priority_field: 'P4', sninc_state: 'Closed',       sninc_capability: 'Monitoring',        sninc_short_desc: 'Grafana dashboard stale after Prometheus scrape interval change',       sninc_assignment_grp: 'Platform Ops'       },
+  { sninc_inc_num: 'INC0089113', priority_field: 'P4', sninc_state: 'New',          sninc_capability: 'DMF Orchestration', sninc_short_desc: 'DMF lineage metadata not refreshed after schema change',                sninc_assignment_grp: 'DataOps Platform'   },
+  { sninc_inc_num: 'INC0089114', priority_field: 'P4', sninc_state: 'Resolved',     sninc_capability: 'Cloud Analytics',   sninc_short_desc: 'Snowflake credit usage 12% over forecast for the billing period',       sninc_assignment_grp: 'Cloud Analytics'    },
+  { sninc_inc_num: 'INC0089115', priority_field: 'P5', sninc_state: 'Closed',       sninc_capability: 'Documentation',     sninc_short_desc: 'Wiki article for DMF lineage process is outdated',                     sninc_assignment_grp: 'DataOps Platform'   },
+  { sninc_inc_num: 'INC0089116', priority_field: 'P5', sninc_state: 'Resolved',     sninc_capability: 'BI Reporting',      sninc_short_desc: 'Request to add new bookmark folder in BI portal',                      sninc_assignment_grp: 'BI Dev Team'        },
+  { sninc_inc_num: 'INC0089117', priority_field: 'P5', sninc_state: 'Closed',       sninc_capability: 'Monitoring',        sninc_short_desc: 'Update Grafana panel title to match new naming convention',             sninc_assignment_grp: 'Platform Ops'       },
 ]
+
+// Incident trend mock — daily open vs closed counts for the last 7 days
+export const MOCK_SERVICENOW_INCIDENT_TREND = (() => {
+  const today = new Date()
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(today)
+    d.setDate(d.getDate() - (6 - i))
+    const day = d.toISOString().split('T')[0]
+    const open   = Math.floor(Math.random() * 8) + 3
+    const closed = Math.floor(Math.random() * 10) + 2
+    return { day, open, closed, total: open + closed }
+  })
+})()
 
 // Incident detail records covering all priorities P1–P5 (used by drill-down modal)
 export const MOCK_SN_INCIDENT_DETAIL = [

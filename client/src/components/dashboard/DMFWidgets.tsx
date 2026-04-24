@@ -51,6 +51,7 @@ interface LineageCounts {
 
 interface LineageJob {
   id: string
+  runId: string
   processDate: string
   sourceCode: string
   datasetName: string
@@ -408,6 +409,7 @@ const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void
 
   // ── Lineage columns ────────────────────────────────────────
   const lineageColumns: ColumnDef<LineageJob>[] = [
+    { key: 'runId',           header: 'Run ID',           width: 110, noWrap: true },
     { key: 'processDate',     header: 'Process Date',     width: 95 },
     { key: 'sourceCode',      header: 'Source',           width: 90 },
     { key: 'datasetName',     header: 'Dataset Name',     flex: 2 },

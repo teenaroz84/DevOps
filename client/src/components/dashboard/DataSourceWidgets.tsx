@@ -11,7 +11,7 @@ import BuildCircleIcon from '@mui/icons-material/BuildCircle'
 import { DrillDownModal, DrillDownData } from './DrillDownModal'
 import { WidgetShell, StatCardGrid, MetricBarList, DataTable, ColumnDef } from '../widgets'
 import { cloudwatchService, servicenowService, snowflakeService, postgresService, espService } from '../../services'
-import { DonutChart } from '../widgets'
+import { DonutChart, ComposedBarLineChart } from '../widgets'
 import { useMockData } from '../../context/MockDataContext'
 import { APP_COLORS, CHART_PALETTE, TRUIST } from '../../theme/truistPalette'
 import { AGENTS } from '../../config/agentConfig'
@@ -24,6 +24,7 @@ import {
   MOCK_SERVICENOW_PLATFORMS,
   MOCK_SERVICENOW_BY_CAPABILITY,
   MOCK_SERVICENOW_BY_ASSIGNMENT_GROUP,
+  MOCK_SERVICENOW_INCIDENT_TREND,
 } from '../../services/servicenowMockData'
 
 const SEV_CONFIG: Record<string, { color: string; bg: string; dot: string }> = {
@@ -538,7 +539,7 @@ export const IncidentsWidget: React.FC<{ platform?: string | null; days?: number
       <WidgetShell
         title="Open Incidents by Priority"
         titleIcon={<WarningAmberIcon sx={{ color: '#c62828', fontSize: 18 }} />}
-        source="PostgreSQL · edoops.service_now_inc"
+        source="PostgreSQL · edoops.service_now_inc · current open state · all time"
         loading={loading}
         error={error ?? undefined}
       >
@@ -754,6 +755,19 @@ export const IncidentListWidget: React.FC<{ platform?: string | null; days?: num
             backgroundColor: PRIORITY_CONFIG[row.priority_field]?.bg || '#eee' }} />
       ),
     },
+    {
+      key: 'sninc_state', header: 'Status', width: 110,
+      render: row => {
+        const state = (row.sninc_state || '').toLowerCase()
+        const isOpen = !['closed','resolved','cancelled','canceled','complete','completed'].includes(state)
+        return (
+          <Chip label={row.sninc_state || '—'} size="small"
+            sx={{ height: 20, fontSize: '10px', fontWeight: 700,
+              color: isOpen ? '#c62828' : '#2e7d32',
+              backgroundColor: isOpen ? '#ffebee' : '#e8f5e9' }} />
+        )
+      },
+    },
     { key: 'sninc_capability',     header: 'Capability',        width: 140, render: row => <Typography sx={{ fontSize: '11px', color: '#555' }}>{row.sninc_capability || '—'}</Typography> },
     { key: 'sninc_short_desc',     header: 'Description',       flex: 1,    render: row => <Typography sx={{ fontSize: '11px', color: '#333' }}>{row.sninc_short_desc || '—'}</Typography> },
     { key: 'sninc_assignment_grp', header: 'Assignment Group',  width: 150, render: row => <Typography sx={{ fontSize: '11px', color: '#666' }}>{row.sninc_assignment_grp || '—'}</Typography> },
@@ -761,9 +775,9 @@ export const IncidentListWidget: React.FC<{ platform?: string | null; days?: num
 
   return (
     <WidgetShell
-      title="Open Incidents"
+      title="All Incidents"
       titleIcon={<WarningAmberIcon sx={{ color: '#1565c0', fontSize: 18 }} />}
-      source="PostgreSQL · edoops.service_now_inc"
+      source="PostgreSQL · edoops.service_now_inc · most recent per incident"
       loading={loading}
       error={error ?? undefined}
     >
@@ -1043,6 +1057,51 @@ export const PipelinesWidget: React.FC = () => {
   )
 }
 
+// ─── Incident Trend Widget ────────────────────────────────
+
+export const IncidentTrendWidget: React.FC<{ platform?: string | null; days?: number }> = ({ platform, days = 7 }) => {
+  const [data, setData] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const { useMock } = useMockData()
+
+  useEffect(() => {
+    setLoading(true); setData([]); setError(null)
+    if (useMock) { setData(MOCK_SERVICENOW_INCIDENT_TREND); setLoading(false); return }
+    servicenowService.getIncidentTrend(platform ?? undefined, days)
+      .then(d => { setData(Array.isArray(d) ? d : []); setLoading(false) })
+      .catch(err => { setError(err.message || 'Failed to fetch'); setLoading(false) })
+  }, [useMock, platform, days])
+
+  return (
+    <WidgetShell
+      title="Incident Volume by Day"
+      titleIcon={<TrendingUpIcon sx={{ color: '#c62828', fontSize: 18 }} />}
+      source={`PostgreSQL · edoops.service_now_inc · last ${days}d · most recent per incident per day`}
+      loading={loading}
+      error={error ?? undefined}
+    >
+      {!error && (
+        <Box sx={{ flex: 1, px: 1, py: 1, minHeight: 0 }}>
+          <ComposedBarLineChart
+            data={data}
+            xKey="day"
+            bars={[
+              { key: 'open',   label: 'Open',   color: '#c62828' },
+              { key: 'closed', label: 'Closed', color: '#2e7d32' },
+            ]}
+            lines={[
+              { key: 'total', label: 'Total', color: '#1565c0', dashed: false },
+            ]}
+            height={220}
+            showBarLabels
+          />
+        </Box>
+      )}
+    </WidgetShell>
+  )
+}
+
 // ─── ServiceNow Dashboard (full-page layout) ───────────────
 
 import SupportAgentIcon from '@mui/icons-material/SupportAgent'
@@ -1177,7 +1236,24 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
         </Paper>
       </Box>
 
-      {/* ── Row 2: Incident list (full width) ── */}
+      {/* ── Row 2: Incident volume trend (full width) ── */}
+      <Paper
+        elevation={0}
+        sx={{
+          borderRadius: 2,
+          overflow: 'hidden',
+          border: '1px solid #e8ecf1',
+          borderTop: '3px solid #c62828',
+          boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+          display: 'flex',
+          flexDirection: 'column',
+          height: 310,
+        }}
+      >
+        <IncidentTrendWidget platform={selectedPlatform} days={days} />
+      </Paper>
+
+      {/* ── Row 3: Incident list (full width) ── */}
       <Paper
         elevation={0}
         sx={{
@@ -1197,7 +1273,7 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
         <IncidentListWidget platform={selectedPlatform} days={days} />
       </Paper>
 
-      {/* ── Row 3: By Capability + By Assignment Group ── */}
+      {/* ── Row 4: By Capability + By Assignment Group ── */}
       <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, alignItems: 'stretch' }}>
         <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #1565c0', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
           <CapabilityWidget platform={selectedPlatform} days={days} />

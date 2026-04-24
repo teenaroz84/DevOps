@@ -30,4 +30,6 @@ export const servicenowService = {
     apiClient.get(withDays('/api/servicenow/by-capability', days, platform)),
   getByAssignmentGroup: (platform?: string, days = 7) =>
     apiClient.get(withDays('/api/servicenow/by-assignment-group', days, platform)),
+  getIncidentTrend: (platform?: string, days = 7) =>
+    apiClient.get(withDays('/api/servicenow/incident-trend', days, platform)),
 }

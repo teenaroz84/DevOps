@@ -26,6 +26,7 @@ import { MOCK_DMF_SUMMARY, MOCK_DMF_RUNS_OVER_TIME } from '../../services/dmfMoc
 import { MOCK_TALEND_SUMMARY } from '../../services/talendMockData'
 import { MOCK_SERVICENOW_INCIDENTS, MOCK_SERVICENOW_TICKETS } from '../../services/servicenowMockData'
 import { MOCK_ESP_JOB_COUNTS } from '../../services/espMockData'
+import { MOCK_SF_PLATFORM_SUMMARY } from '../../services/snowflakeMockData'
 import { useMockData } from '../../context/MockDataContext'
 import { SESSION_ID } from '../../services/session'
 import { AGENTS } from '../../config/agentConfig'
@@ -42,10 +43,10 @@ const SOURCES: {
   sub: string
 }[] = [
   { key: 'overview',   label: 'Overview',        icon: <DashboardIcon />,    accent: TRUIST.sky, sub: 'Executive Summary' },
-  { key: 'servicenow', label: 'ServiceNow',      icon: <SupportAgentIcon />, accent: TRUIST.dawn, sub: '' },
-  { key: 'pipeline',   label: 'ESP',             icon: <CloudIcon />,        accent: TRUIST.dusk, sub: '' },
-  { key: 'dmf',        label: 'DMF',             icon: <StorageIcon />,      accent: TRUIST.darkGray, sub: '' },
   { key: 'logs',       label: 'Talend',          icon: <AccountTreeIcon />,  accent: TRUIST.dawn, sub: '' },
+  { key: 'dmf',        label: 'DMF',             icon: <StorageIcon />,      accent: TRUIST.darkGray, sub: '' },
+  { key: 'pipeline',   label: 'ESP',             icon: <CloudIcon />,        accent: TRUIST.dusk, sub: '' },
+  { key: 'servicenow', label: 'ServiceNow',      icon: <SupportAgentIcon />, accent: TRUIST.dawn, sub: '' },
   { key: 'snowflake',  label: 'Snowflake',       icon: <AcUnitIcon />,       accent: TRUIST.sky, sub: '' },
 ]
 
@@ -109,6 +110,12 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
 
   useEffect(() => {
     setLoadingSnowflake(true)
+    if (useMock) {
+      setCost(null)
+      setSnowflakePlatform(MOCK_SF_PLATFORM_SUMMARY)
+      setLoadingSnowflake(false)
+      return
+    }
     snowflakeService.getCost({ asOf: OVERVIEW_SNOWFLAKE_AS_OF })
       .then(setCost)
       .catch(() => setCost(null))
@@ -117,7 +124,7 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
     snowflakeService.getPlatformSummary({ asOf: OVERVIEW_SNOWFLAKE_AS_OF })
       .then(setSnowflakePlatform)
       .catch(() => setSnowflakePlatform(null))
-  }, [])
+  }, [useMock])
 
   useEffect(() => {
     setLoadingCore(true)
@@ -167,7 +174,7 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
   }
 
   // ── Derived metrics ──────────────────────────────────────
-  const budgetPct = cost ? Math.round((cost.total / cost.budget) * 100) : 0
+
 
   // Talend derived
   const talendBreakdown: any[] = talendSummary?.statusBreakdown ?? []
@@ -242,8 +249,9 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
   ]
 
   // Failure volume comparison
-  const sfTaskFailures = snowflakePlatform?.task_failures ?? 0
-  const sfQueryErrors  = snowflakePlatform?.query_errors  ?? 0
+  const sfTaskFailures  = snowflakePlatform?.task_failures       ?? 0
+  const sfQueryErrors   = snowflakePlatform?.query_errors        ?? 0
+  const sfCreditsUsed   = snowflakePlatform?.warehouse_credits_used ?? 0
   const combinedFailures = (dmfSummary?.failedRuns?.value ?? 0) + talendFailed + sfTaskFailures
   const dmfTicketCount   = ticketsBySource['DMF'] ?? 0
   // ── Global KPI strip (one number from each source) ────────
@@ -277,16 +285,13 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
       description: 'Talend task executions that reached a failed state. Last 7 days.',
     },
     {
-      label: 'Budget Usage',
-      value: budgetPct || '—',
-      unit: budgetPct ? '%' : '',
-      color: budgetPct > 110 ? '#c62828' : budgetPct > 100 ? '#f57c00' : '#2e7d32',
-      bg: budgetPct > 110 ? '#fce4ec' : budgetPct > 100 ? '#fff3e0' : '#e8f5e9',
-      trend: cost
-        ? `$${(cost.total / 1000).toFixed(0)}K of $${(cost.budget / 1000).toFixed(0)}K · as of ${OVERVIEW_SNOWFLAKE_AS_OF_LABEL}`
-        : 'Snowflake',
+      label: 'Credits Used',
+      value: sfCreditsUsed > 0 ? sfCreditsUsed.toLocaleString() : '—',
+      color: '#6a1b9a',
+      bg: '#f3e5f5',
+      trend: `Snowflake warehouse credits · as of ${OVERVIEW_SNOWFLAKE_AS_OF_LABEL}`,
       trendPositiveIsGood: false,
-      description: `Snowflake compute + infrastructure budget utilisation as of ${OVERVIEW_SNOWFLAKE_AS_OF_LABEL}.`,
+      description: 'Snowflake warehouse credits consumed in the current summary period.',
     },
   ]
 
@@ -303,56 +308,30 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
 
   const snapshots: SnapshotDef[] = [
     {
-      key: 'servicenow',
-      prefKey: 'snapServiceNow',
-      title: 'ServiceNow',
-      accent: '#c62828',
-      source: 'ITSM · open incidents · last 7 days',
+      key: 'logs',
+      prefKey: 'snapLogs',
+      title: 'Talend',
+      accent: '#e65100',
+      source: 'PostgreSQL · edoops.talend_logs_dashboard · last 7 days',
       kpis: [
-        { label: 'P1 Incidents', value: p1Incidents,
-          color: p1Incidents > 0 ? '#c62828' : '#2e7d32', bg: p1Incidents > 0 ? '#fce4ec' : '#e8f5e9',
-          description: 'Critical P1 incidents currently open (last 7 days).',
-          dialogStats: [{ label: 'P2', value: p2Incidents }, { label: 'P3', value: p3Incidents }] },
-        { label: 'P2 Incidents', value: p2Incidents,
-          color: p2Incidents > 0 ? '#f57c00' : '#2e7d32', bg: p2Incidents > 0 ? '#fff3e0' : '#e8f5e9',
-          description: 'High priority P2 incidents open in the last 7 days.',
-          dialogStats: [{ label: 'P1', value: p1Incidents }, { label: 'P3', value: p3Incidents }] },
-        { label: 'Open Tickets', value: openTickets,
+        { label: 'Total Runs',  value: talendTotal,
           color: '#1565c0', bg: '#e3f2fd',
-          description: 'Total unresolved tickets across all priorities (last 7 days).',
-          dialogStats: [{ label: 'SLA Breached', value: slaBreached }] },
-        { label: 'SLA Breached', value: slaBreached,
-          color: slaBreached > 0 ? '#c62828' : '#2e7d32', bg: slaBreached > 0 ? '#fce4ec' : '#e8f5e9',
-          description: 'Tickets that have violated their SLA commitment (last 7 days).',
-          dialogStats: [{ label: 'Open', value: openTickets }, { label: 'P1', value: p1Incidents }] },
-      ],
-      alert: p1Incidents > 0 ? `⚠ ${p1Incidents} P1 incident${p1Incidents > 1 ? 's' : ''} active` : undefined,
-    },
-    {
-      key: 'pipeline',
-      prefKey: 'snapPipeline',
-      title: 'ESP',
-      accent: '#2e7d32',
-      source: 'Enterprise Data Platform · job catalog (current)',
-      kpis: [
-        { label: 'Applications', value: totalEspApps,
+          description: 'Total Talend task executions in the last 7 days.',
+          dialogStats: [{ label: 'Success', value: talendSuccess }, { label: 'Failed', value: talendFailed }] },
+        { label: 'Successful',  value: talendSuccess,
           color: '#2e7d32', bg: '#e8f5e9',
-          description: 'Number of distinct ESP scheduler applications.',
-          dialogStats: [{ label: 'Total Jobs', value: capCount(totalEspJobs) }] },
-        { label: 'Total Jobs',   value: capCount(totalEspJobs),
-          color: '#1565c0', bg: '#e3f2fd',
-          description: 'Total job definitions across all ESP applications.',
-          dialogStats: [{ label: 'Applications', value: totalEspApps }, { label: 'Avg / App', value: capCount(avgJobsPerApp) }] },
-        { label: 'Largest App',  value: capCount(parseInt(topEspApp?.total_jobs, 10) || 0),
-          color: '#546e7a', bg: '#eceff1',
-          description: `Application with the most job definitions${topEspApp ? ` (${topEspApp.appl_name})` : ''}.`,
-          dialogStats: topEspApp ? [{ label: 'App', value: topEspApp.appl_name }] : [] },
-        { label: 'Avg Jobs / App', value: totalEspApps > 0 ? capCount(avgJobsPerApp) : '—',
-          color: '#7b1fa2', bg: '#f3e5f5',
-          description: 'Average number of job definitions per ESP application.',
-          dialogStats: [{ label: 'Applications', value: totalEspApps }, { label: 'Total Jobs', value: capCount(totalEspJobs) }] },
+          description: 'Tasks that completed successfully in the last 7 days.',
+          dialogStats: [{ label: 'Total', value: talendTotal }, { label: 'Failed', value: talendFailed }] },
+        { label: 'Failed',      value: talendFailed,
+          color: talendFailed > 0 ? '#c62828' : '#2e7d32', bg: talendFailed > 0 ? '#fce4ec' : '#e8f5e9',
+          description: 'Tasks that reached a failed state in the last 7 days.',
+          dialogStats: [{ label: 'Fail Rate', value: `${talendFailPct}%` }, { label: 'Total', value: talendTotal }] },
+        { label: 'Running',     value: talendRunning,
+          color: '#f57c00', bg: '#fff3e0',
+          description: 'Tasks currently executing.',
+          dialogStats: [{ label: 'Total', value: talendTotal }, { label: 'Success', value: talendSuccess }] },
       ],
-      alert: undefined,
+      alert: talendFailed > 10 ? `⚠ ${talendFailed} failed execution${talendFailed > 1 ? 's' : ''} this period` : undefined,
     },
     {
       key: 'dmf',
@@ -383,30 +362,56 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
         : undefined,
     },
     {
-      key: 'logs',
-      prefKey: 'snapLogs',
-      title: 'Talend',
-      accent: '#e65100',
-      source: 'PostgreSQL · edoops.talend_logs_dashboard · last 7 days',
+      key: 'pipeline',
+      prefKey: 'snapPipeline',
+      title: 'ESP',
+      accent: '#2e7d32',
+      source: 'Enterprise Data Platform · job catalog (current)',
       kpis: [
-        { label: 'Total Runs',  value: talendTotal,
-          color: '#1565c0', bg: '#e3f2fd',
-          description: 'Total Talend task executions in the last 7 days.',
-          dialogStats: [{ label: 'Success', value: talendSuccess }, { label: 'Failed', value: talendFailed }] },
-        { label: 'Successful',  value: talendSuccess,
+        { label: 'Applications', value: totalEspApps,
           color: '#2e7d32', bg: '#e8f5e9',
-          description: 'Tasks that completed successfully in the last 7 days.',
-          dialogStats: [{ label: 'Total', value: talendTotal }, { label: 'Failed', value: talendFailed }] },
-        { label: 'Failed',      value: talendFailed,
-          color: talendFailed > 0 ? '#c62828' : '#2e7d32', bg: talendFailed > 0 ? '#fce4ec' : '#e8f5e9',
-          description: 'Tasks that reached a failed state in the last 7 days.',
-          dialogStats: [{ label: 'Fail Rate', value: `${talendFailPct}%` }, { label: 'Total', value: talendTotal }] },
-        { label: 'Running',     value: talendRunning,
-          color: '#f57c00', bg: '#fff3e0',
-          description: 'Tasks currently executing.',
-          dialogStats: [{ label: 'Total', value: talendTotal }, { label: 'Success', value: talendSuccess }] },
+          description: 'Number of distinct ESP scheduler applications.',
+          dialogStats: [{ label: 'Total Jobs', value: capCount(totalEspJobs) }] },
+        { label: 'Total Jobs',   value: capCount(totalEspJobs),
+          color: '#1565c0', bg: '#e3f2fd',
+          description: 'Total job definitions across all ESP applications.',
+          dialogStats: [{ label: 'Applications', value: totalEspApps }, { label: 'Avg / App', value: capCount(avgJobsPerApp) }] },
+        { label: 'Largest App',  value: capCount(parseInt(topEspApp?.total_jobs, 10) || 0),
+          color: '#546e7a', bg: '#eceff1',
+          description: `Application with the most job definitions${topEspApp ? ` (${topEspApp.appl_name})` : ''}.`,
+          dialogStats: topEspApp ? [{ label: 'App', value: topEspApp.appl_name }] : [] },
+        { label: 'Avg Jobs / App', value: totalEspApps > 0 ? capCount(avgJobsPerApp) : '—',
+          color: '#7b1fa2', bg: '#f3e5f5',
+          description: 'Average number of job definitions per ESP application.',
+          dialogStats: [{ label: 'Applications', value: totalEspApps }, { label: 'Total Jobs', value: capCount(totalEspJobs) }] },
       ],
-      alert: talendFailed > 10 ? `⚠ ${talendFailed} failed execution${talendFailed > 1 ? 's' : ''} this period` : undefined,
+      alert: undefined,
+    },
+    {
+      key: 'servicenow',
+      prefKey: 'snapServiceNow',
+      title: 'ServiceNow',
+      accent: '#c62828',
+      source: 'ITSM · open incidents · last 7 days',
+      kpis: [
+        { label: 'P1 Incidents', value: p1Incidents,
+          color: p1Incidents > 0 ? '#c62828' : '#2e7d32', bg: p1Incidents > 0 ? '#fce4ec' : '#e8f5e9',
+          description: 'Critical P1 incidents currently open (last 7 days).',
+          dialogStats: [{ label: 'P2', value: p2Incidents }, { label: 'P3', value: p3Incidents }] },
+        { label: 'P2 Incidents', value: p2Incidents,
+          color: p2Incidents > 0 ? '#f57c00' : '#2e7d32', bg: p2Incidents > 0 ? '#fff3e0' : '#e8f5e9',
+          description: 'High priority P2 incidents open in the last 7 days.',
+          dialogStats: [{ label: 'P1', value: p1Incidents }, { label: 'P3', value: p3Incidents }] },
+        { label: 'Open Tickets', value: openTickets,
+          color: '#1565c0', bg: '#e3f2fd',
+          description: 'Total unresolved tickets across all priorities (last 7 days).',
+          dialogStats: [{ label: 'SLA Breached', value: slaBreached }] },
+        { label: 'SLA Breached', value: slaBreached,
+          color: slaBreached > 0 ? '#c62828' : '#2e7d32', bg: slaBreached > 0 ? '#fce4ec' : '#e8f5e9',
+          description: 'Tickets that have violated their SLA commitment (last 7 days).',
+          dialogStats: [{ label: 'Open', value: openTickets }, { label: 'P1', value: p1Incidents }] },
+      ],
+      alert: p1Incidents > 0 ? `⚠ ${p1Incidents} P1 incident${p1Incidents > 1 ? 's' : ''} active` : undefined,
     },
   ]
 
@@ -537,22 +542,6 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
         )}
       </Paper>
 
-      <Box sx={{ px: 0.25, pb: 0.25 }}>
-        <Chip
-          label={`Overview Snowflake metrics pinned to ${OVERVIEW_SNOWFLAKE_AS_OF_LABEL} for meaningful sample data`}
-          size="small"
-          sx={{
-            height: 22,
-            fontSize: '10px',
-            fontWeight: 700,
-            backgroundColor: '#eef7f8',
-            color: TRUIST.purple,
-            border: `1px solid ${TRUIST.sky}`,
-            '& .MuiChip-label': { px: 1.2 },
-          }}
-        />
-      </Box>
-
       {/* ── Cross-source KPI strip ── */}
       {prefs.kpiStrip && (
         <Paper sx={{ borderRadius: 2, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
@@ -607,12 +596,11 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
                         sublabel: `${openTickets} open tickets · ${slaBreached} SLA breached`,
                       },
                       {
-                        label: 'Budget Usage',
-                        value: Math.min(budgetPct, 120),
-                        suffix: '%',
-                        color: budgetPct > 110 ? '#c62828' : budgetPct > 100 ? '#f57c00' : '#2e7d32',
-                        max: 120,
-                        sublabel: cost ? `Snowflake · $${(cost.total / 1000).toFixed(0)}K / $${(cost.budget / 1000).toFixed(0)}K · as of ${OVERVIEW_SNOWFLAKE_AS_OF_LABEL}` : `Snowflake · as of ${OVERVIEW_SNOWFLAKE_AS_OF_LABEL}`,
+                        label: 'Credits Used',
+                        value: sfCreditsUsed,
+                        max: Math.max(sfCreditsUsed, 5000),
+                        color: sfCreditsUsed > 4000 ? '#c62828' : sfCreditsUsed > 2500 ? '#f57c00' : '#6a1b9a',
+                        sublabel: `Snowflake warehouse credits · as of ${OVERVIEW_SNOWFLAKE_AS_OF_LABEL}`,
                       },
                     ]}
                     barHeight={10}

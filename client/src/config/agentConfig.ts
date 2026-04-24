@@ -176,9 +176,9 @@ export const FULLSCREEN_AGENT_MENUS: Array<{
   mockOnly?: boolean
 }> = [
   { menuId: 'chat',            agentId: 'knowledge',  label: 'TDT Knowledge Assist' },
-  { menuId: 'esp-chat',        agentId: 'esp',        label: 'TDT ESP Agent' },
-  { menuId: 'dmf-chat',        agentId: 'dmf',        label: 'TDT DMF Agent' },
-  { menuId: 'servicenow-chat', agentId: 'servicenow', label: 'TDT ServiceNow Agent' },
   { menuId: 'talend-chat',     agentId: 'talend',     label: 'TDT Talend Agent' },
+  { menuId: 'dmf-chat',        agentId: 'dmf',        label: 'TDT DMF Agent' },
+  { menuId: 'esp-chat',        agentId: 'esp',        label: 'TDT ESP Agent' },
+  { menuId: 'servicenow-chat', agentId: 'servicenow', label: 'TDT ServiceNow Agent' },
   { menuId: 'snowflake-chat',  agentId: 'snowflake',  label: 'TDT Snowflake Agent', mockOnly: true },
 ]

@@ -5,7 +5,7 @@ import { Router, Request, Response } from 'express';
 import { getPgPool } from '../db/postgres';
 
 const router = Router();
-
+p
 async function safeQuery(sql: string, fallback: any[] = []): Promise<any[]> {
   const pool = getPgPool();
   try { const { rows } = await pool.query(sql); return rows; } catch (e: any) { console.error('DMF query error:', e.message); return fallback; }
@@ -248,7 +248,7 @@ router.get('/lineage/jobs', async (req: Request, res: Response) => {
 
     // COUNT(*) OVER() returns the true total in the same pass — no second query needed.
     const { rows } = await pool.query(`
-      SELECT proc_dt, src_cd, dataset_nm, proc_typ_cd,
+      SELECT run_id, proc_dt, src_cd, dataset_nm, proc_typ_cd,
              src_nm, tgt_nm, run_strt_tm, run_end_tm, run_status,
              COUNT(*) OVER() AS total_rows
       FROM edoops.DMF_RUN_MASTER
@@ -264,6 +264,7 @@ router.get('/lineage/jobs', async (req: Request, res: Response) => {
       total,
       rows: rows.map((r: any, i: number) => ({
         id:              `${pageNum}-${i}-${r.src_cd}-${r.proc_dt}`,
+        runId:           r.run_id      || '',
         processDate:     r.proc_dt     ? String(r.proc_dt).split('T')[0]     : '',
         sourceCode:      r.src_cd      || '',
         datasetName:     r.dataset_nm  || '',
