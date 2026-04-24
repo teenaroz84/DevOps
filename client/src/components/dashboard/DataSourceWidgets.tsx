@@ -547,7 +547,7 @@ export const IncidentsWidget: React.FC<{ platform?: string | null }> = ({ platfo
       <WidgetShell
         title="Current Open Incidents"
         titleIcon={<WarningAmberIcon sx={{ color: '#c62828', fontSize: 18 }} />}
-        source="PostgreSQL · edoops.service_now_inc · current open state · all time"
+        source="edoops.service_now_inc . All Open . All time"
         actions={<WidgetInfo text="Shows the count of currently open incidents grouped by priority (P1–P5). Filters only active incidents using state — closed, resolved, and cancelled are excluded. The days slider does not affect this widget. Count always reflects the live open state." />}
         loading={loading}
         error={error ?? undefined}
@@ -615,7 +615,7 @@ export const MissedIncidentsWidget: React.FC<{ platform?: string | null; days?: 
       <WidgetShell
         title="Top Incidents by SLA"
         titleIcon={<WarningAmberIcon sx={{ color: TRUIST.darkGray, fontSize: 18 }} />}
-        source={`PostgreSQL · edoops.service_now_inc · opened in last ${days}d`}
+        source={`edoops.service_now_inc · opened in last ${days}d`}
         actions={<WidgetInfo text={`Shows all incidents opened in the last ${days} days, grouped by priority with SLA breach status. The SLA breach is calculated from the incident's opened date vs. the resolution SLA target for that priority. Use the days slider to change the opened date window.`} />}
         loading={loading}
         error={error ?? undefined}
@@ -1077,13 +1077,14 @@ export const IncidentTrendWidget: React.FC<{ platform?: string | null; days?: nu
 
   const formatDayLabel = (value: string | number) => {
     if (typeof value !== 'string' || !value) return String(value ?? '')
-    const parsed = new Date(`${value}T00:00:00`)
-    if (Number.isNaN(parsed.getTime())) return value
-    return parsed.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    })
+    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+    if (!match) return value
+    const [, year, month, day] = match
+    const monthIndex = Number(month) - 1
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    const monthLabel = monthNames[monthIndex]
+    if (!monthLabel) return value
+    return `${monthLabel} ${Number(day)} ${year}`
   }
 
   useEffect(() => {
