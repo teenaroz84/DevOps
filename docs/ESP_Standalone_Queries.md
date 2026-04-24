@@ -173,37 +173,17 @@ LIMIT 200;
 
 ---
 
-### Platform Job List (Paginated Table with Run Status)
+### Platform Job List (Paginated Table)
 ```sql
-WITH filtered_jobs AS (
-  SELECT DISTINCT ON (c.jobname)
-    c.jobname, c.appl_name, c.jobtype AS job_type, c.last_run_date
-  FROM edoops.esp_job_cmnd c
-  JOIN (
-    SELECT DISTINCT appl_name, jobname FROM edoops.esp_job_config
-    WHERE pltf_name = '$platform' AND appl_name IS NOT NULL AND jobname IS NOT NULL
-  ) cfg ON cfg.appl_name = c.appl_name AND cfg.jobname = c.jobname
-  ORDER BY c.jobname, c.last_run_date DESC NULLS LAST
-),
-latest_status AS (
-  SELECT DISTINCT ON (s.job_longname, s.appl_name)
-    s.job_longname, s.appl_name, s.ccfail
-  FROM edoops.esp_job_stats_recent s
-  JOIN filtered_jobs f ON f.jobname = s.job_longname AND f.appl_name = s.appl_name
-  ORDER BY s.job_longname, s.appl_name,
-           s.end_date DESC NULLS LAST, s.end_time DESC NULLS LAST
-)
-SELECT
-  f.jobname, f.appl_name, f.job_type, f.last_run_date,
-  CASE
-    WHEN UPPER(TRIM(ls.ccfail)) = 'YES' THEN 'FAILED'
-    WHEN UPPER(TRIM(ls.ccfail)) = 'NO'  THEN 'SUCCESS'
-    WHEN f.last_run_date IS NULL         THEN 'NEVER RUN'
-    ELSE 'UNKNOWN'
-  END AS run_status
-FROM filtered_jobs f
-LEFT JOIN latest_status ls ON ls.job_longname = f.jobname AND ls.appl_name = f.appl_name
-ORDER BY f.last_run_date DESC NULLS LAST, f.jobname
+SELECT DISTINCT ON (c.jobname)
+  c.jobname, c.appl_name, c.jobtype AS job_type, c.last_run_date
+FROM edoops.esp_job_cmnd c
+JOIN (
+  SELECT DISTINCT appl_name, jobname FROM edoops.esp_job_config
+  WHERE pltf_name = '$platform' AND appl_name IS NOT NULL AND jobname IS NOT NULL
+) cfg ON cfg.appl_name = c.appl_name AND cfg.jobname = c.jobname
+-- AND c.appl_name = '$appl_name'   -- optional: filter to one applib
+ORDER BY c.jobname, c.last_run_date DESC NULLS LAST
 LIMIT 2000 OFFSET 0;
 ```
 
@@ -266,12 +246,15 @@ ORDER BY jobname;
 
 ## Application-Level Widgets
 
+All application-level queries accept an optional platform filter (`AND cfg.pltf_name = '$platform'`) to scope counts correctly when an applib belongs to a specific platform. Shown as a commented line below.
+
 ### Job Count (KPI)
 ```sql
 SELECT COUNT(DISTINCT c.jobname)::int AS job_count
 FROM edoops.esp_job_cmnd c
 JOIN edoops.esp_job_config cfg ON cfg.appl_name = c.appl_name AND cfg.jobname = c.jobname
-WHERE c.appl_name = '$appl_name';
+WHERE c.appl_name = '$appl_name'
+-- AND cfg.pltf_name = '$platform';
 ```
 
 ---
@@ -282,6 +265,7 @@ SELECT COUNT(DISTINCT c.jobname)::int AS idle_count
 FROM edoops.esp_job_cmnd c
 JOIN edoops.esp_job_config cfg ON cfg.appl_name = c.appl_name AND cfg.jobname = c.jobname
 WHERE c.appl_name = '$appl_name'
+-- AND cfg.pltf_name = '$platform'
   AND c.last_run_date IS NOT NULL
   AND c.last_run_date::timestamp < NOW() - INTERVAL '2 days';
 ```
@@ -294,6 +278,7 @@ SELECT COUNT(DISTINCT c.jobname)::int AS special_count
 FROM edoops.esp_job_cmnd c
 JOIN edoops.esp_job_config cfg ON cfg.appl_name = c.appl_name AND cfg.jobname = c.jobname
 WHERE c.appl_name = '$appl_name'
+-- AND cfg.pltf_name = '$platform'
   AND (c.jobname LIKE '%JSDELAY%' OR c.jobname LIKE '%RETRIG%');
 ```
 
@@ -305,6 +290,7 @@ SELECT COALESCE(c.agent, 'Null') AS name, COUNT(*)::int AS count
 FROM edoops.esp_job_cmnd c
 JOIN edoops.esp_job_config cfg ON cfg.appl_name = c.appl_name AND cfg.jobname = c.jobname
 WHERE c.appl_name = '$appl_name'
+-- AND cfg.pltf_name = '$platform'
 GROUP BY c.agent
 ORDER BY count DESC;
 ```
@@ -317,6 +303,7 @@ SELECT COALESCE(c.jobtype, 'Null') AS name, COUNT(*)::int AS count
 FROM edoops.esp_job_cmnd c
 JOIN edoops.esp_job_config cfg ON cfg.appl_name = c.appl_name AND cfg.jobname = c.jobname
 WHERE c.appl_name = '$appl_name'
+-- AND cfg.pltf_name = '$platform'
 GROUP BY c.jobtype
 ORDER BY count DESC;
 ```
@@ -329,6 +316,7 @@ SELECT COALESCE(CAST(c.cmpl_cd AS TEXT), 'Null') AS name, COUNT(*)::int AS count
 FROM edoops.esp_job_cmnd c
 JOIN edoops.esp_job_config cfg ON cfg.appl_name = c.appl_name AND cfg.jobname = c.jobname
 WHERE c.appl_name = '$appl_name'
+-- AND cfg.pltf_name = '$platform'
 GROUP BY c.cmpl_cd
 ORDER BY count DESC;
 ```
@@ -341,39 +329,22 @@ SELECT COALESCE(c.user_job, 'Null') AS name, COUNT(*)::int AS count
 FROM edoops.esp_job_cmnd c
 JOIN edoops.esp_job_config cfg ON cfg.appl_name = c.appl_name AND cfg.jobname = c.jobname
 WHERE c.appl_name = '$appl_name'
+-- AND cfg.pltf_name = '$platform'
 GROUP BY c.user_job
 ORDER BY count DESC;
 ```
 
 ---
 
-### Job List with Run Status (Table)
+### Job List (Table)
 ```sql
-SELECT
-  c.jobname, c.jobtype AS job_type, c.last_run_date,
-  CASE
-    WHEN latest.ccfail = 'YES' THEN 'FAILED'
-    WHEN latest.ccfail = 'NO'  THEN 'SUCCESS'
-    WHEN c.last_run_date IS NULL THEN 'NEVER RUN'
-    ELSE 'UNKNOWN'
-  END AS run_status
-FROM (
-  SELECT DISTINCT ON (c.jobname)
-    c.jobname, c.jobtype, c.last_run_date, c.appl_name
-  FROM edoops.esp_job_cmnd c
-  JOIN edoops.esp_job_config cfg ON cfg.appl_name = c.appl_name AND cfg.jobname = c.jobname
-  WHERE c.appl_name = '$appl_name'
-  ORDER BY c.jobname, c.last_run_date DESC NULLS LAST
-) c
-LEFT JOIN LATERAL (
-  SELECT s.ccfail
-  FROM edoops.esp_job_stats_recent s
-  WHERE s.appl_name = c.appl_name AND s.job_longname = c.jobname
-  ORDER BY s.end_date DESC NULLS LAST, s.end_time DESC NULLS LAST,
-           s.start_date DESC NULLS LAST, s.start_time DESC NULLS LAST
-  LIMIT 1
-) latest ON true
-ORDER BY c.last_run_date DESC NULLS LAST, c.jobname;
+SELECT DISTINCT ON (c.jobname)
+  c.jobname, c.jobtype AS job_type, c.last_run_date
+FROM edoops.esp_job_cmnd c
+JOIN edoops.esp_job_config cfg ON cfg.appl_name = c.appl_name AND cfg.jobname = c.jobname
+WHERE c.appl_name = '$appl_name'
+-- AND cfg.pltf_name = '$platform'
+ORDER BY c.jobname, c.last_run_date DESC NULLS LAST;
 ```
 
 ---
@@ -421,6 +392,7 @@ SELECT c.jobname, c.command, c.argument, c.agent,
 FROM edoops.esp_job_cmnd c
 JOIN edoops.esp_job_config cfg ON cfg.appl_name = c.appl_name AND cfg.jobname = c.jobname
 WHERE c.appl_name = '$appl_name'
+-- AND cfg.pltf_name = '$platform'
 ORDER BY c.jobname;
 ```
 
