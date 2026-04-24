@@ -34,15 +34,14 @@ router.get('/incidents', async (req: Request, res: Response) => {
              COUNT(*)::int     AS incident_count
       FROM (
         SELECT DISTINCT ON (sn.sninc_inc_num)
-               sn.sninc_priority,
-               sn.sninc_applkp_pltf_nm
+               sn.sninc_priority
         FROM   edoops.service_now_inc sn
         WHERE  ${OPEN_INCIDENT_FILTER}
+          ${platformClause}
         ORDER BY sn.sninc_inc_num, sn.sninc_last_updt_dttm DESC
       ) sn
       JOIN   edoops.sla_glossary sg
         ON   sn.sninc_priority = sg.snow_priority
-      WHERE  ${platformClause ? `1=1 ${platformClause}` : '1=1'}
       GROUP BY sg.short_priority
       ORDER BY CASE sg.short_priority
                  WHEN 'P1' THEN 1
@@ -126,35 +125,31 @@ router.get('/incident-list', async (req: Request, res: Response) => {
     const platformClause = platform ? `AND latest.sninc_applkp_pltf_nm = $1` : '';
     const params = platform ? [platform] : [];
     const result = await pool.query(`
-      -- Active-during-period: incident existed and was open at any point in the window.
-      -- Includes: all currently open incidents + any incident closed (sninc_closed_at)
-      -- or resolved (sninc_resolved_at / sninc_last_updt_dttm) within the period.
-      SELECT sninc_inc_num, priority_field, sninc_state, sninc_capability, sninc_short_desc, sninc_assignment_grp
+      SELECT latest.sninc_inc_num,
+             sg.short_priority       AS priority_field,
+             latest.sninc_state,
+             latest.sninc_capability,
+             latest.sninc_short_desc,
+             latest.sninc_assignment_grp
       FROM (
         SELECT DISTINCT ON (sn.sninc_inc_num)
-               sn.sninc_inc_num        AS sninc_inc_num,
-               sg.short_priority       AS priority_field,
-               sn.sninc_state          AS sninc_state,
-               sn.sninc_capability     AS sninc_capability,
-               sn.sninc_short_desc     AS sninc_short_desc,
-               sn.sninc_assignment_grp AS sninc_assignment_grp,
+               sn.sninc_inc_num,
+               sn.sninc_priority,
+               sn.sninc_state,
+               sn.sninc_capability,
+               sn.sninc_short_desc,
+               sn.sninc_assignment_grp,
                sn.sninc_applkp_pltf_nm
         FROM   edoops.service_now_inc sn
-        JOIN   edoops.sla_glossary    sg
-          ON   sn.sninc_priority = sg.snow_priority
         WHERE  (
-          -- Still open (active right now, regardless of age)
           COALESCE(LOWER(TRIM(sn.sninc_state)), '') NOT IN ('closed','resolved','canceled')
-          OR
-          -- Closed within the window (sninc_closed_at is set when state = 'closed')
-          sn.sninc_closed_at::timestamp >= NOW() - INTERVAL '${days} days'
-          OR
-          -- Resolved within the window (sninc_resolved_at when available, else last update)
-          COALESCE(sn.sninc_resolved_at, sn.sninc_last_updt_dttm)::timestamp >= NOW() - INTERVAL '${days} days'
+          OR sn.sninc_closed_at::timestamp >= NOW() - INTERVAL '${days} days'
+          OR COALESCE(sn.sninc_resolved_at, sn.sninc_last_updt_dttm)::timestamp >= NOW() - INTERVAL '${days} days'
         )
         ORDER BY sn.sninc_inc_num, sn.sninc_last_updt_dttm DESC
       ) latest
-      WHERE  1=1
+      JOIN edoops.sla_glossary sg ON latest.sninc_priority = sg.snow_priority
+      WHERE 1=1
         ${platformClause}
     `, params);
     res.json(result.rows);

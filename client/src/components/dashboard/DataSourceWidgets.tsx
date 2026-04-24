@@ -747,7 +747,7 @@ export const IncidentListWidget: React.FC<{ platform?: string | null; days?: num
       title="All Incidents"
       titleIcon={<WarningAmberIcon sx={{ color: '#1565c0', fontSize: 18 }} />}
       source={`PostgreSQL · edoops.service_now_inc · active during last ${days}d · most recent status per incident`}
-      actions={<WidgetInfo text={`Shows all incidents that were active at any point in the last ${days} days. This includes: (1) every currently open incident regardless of age, (2) any incident closed within the window (via closed date), and (3) any incident resolved within the window (via resolved date). One row per unique incident — most recent status shown. Use the slider to widen or narrow the activity window.`} />}
+      actions={<WidgetInfo text={`All incidents active in the last ${days} days — open (any age) + closed or resolved within the window. One row per incident, most recent status. Adjust with the slider.`} />}
       loading={loading}
       error={error ?? undefined}
     >
