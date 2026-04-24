@@ -910,9 +910,9 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onChatCl
           <Typography sx={{ color: '#90a4ae', fontSize: '12px' }}>
             {active.label}  {active.sub}
           </Typography>
-          <Typography sx={{ color: '#607d8b', fontSize: '11px', mt: 0.25 }}>
+          {/* <Typography sx={{ color: '#607d8b', fontSize: '11px', mt: 0.25 }}>
             Updated {(lastUpdatedMap[source] ?? new Date()).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}
-          </Typography>
+          </Typography> */}
         </Box>
         <Button
           onClick={onChatClick}

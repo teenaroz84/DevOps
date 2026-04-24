@@ -92,7 +92,7 @@ router.get('/missed-incidents', async (req: Request, res: Response) => {
         FROM   edoops.service_now_inc sn
         JOIN   edoops.sla_glossary sg
           ON   sn.sninc_priority = sg.snow_priority
-        WHERE  sn.sninc_last_updt_dttm::timestamp >= NOW() - INTERVAL '${days} days'
+        WHERE  sn.sninc_opened_at::timestamp >= NOW() - INTERVAL '${days} days'
         ORDER BY sn.sninc_inc_num, sn.sninc_last_updt_dttm DESC
       ) sn
       JOIN   edoops.sla_glossary sg
@@ -139,7 +139,7 @@ router.get('/incident-list', async (req: Request, res: Response) => {
         FROM   edoops.service_now_inc sn
         JOIN   edoops.sla_glossary    sg
           ON   sn.sninc_priority = sg.snow_priority
-        WHERE  sn.sninc_last_updt_dttm::timestamp >= NOW() - INTERVAL '${days} days'
+        WHERE  sn.sninc_opened_at::timestamp >= NOW() - INTERVAL '${days} days'
         ORDER BY sn.sninc_inc_num, sn.sninc_last_updt_dttm DESC
       ) latest
       WHERE  1=1
@@ -222,7 +222,7 @@ router.get('/incident-detail', async (req: Request, res: Response) => {
         JOIN   edoops.sla_glossary    sg
           ON   sn.sninc_priority = sg.snow_priority
         WHERE  ${OPEN_INCIDENT_FILTER}
-          AND sn.sninc_last_updt_dttm::timestamp >= NOW() - INTERVAL '${days} days'
+          AND sn.sninc_opened_at::timestamp >= NOW() - INTERVAL '${days} days'
         ORDER BY sn.sninc_inc_num, sn.sninc_last_updt_dttm DESC
       ) latest
       WHERE  priority_field = ANY($1)
@@ -252,7 +252,7 @@ router.get('/by-capability', async (req: Request, res: Response) => {
                sn.sninc_capability,
                sn.sninc_applkp_pltf_nm
         FROM   edoops.service_now_inc sn
-        WHERE  sn.sninc_last_updt_dttm::timestamp >= NOW() - INTERVAL '${days} days'
+        WHERE  sn.sninc_opened_at::timestamp >= NOW() - INTERVAL '${days} days'
         ORDER BY sn.sninc_inc_num, sn.sninc_last_updt_dttm DESC
       ) latest
       WHERE  sninc_capability IS NOT NULL
@@ -285,7 +285,7 @@ router.get('/by-assignment-group', async (req: Request, res: Response) => {
                sn.sninc_assignment_grp,
                sn.sninc_applkp_pltf_nm
         FROM   edoops.service_now_inc sn
-        WHERE  sn.sninc_last_updt_dttm::timestamp >= NOW() - INTERVAL '${days} days'
+        WHERE  sn.sninc_opened_at::timestamp >= NOW() - INTERVAL '${days} days'
         ORDER BY sn.sninc_inc_num, sn.sninc_last_updt_dttm DESC
       ) latest
       WHERE  sninc_assignment_grp IS NOT NULL

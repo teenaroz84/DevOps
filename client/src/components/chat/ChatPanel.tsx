@@ -240,7 +240,15 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
   const [input, setInput] = useState('')
   const [expanded, setExpanded] = useState(false)
   const [showQuickActions, setShowQuickActions] = useState(true)
-  const [panelPosition, setPanelPosition] = useState({ x: PANEL_MARGIN, y: PANEL_MARGIN })
+  const [panelPosition, setPanelPosition] = useState(() => {
+    if (typeof window === 'undefined' || fullScreen) return { x: PANEL_MARGIN, y: PANEL_MARGIN }
+    if (window.innerWidth <= 600) return { x: 0, y: 0 }
+    const defaultWidth = 440
+    const defaultHeight = Math.min(window.innerHeight - PANEL_MARGIN * 2, 820)
+    const x = Math.max(0, window.innerWidth - defaultWidth - PANEL_MARGIN)
+    const y = Math.max(PANEL_MARGIN, Math.round((window.innerHeight - defaultHeight) / 2))
+    return { x, y }
+  })
   const [dragging, setDragging] = useState(false)
   const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null)
   const popupStorageKey = `${POPUP_CHAT_STORAGE_PREFIX}${agent.id}`

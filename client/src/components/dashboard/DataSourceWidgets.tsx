@@ -624,7 +624,7 @@ export const MissedIncidentsWidget: React.FC<{ platform?: string | null; days?: 
       <WidgetShell
         title="Top Incidents by SLA"
         titleIcon={<WarningAmberIcon sx={{ color: TRUIST.darkGray, fontSize: 18 }} />}
-        source="PostgreSQL · edoops.service_now_inc"
+        source={`PostgreSQL · edoops.service_now_inc · opened in last ${days}d`}
         loading={loading}
         error={error ?? undefined}
       >
@@ -777,7 +777,7 @@ export const IncidentListWidget: React.FC<{ platform?: string | null; days?: num
     <WidgetShell
       title="All Incidents"
       titleIcon={<WarningAmberIcon sx={{ color: '#1565c0', fontSize: 18 }} />}
-      source="PostgreSQL · edoops.service_now_inc · most recent per incident"
+      source={`PostgreSQL · edoops.service_now_inc · opened in last ${days}d · most recent status per incident`}
       loading={loading}
       error={error ?? undefined}
     >
@@ -850,7 +850,7 @@ export const CapabilityWidget: React.FC<{ platform?: string | null; days?: numbe
     <WidgetShell
       title="Incidents by Capability"
       titleIcon={<BugReportIcon sx={{ color: '#1565c0', fontSize: 18 }} />}
-      source="PostgreSQL · edoops.service_now_inc"
+      source={`PostgreSQL · edoops.service_now_inc · opened in last ${days}d`}
       loading={loading}
       error={error ?? undefined}
     >
@@ -904,7 +904,7 @@ export const AssignmentGroupWidget: React.FC<{ platform?: string | null; days?: 
     <WidgetShell
       title="Incidents by Assignment Group"
       titleIcon={<ConfirmationNumberIcon sx={{ color: TRUIST.dusk, fontSize: 18 }} />}
-      source="PostgreSQL · edoops.service_now_inc"
+      source={`PostgreSQL · edoops.service_now_inc · opened in last ${days}d`}
       loading={loading}
       error={error ?? undefined}
     >
@@ -1181,7 +1181,10 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
               ListboxProps={{ sx: { fontSize: '12px' } }}
             />
           <Box sx={{ width: 160, display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
-            <Typography sx={{ fontSize: '10px', color: '#666', minWidth: 48 }}>Last {days}d</Typography>
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 48 }}>
+              <Typography sx={{ fontSize: '10px', color: '#666', lineHeight: 1.2 }}>Last {days}d</Typography>
+              <Typography sx={{ fontSize: '9px', color: '#90a4ae', lineHeight: 1.2, whiteSpace: 'nowrap' }}>by opened date</Typography>
+            </Box>
             <Slider
               size="small"
               value={days}
