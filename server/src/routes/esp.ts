@@ -358,7 +358,16 @@ router.get('/platform-job-list/:platformId', async (req: Request, res: Response)
       ),
       pool.query(`
         SELECT DISTINCT ON (c.jobname)
-          c.jobname, c.appl_name, c.jobtype AS job_type, c.last_run_date
+          c.jobname,
+          c.appl_name,
+          c.jobtype AS job_type,
+          c.last_run_date,
+          CASE
+            WHEN latest.ccfail = 'YES' THEN 'FAILED'
+            WHEN latest.ccfail = 'NO' THEN 'SUCCESS'
+            WHEN c.last_run_date IS NULL THEN 'NEVER RUN'
+            ELSE 'UNKNOWN'
+          END AS run_status
         FROM edoops.esp_job_cmnd c
         JOIN (
           SELECT DISTINCT appl_name, jobname
@@ -367,6 +376,14 @@ router.get('/platform-job-list/:platformId', async (req: Request, res: Response)
             AND appl_name IS NOT NULL
             AND jobname IS NOT NULL
         ) cfg ON cfg.appl_name = c.appl_name AND cfg.jobname = c.jobname
+        LEFT JOIN LATERAL (
+          SELECT s.ccfail
+          FROM edoops.esp_job_stats_recent s
+          WHERE s.appl_name = c.appl_name
+            AND s.job_longname = c.jobname
+          ORDER BY s.end_date DESC NULLS LAST, s.end_time DESC NULLS LAST, s.start_date DESC NULLS LAST, s.start_time DESC NULLS LAST
+          LIMIT 1
+        ) latest ON true
         WHERE 1=1${applClause.replace('appl_name', 'c.appl_name')}
         ORDER BY c.jobname, c.last_run_date DESC NULLS LAST
         LIMIT ${limitParam} OFFSET ${offsetParam}
@@ -378,6 +395,7 @@ router.get('/platform-job-list/:platformId', async (req: Request, res: Response)
       jobs: jobsResult.rows.map((x: any) => ({
         jobname: x.jobname, appl_name: x.appl_name,
         job_type: x.job_type ?? null, last_run_date: x.last_run_date,
+        run_status: x.run_status ?? null,
       })),
       total,
       limited: total > limit || offset > 0,
