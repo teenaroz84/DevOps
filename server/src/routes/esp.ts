@@ -16,7 +16,7 @@ import { getPgPool } from '../db/postgres';
 const router = Router();
 
 const ESP_DEFAULT_DAYS = 2;
-const ESP_MAX_DAYS = 5;
+const ESP_MAX_DAYS = 30;
 const ESP_SLA_VIOLATION_LIMIT = 250;
 const ESP_SLA_QUEUE_LIMIT = 25;
 const ESP_SLA_DETAIL_LIMIT = 100;

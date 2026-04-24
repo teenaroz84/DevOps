@@ -328,8 +328,12 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
     setTrendLoading(true)
     setTrendData([])
     if (useMock) {
-      const mockApp = getMockAppData(selected)
-      setTrendData((mockApp?.job_run_trend as any) ?? [])
+      const mockTrendSource = selected
+        ? getMockAppData(selected)
+        : selectedPlatform
+          ? getMockPlatformData(selectedPlatform)
+          : null
+      setTrendData((mockTrendSource?.job_run_trend as any) ?? [])
       setTrendLoading(false)
       return
     }
@@ -391,19 +395,8 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       .map(([hour, vals]) => ({ hour: `${hour}:00`, ...vals }));
     return { rows: chartRows, days };
   };
-  React.useEffect(() => {
-    // Debug: log trend data and chart transformation
-    // eslint-disable-next-line no-console
-    console.log('[ESP] trendData', trendData);
-  }, [trendData]);
-
-  const trendChart     = React.useMemo(() => {
-    const chart = buildTrendChart(trendData);
-    // eslint-disable-next-line no-console
-    console.log('[ESP] trendChart', chart);
-    return chart;
-  }, [trendData]);
-  const drillJobChart  = React.useMemo(() => buildTrendChart(drillJobTrend), [drillJobTrend]);
+  const trendChart     = React.useMemo(() => buildTrendChart(trendData), [trendData])
+  const drillJobChart  = React.useMemo(() => buildTrendChart(drillJobTrend), [drillJobTrend])
 
   // Available job options for the job selector dropdown
   const jobOptions = React.useMemo(() => (data?.job_list ?? []).map(j => j.jobname), [data])
@@ -858,6 +851,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                 const first = platformSummary[0]?.platform ?? null
                 if (dashboardView === 'operations') setSelectedJobs([])
                 setSelected('')
+                setApplibSearch('')
                 setSelectedPlatform(first)
               }}
               sx={{ fontSize: '10px', color: '#d32f2f', textTransform: 'none', height: 26, whiteSpace: 'nowrap', px: 1.25, border: '1px solid #ef9a9a', borderRadius: 1, ml: { xs: 0, lg: 'auto' }, '&:hover': { bgcolor: '#fce4ec' } }}
