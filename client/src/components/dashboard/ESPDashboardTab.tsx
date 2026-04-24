@@ -94,7 +94,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   const [jobListLimited, setJobListLimited] = React.useState<{ showing: number; total: number } | null>(null)
   const [jobListHasMore, setJobListHasMore] = React.useState(false)
 
-  const [days, setDays] = React.useState(2)
+  const [days, setDays] = React.useState(15)
 
   // Reset job filter + drill-down when application or platform changes
   React.useEffect(() => { setSelectedJobs([]); setDrillJob(null); setWidgetFilter(null) }, [selected, selectedPlatform])
@@ -580,12 +580,12 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
           <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1.5 }}>
             {/* ── Date range slider ── */}
             {dashboardView === 'operations' && (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 200 }}>
-                <Typography sx={{ fontSize: '11px', color: '#777', whiteSpace: 'nowrap' }}>Last {days}d</Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 220 }}>
+                <Typography sx={{ fontSize: '11px', color: '#777', whiteSpace: 'nowrap' }}>Run Trend: Last {days}d</Typography>
                 <Slider
                   value={days}
                   min={1}
-                  max={5}
+                  max={30}
                   step={1}
                   onChange={(_e, v) => setDays(v as number)}
                   size="small"
@@ -596,7 +596,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                     '& .MuiSlider-rail': { opacity: 0.3 },
                   }}
                 />
-                <Typography sx={{ fontSize: '10px', color: '#bbb', whiteSpace: 'nowrap' }}>5d</Typography>
+                <Typography sx={{ fontSize: '10px', color: '#bbb', whiteSpace: 'nowrap' }}>30d</Typography>
               </Box>
             )}
             {onOpenAgent && (
