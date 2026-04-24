@@ -156,6 +156,10 @@ interface ComposedBarLineChartProps {
   margin?: { top?: number; right?: number; bottom?: number; left?: number }
   /** Show exact count label above each bar */
   showBarLabels?: boolean
+  xAxisTickFormatter?: (value: string | number) => string
+  xAxisInterval?: number | 'preserveStart' | 'preserveEnd' | 'preserveStartEnd' | 'equidistantPreserveStart'
+  xAxisAngle?: number
+  xAxisHeight?: number
 }
 
 export const ComposedBarLineChart: React.FC<ComposedBarLineChartProps> = ({
@@ -168,6 +172,10 @@ export const ComposedBarLineChart: React.FC<ComposedBarLineChartProps> = ({
   rightYDomain,
   margin = { top: 5, right: 35, left: 0, bottom: 5 },
   showBarLabels = false,
+  xAxisTickFormatter,
+  xAxisInterval,
+  xAxisAngle = 0,
+  xAxisHeight,
 }) => {
   const hasRightAxis = lines.some(l => l.yAxisId === 'right')
 
@@ -178,7 +186,15 @@ export const ComposedBarLineChart: React.FC<ComposedBarLineChartProps> = ({
           {showGrid && (
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
           )}
-          <XAxis dataKey={xKey} tick={{ fontSize: 11 }} />
+          <XAxis
+            dataKey={xKey}
+            tick={{ fontSize: 11 }}
+            tickFormatter={xAxisTickFormatter}
+            interval={xAxisInterval}
+            angle={xAxisAngle}
+            textAnchor={xAxisAngle === 0 ? 'middle' : 'end'}
+            height={xAxisHeight}
+          />
           <YAxis yAxisId="left" tick={{ fontSize: 11 }} />
           {hasRightAxis && (
             <YAxis

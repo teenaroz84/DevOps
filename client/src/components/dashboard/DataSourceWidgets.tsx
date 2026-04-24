@@ -545,7 +545,7 @@ export const IncidentsWidget: React.FC<{ platform?: string | null }> = ({ platfo
   return (
     <>
       <WidgetShell
-        title="Open Incidents by Priority"
+        title="Current Open Incidents"
         titleIcon={<WarningAmberIcon sx={{ color: '#c62828', fontSize: 18 }} />}
         source="PostgreSQL · edoops.service_now_inc · current open state · all time"
         actions={<WidgetInfo text="Shows the count of currently open incidents grouped by priority (P1–P5). Filters only active incidents using state — closed, resolved, and cancelled are excluded. The days slider does not affect this widget. Count always reflects the live open state." />}
@@ -679,10 +679,20 @@ export const IncidentListWidget: React.FC<{ platform?: string | null; days?: num
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [priorityFilter, setPriorityFilter] = useState('All')
+  const [statusFilter, setStatusFilter] = useState('All')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(0)
   const rowsPerPage = 100
   const { useMock } = useMockData()
+
+  const normalizeIncidentState = (state?: string | null) => (state || '').trim().toLowerCase().replace(/\s+/g, ' ')
+  const getIncidentStatusGroup = (state?: string | null) => {
+    const normalized = normalizeIncidentState(state)
+    if (['on hold', 'onhold'].includes(normalized)) return 'On Hold'
+    if (['closed', 'resolved', 'canceled', 'cancelled'].includes(normalized)) return 'Resolved/Closed/Canceled'
+    return 'Open/In Progress'
+  }
+  const statusFilterOptions = ['All', 'Open/In Progress', 'Resolved/Closed/Canceled', 'On Hold']
 
   useEffect(() => {
     setLoading(true); setData([]); setError(null)
@@ -699,13 +709,15 @@ export const IncidentListWidget: React.FC<{ platform?: string | null; days?: num
   const filtered = useMemo(() =>
     data
       .filter(r => priorityFilter === 'All' || r.priority_field === priorityFilter)
+      .filter(r => statusFilter === 'All' || getIncidentStatusGroup(r.sninc_state) === statusFilter)
       .filter(r => !search || [
         r.sninc_inc_num, r.sninc_capability, r.sninc_short_desc, r.sninc_assignment_grp
       ].some(v => (v || '').toLowerCase().includes(search.toLowerCase()))),
-  [data, priorityFilter, search])
+  [data, priorityFilter, statusFilter, search])
 
   // Reset to first page whenever filters change
   const handlePriorityChange = (p: string) => { setPriorityFilter(p); setPage(0) }
+  const handleStatusChange = (status: string) => { setStatusFilter(status); setPage(0) }
   const handleSearchChange = (val: string) => { setSearch(val); setPage(0) }
 
   const paginated = filtered.slice(page * rowsPerPage, (page + 1) * rowsPerPage)
@@ -727,8 +739,8 @@ export const IncidentListWidget: React.FC<{ platform?: string | null; days?: num
     {
       key: 'sninc_state', header: 'Status', width: 110,
       render: row => {
-        const state = (row.sninc_state || '').toLowerCase()
-        const isOpen = !['closed','resolved','cancelled','canceled','complete','completed'].includes(state)
+        const statusGroup = getIncidentStatusGroup(row.sninc_state)
+        const isOpen = statusGroup !== 'Resolved/Closed/Canceled'
         return (
           <Chip label={row.sninc_state || '—'} size="small"
             sx={{ height: 20, fontSize: '10px', fontWeight: 700,
@@ -774,6 +786,32 @@ export const IncidentListWidget: React.FC<{ platform?: string | null; days?: num
                 }}
               />
             ))}
+            {statusFilterOptions.map(status => {
+              const isActive = statusFilter === status
+              const colors = status === 'Open/In Progress'
+                ? { color: '#c62828', bg: '#ffebee' }
+                : status === 'Resolved/Closed/Canceled'
+                  ? { color: '#2e7d32', bg: '#e8f5e9' }
+                  : status === 'On Hold'
+                    ? { color: '#ef6c00', bg: '#fff3e0' }
+                    : { color: '#1565c0', bg: '#e3f2fd' }
+              return (
+                <Chip
+                  key={status}
+                  label={status}
+                  size="small"
+                  onClick={() => handleStatusChange(status)}
+                  sx={{
+                    fontSize: '10px', height: 22, cursor: 'pointer',
+                    fontWeight: isActive ? 700 : 400,
+                    backgroundColor: isActive ? colors.bg : '#f5f5f5',
+                    color: isActive ? colors.color : '#aaa',
+                    border: isActive ? `1px solid ${colors.color}40` : '1px solid transparent',
+                    '& .MuiChip-label': { px: 1 },
+                  }}
+                />
+              )
+            })}
             <Typography sx={{ fontSize: '10px', color: '#aaa', ml: 'auto' }}>{filtered.length} records</Typography>
           </Box>
           <Box sx={{ flex: 1, overflowY: 'auto', px: 1.5, pb: 1 }}>
@@ -1037,6 +1075,17 @@ export const IncidentTrendWidget: React.FC<{ platform?: string | null; days?: nu
   const [error, setError] = useState<string | null>(null)
   const { useMock } = useMockData()
 
+  const formatDayLabel = (value: string | number) => {
+    if (typeof value !== 'string' || !value) return String(value ?? '')
+    const parsed = new Date(`${value}T00:00:00`)
+    if (Number.isNaN(parsed.getTime())) return value
+    return parsed.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    })
+  }
+
   useEffect(() => {
     setLoading(true); setData([]); setError(null)
     if (useMock) { setData(MOCK_SERVICENOW_INCIDENT_TREND); setLoading(false); return }
@@ -1064,10 +1113,14 @@ export const IncidentTrendWidget: React.FC<{ platform?: string | null; days?: nu
               { key: 'closed', label: 'Closed', color: '#2e7d32' },
             ]}
             lines={[
-              { key: 'total', label: 'Total', color: '#1565c0', dashed: false },
+              { key: 'total', label: 'Total', color: '#1565c0' },
             ]}
             height={220}
             showBarLabels
+            xAxisTickFormatter={formatDayLabel}
+            xAxisInterval={0}
+            xAxisAngle={-35}
+            xAxisHeight={70}
           />
         </Box>
       )}

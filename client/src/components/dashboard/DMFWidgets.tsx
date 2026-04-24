@@ -409,10 +409,10 @@ const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void
 
   // ── Lineage columns ────────────────────────────────────────
   const lineageColumns: ColumnDef<LineageJob>[] = [
+    { key: 'datasetName',     header: 'Dataset Name',     flex: 2 },
     { key: 'runId',           header: 'Run ID',           width: 110, noWrap: true },
     { key: 'processDate',     header: 'Process Date',     width: 95 },
     { key: 'sourceCode',      header: 'Source',           width: 90 },
-    { key: 'datasetName',     header: 'Dataset Name',     flex: 2 },
     { key: 'processTypeCode', header: 'Process Type',     width: 80 },
     { key: 'sourceName',      header: 'Source Name',      flex: 2 },
     { key: 'targetName',      header: 'Target Name',      flex: 2 },
