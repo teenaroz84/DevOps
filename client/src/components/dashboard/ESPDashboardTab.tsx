@@ -451,26 +451,17 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
     .filter(r => !widgetFilteredJobnames || widgetFilteredJobnames.has(r.jobname)),        [data, selectedJobs, widgetFilteredJobnames])
 
   const jobListCols: ColumnDef[] = React.useMemo(() => {
-    const applCol: ColumnDef = selectedPlatform ? {
-      key: 'appl_name',
-      header: 'Application',
-      width: 120,
-      noWrap: true,
-      render: r => r.appl_name ? (
-        <Typography component="span" sx={{ fontSize: '11px', fontWeight: 600 }}>
-          {r.appl_name}
-        </Typography>
-      ) : '—',
-    } : null as unknown as ColumnDef
     const baseCols: ColumnDef[] = [
       {
-        key: 'jobname',
-        header: 'Job Name',
+        key: 'jobname_application',
+        header: 'Application|JOB NAME',
         flex: 1,
         noWrap: true,
-        render: r => (
+        render: r => {
+          const applicationName = r.appl_name ?? data?.appl_name ?? '—'
+          return (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
-            <Tooltip title={r.jobname} placement="top" arrow>
+            <Tooltip title={`${applicationName}|${r.jobname}`} placement="top" arrow>
               <Typography
                 component="span"
                 sx={{
@@ -483,7 +474,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                   whiteSpace: 'nowrap',
                 }}
               >
-                {r.jobname}
+                {`${applicationName}|${r.jobname}`}
               </Typography>
             </Tooltip>
             {isSpecialEspJob(r.jobname) && (
@@ -501,7 +492,8 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
               />
             )}
           </Box>
-        ),
+          )
+        },
       },
       {
         key: 'last_run_date',
@@ -564,9 +556,9 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
         },
       },
     ]
-    return selectedPlatform ? [...baseCols, applCol] : baseCols
+    return [baseCols[0], baseCols[1], baseCols[3], baseCols[2]]
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedPlatform, drillJob])
+  }, [data?.appl_name, drillJob])
 
   const depCols: ColumnDef[] = [
     { key: 'jobname', header: 'Job Name', flex: 1, noWrap: true },
