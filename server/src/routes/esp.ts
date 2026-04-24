@@ -342,50 +342,65 @@ router.get('/platform-job-list/:platformId', async (req: Request, res: Response)
 
     params.push(limit, offset);
 
+    const baseConfigCte = `
+      WITH config_jobs AS MATERIALIZED (
+        SELECT DISTINCT cfg.appl_name, cfg.jobname
+        FROM edoops.esp_job_config cfg
+        WHERE cfg.pltf_name = $1
+          AND cfg.appl_name IS NOT NULL
+          AND cfg.jobname IS NOT NULL
+          ${applClause}
+      ),
+      source_jobs AS MATERIALIZED (
+        SELECT c.appl_name, c.jobname, c.jobtype AS job_type, c.last_run_date
+        FROM edoops.esp_job_cmnd c
+        JOIN config_jobs cfg ON cfg.appl_name = c.appl_name AND cfg.jobname = c.jobname
+      )
+    `;
+
     const [totalResult, jobsResult] = await Promise.all([
       pool.query(
-        `SELECT COUNT(DISTINCT c.jobname) AS cnt
-         FROM edoops.esp_job_cmnd c
-         JOIN (
-           SELECT DISTINCT appl_name, jobname
-           FROM edoops.esp_job_config
-           WHERE pltf_name = $1
-             AND appl_name IS NOT NULL
-             AND jobname IS NOT NULL
-         ) cfg ON cfg.appl_name = c.appl_name AND cfg.jobname = c.jobname
-         WHERE 1=1${applClause.replace('appl_name', 'c.appl_name')}`,
+        `${baseConfigCte}
+         SELECT COUNT(DISTINCT jobname) AS cnt
+         FROM source_jobs`,
         params.slice(0, applName ? 2 : 1)
       ),
       pool.query(`
-        SELECT DISTINCT ON (c.jobname)
-          c.jobname,
-          c.appl_name,
-          c.jobtype AS job_type,
-          c.last_run_date,
+        ${baseConfigCte},
+        latest_cmd AS MATERIALIZED (
+          SELECT DISTINCT ON (jobname)
+            jobname,
+            appl_name,
+            job_type,
+            last_run_date
+          FROM source_jobs
+          ORDER BY jobname, last_run_date DESC NULLS LAST
+        ),
+        latest_stats AS MATERIALIZED (
+          SELECT DISTINCT ON (cfg.jobname)
+            cfg.jobname,
+            s.appl_name,
+            s.ccfail
+          FROM config_jobs cfg
+          JOIN edoops.esp_job_stats_recent s
+            ON s.appl_name = cfg.appl_name
+           AND s.job_longname = cfg.jobname
+          ORDER BY cfg.jobname, s.end_date DESC NULLS LAST, s.end_time DESC NULLS LAST, s.start_date DESC NULLS LAST, s.start_time DESC NULLS LAST
+        )
+        SELECT
+          lc.jobname,
+          lc.appl_name,
+          lc.job_type,
+          lc.last_run_date,
           CASE
-            WHEN latest.ccfail = 'YES' THEN 'FAILED'
-            WHEN latest.ccfail = 'NO' THEN 'SUCCESS'
-            WHEN c.last_run_date IS NULL THEN 'NEVER RUN'
+            WHEN ls.ccfail = 'YES' THEN 'FAILED'
+            WHEN ls.ccfail = 'NO' THEN 'SUCCESS'
+            WHEN lc.last_run_date IS NULL THEN 'NEVER RUN'
             ELSE 'UNKNOWN'
           END AS run_status
-        FROM edoops.esp_job_cmnd c
-        JOIN (
-          SELECT DISTINCT appl_name, jobname
-          FROM edoops.esp_job_config
-          WHERE pltf_name = $1
-            AND appl_name IS NOT NULL
-            AND jobname IS NOT NULL
-        ) cfg ON cfg.appl_name = c.appl_name AND cfg.jobname = c.jobname
-        LEFT JOIN LATERAL (
-          SELECT s.ccfail
-          FROM edoops.esp_job_stats_recent s
-          WHERE s.appl_name = c.appl_name
-            AND s.job_longname = c.jobname
-          ORDER BY s.end_date DESC NULLS LAST, s.end_time DESC NULLS LAST, s.start_date DESC NULLS LAST, s.start_time DESC NULLS LAST
-          LIMIT 1
-        ) latest ON true
-        WHERE 1=1${applClause.replace('appl_name', 'c.appl_name')}
-        ORDER BY c.jobname, c.last_run_date DESC NULLS LAST
+        FROM latest_cmd lc
+        LEFT JOIN latest_stats ls ON ls.jobname = lc.jobname
+        ORDER BY lc.last_run_date DESC NULLS LAST, lc.jobname
         LIMIT ${limitParam} OFFSET ${offsetParam}
       `, params),
     ]);

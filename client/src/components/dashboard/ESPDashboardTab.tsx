@@ -49,6 +49,7 @@ const BAR_COLORS = ['#1976d2', '#f57c00', '#c62828', '#2e7d32', '#6a1b9a', '#008
 const ESP_PLATFORM_RECENT_JOB_LIMIT = 500
 const ESP_WIDGET_PANEL_HEIGHT = 260
 const isSpecialEspJob = (jobname: string) => /JSDELAY|RETRIG/i.test(jobname)
+const RUN_STATUS_ORDER = ['SUCCESS', 'FAILED', 'NEVER RUN', 'UNKNOWN'] as const
 const normalizeRunStatusLabel = (value?: string | null) => {
   const trimmed = typeof value === 'string' ? value.trim() : ''
   return trimmed || 'UNKNOWN'
@@ -406,8 +407,8 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   // Available job options for the job selector dropdown
   const jobOptions = React.useMemo(() => (data?.job_list ?? []).map(j => j.jobname), [data])
   const statusOptions = React.useMemo(() => {
-    const statuses = [...new Set((data?.job_list ?? []).map(j => normalizeRunStatusLabel(j.run_status)))].sort()
-    return ['All', ...statuses]
+    const statuses = new Set((data?.job_list ?? []).map(j => normalizeRunStatusLabel(j.run_status)))
+    return ['All', ...RUN_STATUS_ORDER.filter(status => statuses.has(status))]
   }, [data])
 
   // Jobnames matching widgetFilter (derived from metadataDetail)
