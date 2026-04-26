@@ -5,7 +5,6 @@ import { Router, Request, Response } from 'express';
 import { getPgPool } from '../db/postgres';
 
 const router = Router();
-p
 async function safeQuery(sql: string, fallback: any[] = []): Promise<any[]> {
   const pool = getPgPool();
   try { const { rows } = await pool.query(sql); return rows; } catch (e: any) { console.error('DMF query error:', e.message); return fallback; }
@@ -112,23 +111,22 @@ router.get('/lineage/meta', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
     const drClause = dateRangeClause(req.query.date_range);
-    // src_cd: usually <100 distinct values — ARRAY_AGG fine.
+    // src_cd: distinct count is still small enough to return unfiltered.
+    // Keeping sourceCodes independent of the date range avoids hiding valid
+    // sources when the UI boots with the default 3-month filter.
     // dataset_nm: can be 10k+ — use GROUP BY + ORDER BY count + LIMIT 300
     //             so the Autocomplete list is fast to render and transmit.
     const [srcRes, dsRes] = await Promise.all([
       pool.query(`
         SELECT ARRAY_AGG(DISTINCT src_cd) FILTER (WHERE src_cd IS NOT NULL) AS src_cds
         FROM edoops.DMF_RUN_MASTER
-        WHERE 1=1 ${drClause}
       `),
       pool.query(`
         SELECT dataset_nm
         FROM edoops.DMF_RUN_MASTER
         WHERE dataset_nm IS NOT NULL
-          AND 1=1 ${drClause}
         GROUP BY dataset_nm
         ORDER BY COUNT(*) DESC
-        LIMIT 300
       `),
     ]);
     const sort = (a: string[]) => (a ?? []).slice().sort();
@@ -214,13 +212,14 @@ router.get('/lineage/counts', async (req: Request, res: Response) => {
 });
 
 // ─── GET /api/dmf/lineage/jobs ─────────────────────────────
-// Accepts: src_cd (required), date_range, page (0-based), pageSize
+// Accepts: src_cd (required), date_range, proc_typ_cd, run_status, dataset_nm,
+// page (0-based), pageSize
 // Returns { rows, total } for paginated detail table.
 // Charts use lineage/counts — not this endpoint.
 router.get('/lineage/jobs', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
-    const { src_cd, date_range, page, pageSize } = req.query;
+    const { src_cd, date_range, proc_typ_cd, run_status, dataset_nm, page, pageSize } = req.query;
 
     if (!src_cd || String(src_cd) === 'All') {
       return res.json({ rows: [], total: 0 });
@@ -231,6 +230,7 @@ router.get('/lineage/jobs', async (req: Request, res: Response) => {
     const offset   = pageNum * pageSz;
 
     const params: any[] = [String(src_cd)];
+    const conditions: string[] = ['src_cd = $1'];
     const drMap: Record<string, string> = { '1m': '1 month', '3m': '3 months', '6m': '6 months', '1y': '1 year', '2y': '2 years' };
     let dateFilter: string;
     const drVal = String(date_range ?? '').toLowerCase();
@@ -246,14 +246,40 @@ router.get('/lineage/jobs', async (req: Request, res: Response) => {
       dateFilter = `proc_dt::date >= CURRENT_DATE - INTERVAL '${interval}'`;
     }
 
+    if (proc_typ_cd) {
+      const vals = String(proc_typ_cd).split(',').filter(Boolean);
+      if (vals.length) {
+        conditions.push(`proc_typ_cd = ANY($${params.length + 1})`);
+        params.push(vals);
+      }
+    }
+    if (run_status) {
+      const vals = String(run_status)
+        .split(',')
+        .map((val) => val.toLowerCase() === 'success' ? 'SUCCESS' : val.toLowerCase() === 'failed' ? 'FAILED' : val)
+        .filter(Boolean);
+      if (vals.length) {
+        conditions.push(`run_status = ANY($${params.length + 1})`);
+        params.push(vals);
+      }
+    }
+    if (dataset_nm) {
+      const vals = String(dataset_nm).split(',').filter(Boolean);
+      if (vals.length) {
+        conditions.push(`dataset_nm = ANY($${params.length + 1})`);
+        params.push(vals);
+      }
+    }
+
+    const where = `${dateFilter}\n        AND ${conditions.join('\n        AND ')}`;
+
     // COUNT(*) OVER() returns the true total in the same pass — no second query needed.
     const { rows } = await pool.query(`
       SELECT run_id, proc_dt, src_cd, dataset_nm, proc_typ_cd,
              src_nm, tgt_nm, run_strt_tm, run_end_tm, run_status,
              COUNT(*) OVER() AS total_rows
       FROM edoops.DMF_RUN_MASTER
-      WHERE ${dateFilter}
-        AND src_cd = $1
+      WHERE ${where}
       ORDER BY proc_dt DESC
       LIMIT ${pageSz} OFFSET ${offset}
     `, params);

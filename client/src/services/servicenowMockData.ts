@@ -89,7 +89,9 @@ export const MOCK_SERVICENOW_INCIDENT_TREND = (() => {
     const day = d.toISOString().split('T')[0]
     const open   = Math.floor(Math.random() * 8) + 3
     const closed = Math.floor(Math.random() * 10) + 2
-    return { day, open, closed, total: open + closed }
+    const total = open + closed
+    const p1p2 = Math.min(total, Math.floor(total * (0.12 + Math.random() * 0.18)))
+    return { day, open, closed, p1p2, total }
   })
 })()
 

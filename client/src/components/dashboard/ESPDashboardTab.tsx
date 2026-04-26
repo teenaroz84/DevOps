@@ -437,7 +437,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   const trendChart     = React.useMemo(() => buildTrendChart(trendData), [trendData])
   const drillJobChart  = React.useMemo(() => buildTrendChart(drillJobTrend), [drillJobTrend])
   const dailyPlatformTrendChart = React.useMemo(() => buildDailyTrendSummary(trendData), [trendData])
-  const useDailyPlatformTrend = !!selectedPlatform && !selected && days > 7
+  const useDailyPlatformTrend = days > 7
 
   // Available job options for the job selector dropdown
   const jobOptions = React.useMemo(() => (data?.job_list ?? []).map(j => j.jobname), [data])

@@ -1114,7 +1114,7 @@ export const IncidentTrendWidget: React.FC<{ platform?: string | null; days?: nu
       title="Incident Volume by Day"
       titleIcon={<TrendingUpIcon sx={{ color: '#c62828', fontSize: 18 }} />}
       source={`PostgreSQL · edoops.service_now_inc · last ${days}d · most recent per incident per day`}
-      actions={<WidgetInfo text={`Daily breakdown of incidents over the last ${days} days — bars show open vs closed count per day, line shows total. Filtered by last-updated date (not opened date) to capture day-by-day state transitions. Use the days slider to widen or narrow the trend window.`} />}
+      actions={<WidgetInfo text={`Daily breakdown of incidents over the last ${days} days — bars show open vs closed count per day, lines show total volume and P1/P2 critical incidents when present. Filtered by last-updated date (not opened date) to capture day-by-day state transitions. Use the days slider to widen or narrow the trend window.`} />}
       loading={loading}
       error={error ?? undefined}
     >
@@ -1129,9 +1129,11 @@ export const IncidentTrendWidget: React.FC<{ platform?: string | null; days?: nu
             ]}
             lines={[
               { key: 'total', label: 'Total', color: '#1565c0' },
+              { key: 'p1p2', label: 'P1/P2', color: '#6a1b9a', yAxisId: 'right', strokeWidth: 2.25 },
             ]}
             height={220}
             showBarLabels
+            rightYDomain={[0, 'auto']}
             xAxisTickFormatter={formatDayLabel}
             xAxisInterval={0}
             xAxisAngle={-35}

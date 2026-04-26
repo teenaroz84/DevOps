@@ -322,13 +322,17 @@ router.get('/incident-trend', async (req: Request, res: Response) => {
         TO_CHAR(day, 'YYYY-MM-DD') AS day,
         SUM(CASE WHEN is_open THEN 1 ELSE 0 END)::int   AS open_count,
         SUM(CASE WHEN NOT is_open THEN 1 ELSE 0 END)::int AS closed_count,
+        SUM(CASE WHEN is_priority_1_2 THEN 1 ELSE 0 END)::int AS p1_p2_count,
         COUNT(*)::int                                     AS total_count
       FROM (
         SELECT DISTINCT ON (sn.sninc_inc_num, DATE(sn.sninc_last_updt_dttm::timestamp))
                DATE(sn.sninc_last_updt_dttm::timestamp) AS day,
+               sg.short_priority IN ('P1', 'P2') AS is_priority_1_2,
                COALESCE(LOWER(TRIM(sn.sninc_state)), '') NOT IN
                  ('closed','resolved','canceled') AS is_open
         FROM   edoops.service_now_inc sn
+        LEFT JOIN edoops.sla_glossary sg
+          ON sn.sninc_priority = sg.snow_priority
         WHERE  sn.sninc_last_updt_dttm::timestamp >= NOW() - INTERVAL '${days} days'
           ${platformClause}
         ORDER BY sn.sninc_inc_num, DATE(sn.sninc_last_updt_dttm::timestamp), sn.sninc_last_updt_dttm DESC
@@ -340,6 +344,7 @@ router.get('/incident-trend', async (req: Request, res: Response) => {
       day:          r.day ?? null,
       open:         r.open_count,
       closed:       r.closed_count,
+      p1p2:         r.p1_p2_count,
       total:        r.total_count,
     })));
   } catch (err: any) {

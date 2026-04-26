@@ -25,10 +25,13 @@ export const dmfService = {
     const qs = params.toString()
     return apiClient.get(`/api/dmf/lineage/counts${qs ? `?${qs}` : ''}`)
   },
-  getLineageJobs: (filters: { src_cd?: string; date_range?: string; page?: number; pageSize?: number } = {}) => {
+  getLineageJobs: (filters: { src_cd?: string; date_range?: string; proc_typ_cd?: string[]; run_status?: string[]; dataset_nm?: string[]; page?: number; pageSize?: number } = {}) => {
     const params = new URLSearchParams()
     if (filters.src_cd && filters.src_cd !== 'All') params.set('src_cd', filters.src_cd)
     if (filters.date_range) params.set('date_range', filters.date_range)
+    if (filters.proc_typ_cd?.length) params.set('proc_typ_cd', filters.proc_typ_cd.join(','))
+    if (filters.run_status?.length) params.set('run_status', filters.run_status.join(','))
+    if (filters.dataset_nm?.length) params.set('dataset_nm', filters.dataset_nm.join(','))
     if (filters.page !== undefined) params.set('page', String(filters.page))
     if (filters.pageSize !== undefined) params.set('pageSize', String(filters.pageSize))
     const qs = params.toString()

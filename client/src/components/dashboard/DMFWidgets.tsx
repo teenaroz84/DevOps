@@ -193,6 +193,10 @@ const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void
   useEffect(() => {
     setLineageJobsPage(0)
   }, [lgSourceCode])
+
+  useEffect(() => {
+    setLineageJobsPage(0)
+  }, [lgDatasets, lgProcTypes, lgStatuses])
   // Fetch meta (sourceCodes, datasetNames) once — not re-fetched on date change
   useEffect(() => {
     if (activeTab !== 'lineage' || lineageMetaLoaded) return
@@ -219,7 +223,7 @@ const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void
       .catch(() => setLineageLoaded(true))
   }, [activeTab, lineageLoaded, useMock])
 
-  // ── Load jobs when source is selected (other filters applied client-side) ──────
+  // ── Load jobs when source is selected ──────────────────────────────────────────
   const hasAnyFilter = !!lgSourceCode
 
   // ── Memoised lineage derivations — prevent blocking paint on filter selection ──
@@ -231,16 +235,7 @@ const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void
   const deferredProcTypes = useDeferredValue(lgProcTypes)
   const deferredStatuses  = useDeferredValue(lgStatuses)
 
-  const filteredJobs = useMemo(() =>
-    isFiltered
-      ? lineageJobs.filter(j =>
-          (deferredDatasets.length === 0  || deferredDatasets.includes(j.datasetName)) &&
-          (deferredProcTypes.length === 0 || deferredProcTypes.includes(j.processTypeCode)) &&
-          (deferredStatuses.length === 0  || deferredStatuses.includes(j.status))
-        )
-      : [],
-    [isFiltered, lineageJobs, deferredDatasets, deferredProcTypes, deferredStatuses]
-  )
+  const filteredJobs = useMemo(() => (isFiltered ? lineageJobs : []), [isFiltered, lineageJobs])
 
   // Tableau approach: charts always read from lineageCounts (server-aggregated).
   // The DB does all the work — browser just displays the results.
@@ -307,21 +302,37 @@ const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void
   useEffect(() => {
     if (!lineageLoaded || !lgSourceCode) {
       setLineageJobs([])
+      setLineageJobsTotal(0)
       return
     }
     if (useMock) {
-      setLineageJobs(MOCK_DMF_LINEAGE_JOBS.filter(j => j.sourceCode === lgSourceCode))
+      const mockJobs = MOCK_DMF_LINEAGE_JOBS.filter(j =>
+        j.sourceCode === lgSourceCode &&
+        (deferredDatasets.length === 0 || deferredDatasets.includes(j.datasetName)) &&
+        (deferredProcTypes.length === 0 || deferredProcTypes.includes(j.processTypeCode)) &&
+        (deferredStatuses.length === 0 || deferredStatuses.includes(j.status))
+      )
+      setLineageJobs(mockJobs)
+      setLineageJobsTotal(mockJobs.length)
       return
     }
     setLineageJobsLoading(true)
-    dmfService.getLineageJobs({ src_cd: lgSourceCode, date_range: resolvedDateRange, page: lineageJobsPage, pageSize: lineageJobsPageSize })
+    dmfService.getLineageJobs({
+      src_cd: lgSourceCode,
+      date_range: resolvedDateRange,
+      proc_typ_cd: deferredProcTypes,
+      run_status: deferredStatuses,
+      dataset_nm: deferredDatasets,
+      page: lineageJobsPage,
+      pageSize: lineageJobsPageSize,
+    })
       .then((result: any) => {
         setLineageJobs(result.rows ?? [])
         setLineageJobsTotal(result.total ?? 0)
       })
       .catch(() => { setLineageJobs([]); setLineageJobsTotal(0) })
       .finally(() => setLineageJobsLoading(false))
-  }, [lineageLoaded, lgSourceCode, useMock, dateRange, lineageJobsPage])
+  }, [lineageLoaded, lgSourceCode, useMock, dateRange, lineageJobsPage, deferredDatasets, deferredProcTypes, deferredStatuses])
 
   // ── Lazy-load Analytics meta (once per mock toggle) ────────
   // Loaded on both lineage and analytics tabs (step names needed for lineage filter)
@@ -552,7 +563,7 @@ const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void
                         ? 'Loading jobs…'
                         : !isFiltered
                           ? `${lineageMeta?.sourceCodes.length ?? 0} sources · ${(lineageCounts?.total ?? 0).toLocaleString()} total jobs`
-                          : `${(lineageCounts?.total ?? 0).toLocaleString()} jobs · page ${lineageJobsPage + 1} of ${Math.ceil(lineageJobsTotal / lineageJobsPageSize) || 1}`}
+                          : `${lineageJobsTotal.toLocaleString()} jobs`}
                     </Typography>
                   </Box>
                   <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'flex-start' }}>
@@ -815,10 +826,10 @@ const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void
               <Box sx={{ backgroundColor: '#fff', border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
                 <WidgetShell
                   title="Job Details"
-                  source={!hasAnyFilter ? 'Apply a filter above to load jobs' : `${filteredJobs.length} matching jobs`}
+                  source={!hasAnyFilter ? 'Apply a filter above to load jobs' : `${filteredJobs.length} rows shown on this page / ${lineageJobsTotal.toLocaleString()} total matching jobs`}
                   actions={
                     hasAnyFilter
-                      ? <Chip label={`${filteredJobs.length} jobs`} size="small" sx={{ fontSize: '10px', height: 20, backgroundColor: '#e3f2fd', color: '#1565c0', fontWeight: 600 }} />
+                      ? <Chip label={`Showing ${filteredJobs.length} of ${lineageJobsTotal.toLocaleString()}`} size="small" sx={{ fontSize: '10px', height: 20, backgroundColor: '#e3f2fd', color: '#1565c0', fontWeight: 600 }} />
                       : undefined
                   }
                 >
