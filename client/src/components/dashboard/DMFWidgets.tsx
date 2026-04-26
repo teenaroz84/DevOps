@@ -1040,15 +1040,18 @@ const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void
                 <WidgetShell title="Status Summary" source="DMF">
                   <Box sx={{ px: 2, py: 1.5 }}>
                     <DonutChart
-                      data={analytics.statusSummary.map((r) => ({
-                        name: r.status,
-                        value: r.count,
-                        color:
-                          r.status.toLowerCase() === 'success' ? '#2e7d32'
-                          : r.status.toLowerCase() === 'failed' ? '#d32f2f'
-                          : r.status.toLowerCase() === 'in progress' ? '#f57c00'
-                          : '#7b1fa2',
-                      }))}
+                      data={analytics.statusSummary.map((r) => {
+                        const normalizedStatus = r.status.trim().toLowerCase().replace(/[_\s]+/g, ' ')
+                        return {
+                          name: r.status,
+                          value: r.count,
+                          color:
+                            normalizedStatus === 'success' ? '#2e7d32'
+                            : normalizedStatus === 'failed' ? '#d32f2f'
+                            : normalizedStatus === 'in progress' ? '#f57c00'
+                            : '#7b1fa2',
+                        }
+                      })}
                       size={110}
                       centerLabel={analytics.statusSummary.reduce((s, r) => s + r.count, 0)}
                     />
