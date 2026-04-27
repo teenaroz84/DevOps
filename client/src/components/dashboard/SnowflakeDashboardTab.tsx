@@ -270,11 +270,11 @@ const CostEfficiencyScreen: React.FC<{ data: CostData; costDayLabel: string }> =
       {/* 6 KPIs matching screenshot */}
       <StatCardGrid items={[
         { label: costDayLabel,           value: fmtKpiDollar(s.cost_today),                           color: '#1565c0', bg: '#e3f2fd' },
-        { label: 'Cost MTD',             value: fmtKpiDollar(s.cost_mtd),                             color: '#37474f', bg: '#f5f5f5' },
-        { label: 'Avg Daily Burn (30d)', value: fmtKpiDollar(s.avg_daily_burn_30d),                   color: '#6a1b9a', bg: '#f3e5f5' },
+        { label: costDayLabel === 'Cost Today' ? 'Cost MTD' : 'Cost', value: fmtKpiDollar(s.cost_mtd), color: '#37474f', bg: '#f5f5f5' },
+        { label: costDayLabel === 'Cost Today' ? 'Avg Daily Burn (30d)' : 'Daily Burn', value: fmtKpiDollar(s.avg_daily_burn_30d), color: '#6a1b9a', bg: '#f3e5f5' },
         { label: 'Remaining Balance',    value: fmtCompactUsd(s.remaining_balance),                   color: '#2e7d32', bg: '#e8f5e9' },
         { label: 'Days Remaining',       value: s.days_remaining != null ? String(s.days_remaining) : '—', color: '#e65100', bg: '#fff3e0' },
-        { label: 'Savings Opp (7d)',     value: fmtKpiDollar(s.optimization_opportunity_currency_7d), color: '#c62828', bg: '#fce4ec' },
+        { label: costDayLabel === 'Cost Today' ? 'Savings Opp (7d)' : 'Savings Opp', value: fmtKpiDollar(s.optimization_opportunity_currency_7d), color: '#c62828', bg: '#fce4ec' },
       ]} />
 
       {/* Row 1: Cost by Service Type + Daily Cost Trend */}
@@ -412,12 +412,12 @@ const PlatformIntelligenceScreen: React.FC<{ data: PlatformData; queriesDayLabel
     if (v >= 75) return '#7f6a95'
     if (v >= 65) return '#9787ad'
     if (v >= 55) return '#5fa9bc'
-    if (v >= 45) return '#79bdd0'
-    if (v >= 35) return '#92cddd'
-    if (v >= 25) return '#abd9e6'
-    if (v >= 15) return '#c2e2ec'
-    if (v >= 5) return '#d6e9f1'
-    return '#e7f0f5'
+    if (v >= 45) return '#6e7af4'
+    if (v >= 35) return '#507ce3'
+    if (v >= 25) return '#0a576c'
+    if (v >= 15) return '#a4aaf0'
+    if (v >= 5) return '#4c7db9'
+    return '#9ad5f4'
   }
 
   const heatLegend = [
@@ -858,7 +858,8 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
   const previewAsOfDate = asOfOption === 'sample' ? SAMPLE_AS_OF_DATE : shiftIsoDate(todayIsoDate, sliderDays)
   const sliderValue = asOfOption === 'sample' ? 0 : sliderDays
   const sliderLabel = asOfOption === 'sample' ? 'Sample Date' : formatDisplayDate(previewAsOfDate)
-  const costDayLabel =  'Cost Today' 
+  const isCurrentDateOnly = asOfOption === 'current' && days === 0
+  const costDayLabel = isCurrentDateOnly ? 'Cost' : 'Cost Today'
   const queriesDayLabel =  'Queries Today' 
 
   const handleLookbackChange = (_: Event, value: number | number[]) => {

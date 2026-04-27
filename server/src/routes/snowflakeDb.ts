@@ -65,12 +65,33 @@ function sqlRefTimestamp(req: Request): string {
   return `${sqlRefDate(req)}::timestamp`
 }
 
+function isTodayAsOfDate(req: Request): boolean {
+  const asOf = getAsOfDate(req)
+  if (!asOf) return false
+  return asOf === new Date().toISOString().slice(0, 10)
+}
+
+function getEffectiveLookbackDays(req: Request, fallbackDays: number): number {
+  return isTodayAsOfDate(req) ? 0 : getLookbackDays(req, fallbackDays)
+}
+
+function sqlEffectiveSinceDate(req: Request, fallbackDays: number): string {
+  const days = getEffectiveLookbackDays(req, fallbackDays)
+  return days === 0 ? sqlRefDate(req) : `(${sqlRefDate(req)} - INTERVAL '${days} day')`
+}
+
+function sqlEffectiveSinceTimestamp(req: Request, fallbackDays: number): string {
+  const days = getEffectiveLookbackDays(req, fallbackDays)
+  return days === 0 ? sqlRefTimestamp(req) : `(${sqlRefDate(req)} - INTERVAL '${days} day')::timestamp`
+}
+
 // ─── GET /api/snowflake/cost-summary ──────────────────────
 router.get('/cost-summary', async (req: Request, res: Response) => {
   const windowEndDate = sqlRefDate(req);
-  const rollingWindowStartDate = sqlSinceDate(req, 30);
-  const opportunityWindowStartDate = sqlSinceDate(req, 7);
-  const opportunityWindowStartTimestamp = sqlSinceTimestamp(req, 7);
+  const rollingWindowStartDate = sqlEffectiveSinceDate(req, 30);
+  const opportunityWindowStartDate = sqlEffectiveSinceDate(req, 7);
+  const opportunityWindowStartTimestamp = sqlEffectiveSinceTimestamp(req, 7);
+  const costMtdStartDate = isTodayAsOfDate(req) ? windowEndDate : `DATE_TRUNC('month', ${windowEndDate})::date`;
   const rows = await safeQuery(`
     WITH cost_today_cte AS (
       SELECT ROUND(COALESCE(SUM(NULLIF(usage_in_currency::text, '')::numeric), 0)::numeric, 2) AS cost_today
@@ -80,7 +101,7 @@ router.get('/cost-summary', async (req: Request, res: Response) => {
     cost_mtd_cte AS (
       SELECT ROUND(COALESCE(SUM(NULLIF(usage_in_currency::text, '')::numeric), 0)::numeric, 2) AS cost_mtd
       FROM edoops.sf_usage_in_currency_daily
-      WHERE usage_date >= DATE_TRUNC('month', ${windowEndDate})::date
+      WHERE usage_date >= ${costMtdStartDate}
         AND usage_date <= ${windowEndDate}
     ),
     burn_cte AS (
@@ -178,7 +199,7 @@ router.get('/cost-summary', async (req: Request, res: Response) => {
 // ─── GET /api/snowflake/cost-by-pipeline ──────────────────
 router.get('/cost-by-pipeline', async (req: Request, res: Response) => {
   const windowEndDate = sqlRefDate(req);
-  const rollingWindowStartDate = sqlSinceDate(req, 30);
+  const rollingWindowStartDate = sqlEffectiveSinceDate(req, 30);
   const COLORS = ['#1565c0','#f57c00','#2e7d32','#c62828','#6a1b9a','#00838f','#ef6c00','#558b2f'];
   const rows = await safeQuery(`
     SELECT
@@ -201,7 +222,7 @@ router.get('/cost-by-pipeline', async (req: Request, res: Response) => {
 // ─── GET /api/snowflake/cost-scatter ──────────────────────
 router.get('/cost-scatter', async (req: Request, res: Response) => {
   const windowEndTimestamp = sqlRefTimestamp(req);
-  const rollingWindowStartTimestamp = sqlSinceTimestamp(req, 30);
+  const rollingWindowStartTimestamp = sqlEffectiveSinceTimestamp(req, 30);
   const rows = await safeQuery(`
     WITH q AS (
       SELECT
@@ -251,7 +272,7 @@ router.get('/cost-scatter', async (req: Request, res: Response) => {
 // ─── GET /api/snowflake/warehouse-cost-efficiency ────────
 router.get('/warehouse-cost-efficiency', async (req: Request, res: Response) => {
   const windowEndTimestamp = sqlRefTimestamp(req);
-  const rollingWindowStartTimestamp = sqlSinceTimestamp(req, 30);
+  const rollingWindowStartTimestamp = sqlEffectiveSinceTimestamp(req, 30);
   const rows = await safeQuery(`
     WITH q AS (
       SELECT
@@ -310,7 +331,7 @@ router.get('/warehouse-cost-efficiency', async (req: Request, res: Response) => 
 // ─── GET /api/snowflake/cost-by-duration ──────────────────
 router.get('/cost-by-duration', async (req: Request, res: Response) => {
   const windowEndDate = sqlRefDate(req);
-  const rollingWindowStartDate = sqlSinceDate(req, 30);
+  const rollingWindowStartDate = sqlEffectiveSinceDate(req, 30);
   const rows = await safeQuery(`
     SELECT
       TO_CHAR(NULLIF(usage_date::text, '')::date, 'YYYY-MM-DD') AS bucket,
@@ -330,7 +351,7 @@ router.get('/cost-by-duration', async (req: Request, res: Response) => {
 // ─── GET /api/snowflake/top-costly-jobs ───────────────────
 router.get('/top-costly-jobs', async (req: Request, res: Response) => {
   const windowEndTimestamp = sqlRefTimestamp(req);
-  const rollingWindowStartTimestamp = sqlSinceTimestamp(req, 30);
+  const rollingWindowStartTimestamp = sqlEffectiveSinceTimestamp(req, 30);
   const rows = await safeQuery(`
     WITH query_patterns AS (
       SELECT
@@ -497,8 +518,9 @@ router.get('/hourly-queries', async (req: Request, res: Response) => {
 // ─── GET /api/snowflake/top-slow-queries ──────────────────
 router.get('/top-slow-queries', async (req: Request, res: Response) => {
   const windowEndTimestamp = sqlRefTimestamp(req);
-  const rollingWindowStartTimestamp = sqlSinceTimestamp(req, 30);
-  const cacheKey = `top-slow-queries:${getAsOfDate(req) ?? 'current'}:30`;
+  const lookbackDays = getEffectiveLookbackDays(req, 30);
+  const rollingWindowStartTimestamp = sqlEffectiveSinceTimestamp(req, 30);
+  const cacheKey = `top-slow-queries:${getAsOfDate(req) ?? 'current'}:${lookbackDays}`;
   const rows = await safeCachedQuery(cacheKey, `
     WITH base AS MATERIALIZED (
       SELECT
@@ -639,7 +661,7 @@ router.get('/login-failures', async (req: Request, res: Response) => {
 // ─── GET /api/snowflake/storage-growth ────────────────────
 router.get('/storage-growth', async (req: Request, res: Response) => {
   const windowEndDate = sqlRefDate(req);
-  const rollingWindowStartDate = sqlSinceDate(req, 30);
+  const rollingWindowStartDate = sqlEffectiveSinceDate(req, 30);
   const rows = await safeQuery(`
     SELECT
       TO_CHAR(NULLIF(usage_date::text, '')::date, 'MM/DD') AS date,
