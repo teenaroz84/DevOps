@@ -407,31 +407,31 @@ const PlatformIntelligenceScreen: React.FC<{ data: PlatformData; queriesDayLabel
   }))
 
   const utilColor = (v: number) => {
-    if (v >= 95) return '#5c4a73'
-    if (v >= 85) return '#7c6992'
-    if (v >= 75) return '#978ab0'
-    if (v >= 65) return '#afabc9'
-    if (v >= 55) return '#b0e0e2'
-    if (v >= 45) return '#c7e9ea'
-    if (v >= 35) return '#d6edef'
-    if (v >= 25) return '#e4f3f4'
-    if (v >= 15) return '#eef7f8'
-    if (v >= 5) return '#f6f4f8'
-    return '#fbfafc'
+    if (v >= 95) return '#4a3763'
+    if (v >= 85) return '#67517e'
+    if (v >= 75) return '#7f6a95'
+    if (v >= 65) return '#9787ad'
+    if (v >= 55) return '#5fa9bc'
+    if (v >= 45) return '#79bdd0'
+    if (v >= 35) return '#92cddd'
+    if (v >= 25) return '#abd9e6'
+    if (v >= 15) return '#c2e2ec'
+    if (v >= 5) return '#d6e9f1'
+    return '#e7f0f5'
   }
 
   const heatLegend = [
-    { label: '95-100%', color: '#5c4a73' },
-    { label: '85-94%', color: '#7c6992' },
-    { label: '75-84%', color: '#978ab0' },
-    { label: '65-74%', color: '#afabc9' },
-    { label: '55-64%', color: '#b0e0e2' },
-    { label: '45-54%', color: '#c7e9ea' },
-    { label: '35-44%', color: '#d6edef' },
-    { label: '25-34%', color: '#e4f3f4' },
-    { label: '15-24%', color: '#eef7f8' },
-    { label: '5-14%', color: '#f6f4f8' },
-    { label: '0-4%', color: '#fbfafc' },
+    { label: '95-100%', color: '#4a3763' },
+    { label: '85-94%', color: '#67517e' },
+    { label: '75-84%', color: '#7f6a95' },
+    { label: '65-74%', color: '#9787ad' },
+    { label: '55-64%', color: '#5fa9bc' },
+    { label: '45-54%', color: '#79bdd0' },
+    { label: '35-44%', color: '#92cddd' },
+    { label: '25-34%', color: '#abd9e6' },
+    { label: '15-24%', color: '#c2e2ec' },
+    { label: '5-14%', color: '#d6e9f1' },
+    { label: '0-4%', color: '#e7f0f5' },
   ]
 
   const formatQueryDuration = (durationMs?: number) => {
@@ -448,12 +448,6 @@ const PlatformIntelligenceScreen: React.FC<{ data: PlatformData; queriesDayLabel
   const queryCols: ColumnDef[] = [
     { key: 'pipeline',   header: 'Pipeline',      width: 180 },
     { key: 'start_date', header: 'Start Date',    width: 105 },
-    {
-      key: 'duration_ms',
-      header: 'Duration',
-      width: 100,
-      render: (row) => <Typography sx={{ fontSize: '12px' }}>{formatQueryDuration(row.duration_ms)}</Typography>,
-    },
     { key: 'error_type', header: 'Error Type',     width: 110,
       render: (row) => {
         const errorType = row.error_type || 'UNKNOWN'
@@ -489,6 +483,12 @@ const PlatformIntelligenceScreen: React.FC<{ data: PlatformData; queriesDayLabel
         )
       } },
     { key: 'fix',        header: 'Suggested Fix', width: 160 },
+    {
+      key: 'duration_ms',
+      header: 'Duration',
+      width: 100,
+      render: (row) => <Typography sx={{ fontSize: '12px' }}>{formatQueryDuration(row.duration_ms)}</Typography>,
+    },
   ]
 
   return (
