@@ -8,7 +8,7 @@ import { getPgPool } from '../db/postgres';
 
 const router = Router();
 const SN_DEFAULT_DAYS = 7;
-const SN_MAX_DAYS = 15;
+const SN_MAX_DAYS = 90;
 
 function parseDays(query: any): number {
   const n = parseInt(String(query.days ?? SN_DEFAULT_DAYS), 10);

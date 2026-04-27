@@ -837,6 +837,7 @@ export const IncidentListWidget: React.FC<{ platform?: string | null; days?: num
 // ─── By Capability Widget ──────────────────────────────────
 
 const CAPABILITY_COLORS = CHART_PALETTE
+const SERVICENOW_DAY_PRESETS = [30, 60, 90]
 
 export const CapabilityWidget: React.FC<{ platform?: string | null; days?: number }> = ({ platform, days = 7 }) => {
   const [data, setData] = useState<any[]>([])
@@ -1230,7 +1231,7 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
             </Box>
             <Slider
               size="small"
-              value={days}
+              value={Math.min(days, 15)}
               onChange={(_, v) => setDays(Array.isArray(v) ? v[0] : v)}
               valueLabelDisplay="auto"
               min={1}
@@ -1244,6 +1245,29 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
               }}
             />
             <Typography sx={{ fontSize: '9px', color: '#bbb', whiteSpace: 'nowrap' }}>15d</Typography>
+          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
+            {SERVICENOW_DAY_PRESETS.map((presetDays) => {
+              const isActive = days === presetDays
+              return (
+                <Chip
+                  key={presetDays}
+                  label={`${presetDays}d`}
+                  size="small"
+                  onClick={() => setDays(presetDays)}
+                  sx={{
+                    height: 22,
+                    fontSize: '10px',
+                    fontWeight: isActive ? 700 : 500,
+                    cursor: 'pointer',
+                    backgroundColor: isActive ? '#e3f2fd' : '#f5f5f5',
+                    color: isActive ? '#1565c0' : '#78909c',
+                    border: isActive ? '1px solid #1565c040' : '1px solid transparent',
+                    '& .MuiChip-label': { px: 1 },
+                  }}
+                />
+              )
+            })}
           </Box>
           <Typography sx={{ fontSize: '10px', color: '#aaa', ml: 'auto', flexShrink: 0, whiteSpace: 'nowrap' }}>
             PostgreSQL
