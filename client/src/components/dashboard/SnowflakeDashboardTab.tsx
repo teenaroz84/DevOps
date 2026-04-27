@@ -80,7 +80,24 @@ const formatDisplayDate = (isoDate: string) => new Intl.DateTimeFormat('en-US', 
 }).format(new Date(`${isoDate}T00:00:00Z`))
 
 const fmtK = (n: number) => `$${(n / 1000).toFixed(1)}k`
-const fmtDollar = (n?: number) => n != null ? `$${n.toLocaleString()}` : '—'
+const fmtKpiDollar = (n?: number) => n != null ? `$${Math.round(n).toLocaleString('en-US')}` : '—'
+const fmtCompactUsd = (n?: number) => {
+  if (n == null) return '—'
+  const abs = Math.abs(n)
+  if (abs < 1_000_000) return fmtKpiDollar(n)
+
+  const units = [
+    { value: 1_000_000_000, suffix: 'B' },
+    { value: 1_000_000, suffix: 'M' },
+  ]
+  const unit = units.find((item) => abs >= item.value) ?? units[units.length - 1]
+  const scaled = n / unit.value
+  const formatted = new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(scaled)
+  return `$${formatted} ${unit.suffix}`
+}
 
 const ERROR_COLOR: Record<string, string> = {
   TIMEOUT:    '#e53935',
@@ -252,12 +269,12 @@ const CostEfficiencyScreen: React.FC<{ data: CostData; costDayLabel: string }> =
 
       {/* 6 KPIs matching screenshot */}
       <StatCardGrid items={[
-        { label: costDayLabel,           value: fmtDollar(s.cost_today),                              color: '#1565c0', bg: '#e3f2fd' },
-        { label: 'Cost MTD',             value: fmtDollar(s.cost_mtd),                                color: '#37474f', bg: '#f5f5f5' },
-        { label: 'Avg Daily Burn (30d)', value: fmtDollar(s.avg_daily_burn_30d),                      color: '#6a1b9a', bg: '#f3e5f5' },
-        { label: 'Remaining Balance',    value: fmtDollar(s.remaining_balance),                       color: '#2e7d32', bg: '#e8f5e9' },
+        { label: costDayLabel,           value: fmtKpiDollar(s.cost_today),                           color: '#1565c0', bg: '#e3f2fd' },
+        { label: 'Cost MTD',             value: fmtKpiDollar(s.cost_mtd),                             color: '#37474f', bg: '#f5f5f5' },
+        { label: 'Avg Daily Burn (30d)', value: fmtKpiDollar(s.avg_daily_burn_30d),                   color: '#6a1b9a', bg: '#f3e5f5' },
+        { label: 'Remaining Balance',    value: fmtCompactUsd(s.remaining_balance),                   color: '#2e7d32', bg: '#e8f5e9' },
         { label: 'Days Remaining',       value: s.days_remaining != null ? String(s.days_remaining) : '—', color: '#e65100', bg: '#fff3e0' },
-        { label: 'Savings Opp (7d)',     value: fmtDollar(s.optimization_opportunity_currency_7d),    color: '#c62828', bg: '#fce4ec' },
+        { label: 'Savings Opp (7d)',     value: fmtKpiDollar(s.optimization_opportunity_currency_7d), color: '#c62828', bg: '#fce4ec' },
       ]} />
 
       {/* Row 1: Cost by Service Type + Daily Cost Trend */}
@@ -379,42 +396,64 @@ const CostEfficiencyScreen: React.FC<{ data: CostData; costDayLabel: string }> =
 const PlatformIntelligenceScreen: React.FC<{ data: PlatformData; queriesDayLabel: string; analyticsLoading: boolean }> = ({ data, queriesDayLabel, analyticsLoading }) => {
   const s = data.summary
   const rowPanelHeight = 430
+  const avgQuerySeconds = Math.round(((s.avg_query_time_ms ?? 0) / 1000) * 10) / 10
 
   const heatRows   = data.heatmap.map(r => r.row)
   const heatCols   = data.heatmap[0]?.cells.map(c => c.col) ?? []
   const heatValues = data.heatmap.map(r => r.cells.map(c => c.value))
+  const queryVolumeTrendSeconds = data.queryVolumeTrend.map((point) => ({
+    ...point,
+    avg_time_seconds: Math.round(((point.avg_time_ms ?? 0) / 1000) * 10) / 10,
+  }))
 
   const utilColor = (v: number) => {
-    if (v >= 95) return '#b71c1c'
-    if (v >= 85) return '#e65100'
-    if (v >= 75) return '#fb8c00'
-    if (v >= 65) return '#fdd835'
-    if (v >= 55) return '#9ccc65'
-    if (v >= 45) return '#43a047'
-    if (v >= 35) return '#00897b'
-    if (v >= 25) return '#00acc1'
-    if (v >= 15) return '#1e88e5'
-    if (v >= 5) return '#5e35b1'
-    return '#8e24aa'
+    if (v >= 95) return '#5c4a73'
+    if (v >= 85) return '#7c6992'
+    if (v >= 75) return '#978ab0'
+    if (v >= 65) return '#afabc9'
+    if (v >= 55) return '#b0e0e2'
+    if (v >= 45) return '#c7e9ea'
+    if (v >= 35) return '#d6edef'
+    if (v >= 25) return '#e4f3f4'
+    if (v >= 15) return '#eef7f8'
+    if (v >= 5) return '#f6f4f8'
+    return '#fbfafc'
   }
 
   const heatLegend = [
-    { label: '95-100%', color: '#b71c1c' },
-    { label: '85-94%', color: '#e65100' },
-    { label: '75-84%', color: '#fb8c00' },
-    { label: '65-74%', color: '#fdd835' },
-    { label: '55-64%', color: '#9ccc65' },
-    { label: '45-54%', color: '#43a047' },
-    { label: '35-44%', color: '#00897b' },
-    { label: '25-34%', color: '#00acc1' },
-    { label: '15-24%', color: '#1e88e5' },
-    { label: '5-14%', color: '#5e35b1' },
-    { label: '0-4%', color: '#8e24aa' },
+    { label: '95-100%', color: '#5c4a73' },
+    { label: '85-94%', color: '#7c6992' },
+    { label: '75-84%', color: '#978ab0' },
+    { label: '65-74%', color: '#afabc9' },
+    { label: '55-64%', color: '#b0e0e2' },
+    { label: '45-54%', color: '#c7e9ea' },
+    { label: '35-44%', color: '#d6edef' },
+    { label: '25-34%', color: '#e4f3f4' },
+    { label: '15-24%', color: '#eef7f8' },
+    { label: '5-14%', color: '#f6f4f8' },
+    { label: '0-4%', color: '#fbfafc' },
   ]
+
+  const formatQueryDuration = (durationMs?: number) => {
+    const totalSeconds = Math.max(0, Math.round((Number(durationMs) || 0) / 1000))
+    const hours = Math.floor(totalSeconds / 3600)
+    const minutes = Math.floor((totalSeconds % 3600) / 60)
+    const seconds = totalSeconds % 60
+
+    if (hours > 0) return `${hours}h ${minutes}m`
+    if (minutes > 0) return `${minutes}m ${seconds}s`
+    return `${seconds}s`
+  }
 
   const queryCols: ColumnDef[] = [
     { key: 'pipeline',   header: 'Pipeline',      width: 180 },
-    { key: 'last_run',   header: 'Last Run',       width: 80 },
+    { key: 'start_date', header: 'Start Date',    width: 105 },
+    {
+      key: 'duration_ms',
+      header: 'Duration',
+      width: 100,
+      render: (row) => <Typography sx={{ fontSize: '12px' }}>{formatQueryDuration(row.duration_ms)}</Typography>,
+    },
     { key: 'error_type', header: 'Error Type',     width: 110,
       render: (row) => {
         const errorType = row.error_type || 'UNKNOWN'
@@ -432,6 +471,7 @@ const PlatformIntelligenceScreen: React.FC<{ data: PlatformData; queriesDayLabel
           </Tooltip>
         )
       } },
+    { key: 'last_run',   header: 'Last Run',       width: 80 },
     { key: 'sla_ok',     header: 'SLA Status',    width: 90,
       render: (row) => {
         const slaStatus = row.sla_ok 
@@ -464,7 +504,7 @@ const PlatformIntelligenceScreen: React.FC<{ data: PlatformData; queriesDayLabel
       <StatCardGrid items={[
         { label: queriesDayLabel,   value: (s.queries_today ?? 0).toLocaleString(),            color: '#1565c0', bg: '#e3f2fd' },
         { label: 'Query Success %', value: `${s.query_success_pct ?? 0}%`,                     color: '#2e7d32', bg: '#e8f5e9' },
-        { label: 'Avg Query Time',  value: `${(s.avg_query_time_ms ?? 0).toLocaleString()} ms`, color: '#37474f', bg: '#f5f5f5' },
+        { label: 'Avg Query Time',  value: `${avgQuerySeconds.toLocaleString()} sec`,          color: '#37474f', bg: '#f5f5f5' },
         { label: 'Credits Used',    value: (s.warehouse_credits_used ?? 0).toLocaleString(),   color: '#6a1b9a', bg: '#f3e5f5' },
         { label: 'Failed Tasks',    value: s.task_failures,                                    color: '#e65100', bg: '#fff3e0' },
         { label: 'Failed Logins',   value: s.failed_logins ?? 0,                               color: '#c62828', bg: '#fce4ec' },
@@ -507,10 +547,10 @@ const PlatformIntelligenceScreen: React.FC<{ data: PlatformData; queriesDayLabel
               </Box>
             ) : (
               <ComposedBarLineChart
-                data={data.queryVolumeTrend}
+                data={queryVolumeTrendSeconds}
                 xKey="date"
                 bars={[{ key: 'queries', color: '#1976d2', label: 'Queries' }]}
-                lines={[{ key: 'avg_time_ms', color: '#e53935', label: 'Avg Query Time (ms)', yAxisId: 'right' }]}
+                lines={[{ key: 'avg_time_seconds', color: '#e53935', label: 'Avg Query Time (sec)', yAxisId: 'right', unit: ' sec' }]}
                 height={188}
                 margin={{ top: 5, right: 35, left: 0, bottom: 24 }}
               />
@@ -534,7 +574,7 @@ const PlatformIntelligenceScreen: React.FC<{ data: PlatformData; queriesDayLabel
             ) : (
               <>
                 <Box sx={{ flex: 1, minHeight: 0, mb: 1 }}>
-                  <DataTable columns={queryCols} rows={data.topSlowQueries} maxHeight={220} tableMinWidth={840} compact />
+                  <DataTable columns={queryCols} rows={data.topSlowQueries} maxHeight={220} tableMinWidth={1040} compact />
                 </Box>
                 <Box sx={{ borderTop: '1px solid #e8ecf1', pt: 1, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5, fontSize: '11px', color: '#666' }}>
                   <Box>
@@ -576,8 +616,8 @@ const PlatformIntelligenceScreen: React.FC<{ data: PlatformData; queriesDayLabel
                 data={data.taskReliability}
                 xKey="date"
                 bars={[
-                  { key: 'succeeded', color: '#43a047', label: 'Succeeded' },
-                  { key: 'failed',    color: '#e53935', label: 'Failed' },
+                  { key: 'succeeded', color: '#43a047', label: 'Succeeded', stackId: 'taskReliability' },
+                  { key: 'failed',    color: '#e53935', label: 'Failed', stackId: 'taskReliability' },
                 ]}
                 lines={[]}
               />

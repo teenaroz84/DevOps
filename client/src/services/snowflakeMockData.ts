@@ -104,22 +104,22 @@ export const MOCK_SF_HOURLY_QUERIES = HOURS.map(h => ({
 }))
 
 export const MOCK_SF_TOP_SLOW_QUERIES = [
-  { pipeline: 'RPT_DAILY_AGGREG',   last_run: '5:18 AM', error_type: 'TIMEOUT',     sla_ok: false, fix: 'Partition pruning'   },
-  { pipeline: 'ML_FEAT_EXTRACT',    last_run: '9:28 AM', error_type: 'SPILL',       sla_ok: true,  fix: 'Warehouse upsize'    },
-  { pipeline: 'ENRICH_CUSTOMER_V2', last_run: '5:28 AM', error_type: 'LOCK_WAIT',   sla_ok: true,  fix: 'Column pruning'      },
-  { pipeline: 'SYNC_EXT_PARTNER',   last_run: '5:28 AM', error_type: 'ROW_ACCESS',  sla_ok: true,  fix: 'Row access policy'   },
-  { pipeline: 'FINANCE_MONTH_END_CLOSE',      last_run: '6:02 AM', error_type: 'TIMEOUT',    sla_ok: false, fix: 'Predicate pushdown'    },
-  { pipeline: 'CLAIMS_CROSSWALK_REFRESH',     last_run: '6:14 AM', error_type: 'SPILL',      sla_ok: false, fix: 'Temporary table tuning' },
-  { pipeline: 'CUSTOMER_360_SEGMENT_BUILD',   last_run: '6:31 AM', error_type: 'LOCK_WAIT',  sla_ok: true,  fix: 'Concurrency review'     },
-  { pipeline: 'RISK_SCORE_BATCH_V5',          last_run: '6:47 AM', error_type: 'ERROR',      sla_ok: false, fix: 'Query plan review'      },
-  { pipeline: 'OPERATIONS_SNAPSHOT_ROLLUP',   last_run: '7:05 AM', error_type: 'SLOW',       sla_ok: false, fix: 'Warehouse resize'       },
-  { pipeline: 'MEMBER_ELIGIBILITY_RECON',     last_run: '7:22 AM', error_type: 'SPILL',      sla_ok: true,  fix: 'Join simplification'    },
-  { pipeline: 'PROVIDER_NETWORK_ALIGNMENT',   last_run: '7:44 AM', error_type: 'TIMEOUT',    sla_ok: false, fix: 'Clustering review'      },
-  { pipeline: 'DIGITAL_EVENTS_SESSIONIZE',    last_run: '8:09 AM', error_type: 'LOCK_WAIT',  sla_ok: true,  fix: 'Task staggering'        },
-  { pipeline: 'BILLING_ADJUSTMENT_AUDIT',     last_run: '8:33 AM', error_type: 'ERROR',      sla_ok: false, fix: 'Retry and alerting'     },
-  { pipeline: 'PHARMACY_CLAIMS_P95_MONITOR',  last_run: '8:58 AM', error_type: 'SLOW',       sla_ok: true,  fix: 'Materialized view'      },
-  { pipeline: 'PRODUCT_USAGE_ENTITLEMENT',    last_run: '9:17 AM', error_type: 'ROW_ACCESS', sla_ok: true,  fix: 'Policy evaluation'      },
-  { pipeline: 'ENTERPRISE_USAGE_FACT_LOAD',   last_run: '9:46 AM', error_type: 'TIMEOUT',    sla_ok: false, fix: 'Partition strategy'     },
+  { pipeline: 'RPT_DAILY_AGGREG',   start_date: '2026-03-12', duration_ms: 482000, error_type: 'TIMEOUT',     sla_ok: false, fix: 'Partition pruning',        last_run: '5:18 AM' },
+  { pipeline: 'ML_FEAT_EXTRACT',    start_date: '2026-03-12', duration_ms: 315000, error_type: 'SPILL',       sla_ok: true,  fix: 'Warehouse upsize',         last_run: '9:28 AM' },
+  { pipeline: 'ENRICH_CUSTOMER_V2', start_date: '2026-03-11', duration_ms: 228000, error_type: 'LOCK_WAIT',   sla_ok: true,  fix: 'Column pruning',           last_run: '5:28 AM' },
+  { pipeline: 'SYNC_EXT_PARTNER',   start_date: '2026-03-11', duration_ms: 191000, error_type: 'ROW_ACCESS',  sla_ok: true,  fix: 'Row access policy',        last_run: '5:28 AM' },
+  { pipeline: 'FINANCE_MONTH_END_CLOSE',      start_date: '2026-03-10', duration_ms: 910000, error_type: 'TIMEOUT',    sla_ok: false, fix: 'Predicate pushdown',     last_run: '6:02 AM' },
+  { pipeline: 'CLAIMS_CROSSWALK_REFRESH',     start_date: '2026-03-10', duration_ms: 603000, error_type: 'SPILL',      sla_ok: false, fix: 'Temporary table tuning',  last_run: '6:14 AM' },
+  { pipeline: 'CUSTOMER_360_SEGMENT_BUILD',   start_date: '2026-03-09', duration_ms: 264000, error_type: 'LOCK_WAIT',  sla_ok: true,  fix: 'Concurrency review',      last_run: '6:31 AM' },
+  { pipeline: 'RISK_SCORE_BATCH_V5',          start_date: '2026-03-09', duration_ms: 756000, error_type: 'ERROR',      sla_ok: false, fix: 'Query plan review',       last_run: '6:47 AM' },
+  { pipeline: 'OPERATIONS_SNAPSHOT_ROLLUP',   start_date: '2026-03-08', duration_ms: 540000, error_type: 'SLOW',       sla_ok: false, fix: 'Warehouse resize',        last_run: '7:05 AM' },
+  { pipeline: 'MEMBER_ELIGIBILITY_RECON',     start_date: '2026-03-08', duration_ms: 198000, error_type: 'SPILL',      sla_ok: true,  fix: 'Join simplification',     last_run: '7:22 AM' },
+  { pipeline: 'PROVIDER_NETWORK_ALIGNMENT',   start_date: '2026-03-07', duration_ms: 844000, error_type: 'TIMEOUT',    sla_ok: false, fix: 'Clustering review',       last_run: '7:44 AM' },
+  { pipeline: 'DIGITAL_EVENTS_SESSIONIZE',    start_date: '2026-03-07', duration_ms: 276000, error_type: 'LOCK_WAIT',  sla_ok: true,  fix: 'Task staggering',         last_run: '8:09 AM' },
+  { pipeline: 'BILLING_ADJUSTMENT_AUDIT',     start_date: '2026-03-06', duration_ms: 632000, error_type: 'ERROR',      sla_ok: false, fix: 'Retry and alerting',      last_run: '8:33 AM' },
+  { pipeline: 'PHARMACY_CLAIMS_P95_MONITOR',  start_date: '2026-03-06', duration_ms: 172000, error_type: 'SLOW',       sla_ok: true,  fix: 'Materialized view',       last_run: '8:58 AM' },
+  { pipeline: 'PRODUCT_USAGE_ENTITLEMENT',    start_date: '2026-03-05', duration_ms: 144000, error_type: 'ROW_ACCESS', sla_ok: true,  fix: 'Policy evaluation',       last_run: '9:17 AM' },
+  { pipeline: 'ENTERPRISE_USAGE_FACT_LOAD',   start_date: '2026-03-05', duration_ms: 988000, error_type: 'TIMEOUT',    sla_ok: false, fix: 'Partition strategy',      last_run: '9:46 AM' },
 ]
 
 export const MOCK_SF_ALERT = 'DLQ count is high – review poison pill batching'

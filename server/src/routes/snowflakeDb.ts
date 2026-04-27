@@ -516,6 +516,7 @@ router.get('/top-slow-queries', async (req: Request, res: Response) => {
       SELECT
         query_pattern,
         MAX(start_ts) AS last_run,
+        (ARRAY_AGG(elapsed_ms ORDER BY start_ts DESC NULLS LAST))[1] AS last_elapsed_ms,
         ROUND(AVG(elapsed_ms), 2) AS avg_elapsed_ms,
         MAX(elapsed_ms) AS max_elapsed_ms,
         COUNT(*) FILTER (WHERE execution_status NOT ILIKE 'SUCCESS%') AS error_count,
@@ -535,7 +536,8 @@ router.get('/top-slow-queries', async (req: Request, res: Response) => {
     )
     SELECT
       c.query_pattern AS pipeline,
-      TO_CHAR(c.last_run, 'HH24:MI') AS last_run,
+      TO_CHAR(c.last_run, 'YYYY-MM-DD') AS start_date,
+      ROUND(c.last_elapsed_ms, 0) AS duration_ms,
       CASE WHEN c.error_count > 0 THEN 'ERROR' ELSE 'SLOW' END AS error_type,
       CASE WHEN c.error_count > 0 OR ranked.p95_elapsed_ms >= 15000 THEN FALSE ELSE TRUE END AS sla_ok,
       CASE
@@ -543,6 +545,7 @@ router.get('/top-slow-queries', async (req: Request, res: Response) => {
         WHEN ranked.p95_elapsed_ms >= 15000 THEN 'Review joins and warehouse sizing'
         ELSE 'Monitor pattern'
       END AS fix
+      ,TO_CHAR(c.last_run, 'HH24:MI') AS last_run
     FROM candidates c
     JOIN ranked ON ranked.query_pattern = c.query_pattern
     ORDER BY ranked.p95_elapsed_ms DESC NULLS LAST, c.error_count DESC, c.max_elapsed_ms DESC NULLS LAST
@@ -550,10 +553,12 @@ router.get('/top-slow-queries', async (req: Request, res: Response) => {
   `, [], 45_000);
   res.json((rows ?? []).map((r: any) => ({
     pipeline:   r.PIPELINE   ?? r.pipeline   ?? '',
-    last_run:   r.LAST_RUN   ?? r.last_run   ?? '',
+    start_date: r.START_DATE ?? r.start_date ?? '',
+    duration_ms: parseInt(r.DURATION_MS ?? r.duration_ms ?? 0, 10),
     error_type: r.ERROR_TYPE ?? r.error_type ?? null,
     sla_ok:     !!(r.SLA_OK  ?? r.sla_ok),
     fix:        r.FIX        ?? r.fix        ?? '',
+    last_run:   r.LAST_RUN   ?? r.last_run   ?? '',
   })));
 });
 
