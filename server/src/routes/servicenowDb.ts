@@ -128,29 +128,44 @@ router.get('/incident-list', async (req: Request, res: Response) => {
       SELECT latest.sninc_inc_num,
              sg.short_priority       AS priority_field,
              latest.sninc_state,
+             latest.sninc_opened_at,
              latest.sninc_capability,
              latest.sninc_short_desc,
              latest.sninc_assignment_grp
       FROM (
-        SELECT DISTINCT ON (sn.sninc_inc_num)
-               sn.sninc_inc_num,
-               sn.sninc_priority,
-               sn.sninc_state,
-               sn.sninc_capability,
-               sn.sninc_short_desc,
-               sn.sninc_assignment_grp,
-               sn.sninc_applkp_pltf_nm
-        FROM   edoops.service_now_inc sn
-        WHERE  (
-          COALESCE(LOWER(TRIM(sn.sninc_state)), '') NOT IN ('closed','resolved','canceled')
-          OR sn.sninc_closed_at::timestamp >= NOW() - INTERVAL '${days} days'
-          OR COALESCE(sn.sninc_resolved_at, sn.sninc_last_updt_dttm)::timestamp >= NOW() - INTERVAL '${days} days'
-        )
-        ORDER BY sn.sninc_inc_num, sn.sninc_last_updt_dttm DESC
+        SELECT *
+        FROM (
+          SELECT sn.sninc_inc_num,
+                 sn.sninc_priority,
+                 sn.sninc_state,
+                 sn.sninc_capability,
+                 sn.sninc_short_desc,
+                 sn.sninc_assignment_grp,
+                 sn.sninc_applkp_pltf_nm,
+                 sn.sninc_opened_at,
+                 sn.sninc_closed_at,
+                 sn.sninc_resolved_at,
+                 sn.sninc_last_updt_dttm,
+                 ROW_NUMBER() OVER (
+                   PARTITION BY sn.sninc_inc_num
+                   ORDER BY sn.sninc_last_updt_dttm DESC
+                 ) AS latest_rec
+          FROM edoops.service_now_inc sn
+        ) sn
+        WHERE sn.latest_rec = 1
+          AND sn.sninc_applkp_pltf_nm IS NOT NULL
+          AND (
+            COALESCE(LOWER(TRIM(sn.sninc_state)), '') NOT IN ('closed', 'resolved', 'canceled')
+            OR sn.sninc_closed_at::timestamp >= NOW() - INTERVAL '${days} days'
+            OR COALESCE(sn.sninc_resolved_at, sn.sninc_last_updt_dttm)::timestamp >= NOW() - INTERVAL '${days} days'
+          )
       ) latest
       JOIN edoops.sla_glossary sg ON latest.sninc_priority = sg.snow_priority
       WHERE 1=1
         ${platformClause}
+      ORDER BY latest.sninc_opened_at DESC NULLS LAST,
+               latest.sninc_last_updt_dttm DESC NULLS LAST,
+               latest.sninc_inc_num
     `, params);
     res.json(result.rows);
   } catch (err: any) {

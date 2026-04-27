@@ -693,6 +693,23 @@ export const IncidentListWidget: React.FC<{ platform?: string | null; days?: num
     return 'Open/In Progress'
   }
   const statusFilterOptions = ['All', 'Open/In Progress', 'Resolved/Closed/Canceled', 'On Hold']
+  const formatOpenedAt = (value?: string | null) => {
+    if (!value) return '—'
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return value
+    return new Intl.DateTimeFormat('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    }).format(date)
+  }
+  const getOpenedAtTime = (value?: string | null) => {
+    if (!value) return 0
+    const time = new Date(value).getTime()
+    return Number.isNaN(time) ? 0 : time
+  }
 
   useEffect(() => {
     setLoading(true); setData([]); setError(null)
@@ -711,8 +728,9 @@ export const IncidentListWidget: React.FC<{ platform?: string | null; days?: num
       .filter(r => priorityFilter === 'All' || r.priority_field === priorityFilter)
       .filter(r => statusFilter === 'All' || getIncidentStatusGroup(r.sninc_state) === statusFilter)
       .filter(r => !search || [
-        r.sninc_inc_num, r.sninc_capability, r.sninc_short_desc, r.sninc_assignment_grp
-      ].some(v => (v || '').toLowerCase().includes(search.toLowerCase()))),
+        r.sninc_inc_num, r.sninc_capability, r.sninc_short_desc, r.sninc_assignment_grp, r.sninc_opened_at
+      ].some(v => String(v || '').toLowerCase().includes(search.toLowerCase())))
+      .sort((a, b) => getOpenedAtTime(b.sninc_opened_at) - getOpenedAtTime(a.sninc_opened_at)),
   [data, priorityFilter, statusFilter, search])
 
   // Reset to first page whenever filters change
@@ -748,6 +766,10 @@ export const IncidentListWidget: React.FC<{ platform?: string | null; days?: num
               backgroundColor: isOpen ? '#ffebee' : '#e8f5e9' }} />
         )
       },
+    },
+    {
+      key: 'sninc_opened_at', header: 'Opened At', width: 150,
+      render: row => <Typography sx={{ fontSize: '11px', color: '#555' }}>{formatOpenedAt(row.sninc_opened_at)}</Typography>,
     },
     { key: 'sninc_capability',     header: 'Capability',        width: 140, render: row => <Typography sx={{ fontSize: '11px', color: '#555' }}>{row.sninc_capability || '—'}</Typography> },
     { key: 'sninc_short_desc',     header: 'Description',       flex: 1,    render: row => <Typography sx={{ fontSize: '11px', color: '#333' }}>{row.sninc_short_desc || '—'}</Typography> },
