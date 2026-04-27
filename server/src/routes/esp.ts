@@ -352,7 +352,7 @@ router.get('/platform-job-list/:platformId', async (req: Request, res: Response)
           ${applClause}
       ),
       source_jobs AS MATERIALIZED (
-        SELECT c.appl_name, c.jobname, c.jobtype AS job_type, c.last_run_date
+        SELECT c.appl_name, c.jobname, c.jobtype AS job_type
         FROM edoops.esp_job_cmnd c
         JOIN config_jobs cfg ON cfg.appl_name = c.appl_name AND cfg.jobname = c.jobname
       )
@@ -371,15 +371,19 @@ router.get('/platform-job-list/:platformId', async (req: Request, res: Response)
           SELECT DISTINCT ON (jobname)
             jobname,
             appl_name,
-            job_type,
-            last_run_date
+            job_type
           FROM source_jobs
-          ORDER BY jobname, last_run_date DESC NULLS LAST
+          ORDER BY jobname, appl_name
         ),
         latest_stats AS MATERIALIZED (
           SELECT DISTINCT ON (cfg.jobname)
             cfg.jobname,
             s.appl_name,
+            TO_CHAR(
+              NULLIF(s.start_date::text, '')::timestamp
+              + COALESCE(NULLIF(s.start_time::text, '')::time, TIME '00:00:00'),
+              'YYYY-MM-DD"T"HH24:MI:SS'
+            ) AS last_run_date,
             s.ccfail
           FROM config_jobs cfg
           JOIN edoops.esp_job_stats_recent s
@@ -391,16 +395,16 @@ router.get('/platform-job-list/:platformId', async (req: Request, res: Response)
           lc.jobname,
           lc.appl_name,
           lc.job_type,
-          lc.last_run_date,
+          ls.last_run_date,
           CASE
             WHEN ls.ccfail = 'YES' THEN 'FAILED'
             WHEN ls.ccfail = 'NO' THEN 'SUCCESS'
-            WHEN lc.last_run_date IS NULL THEN 'NEVER RUN'
+            WHEN ls.last_run_date IS NULL THEN 'NEVER RUN'
             ELSE 'UNKNOWN'
           END AS run_status
         FROM latest_cmd lc
-        LEFT JOIN latest_stats ls ON ls.jobname = lc.jobname
-        ORDER BY lc.last_run_date DESC NULLS LAST, lc.jobname
+        LEFT JOIN latest_stats ls ON ls.jobname = lc.jobname AND ls.appl_name = lc.appl_name
+        ORDER BY ls.last_run_date DESC NULLS LAST, lc.jobname
         LIMIT ${limitParam} OFFSET ${offsetParam}
       `, params),
     ]);
@@ -440,7 +444,7 @@ router.get('/platform-run-trend/:platformId', async (req: Request, res: Response
         FROM edoops.esp_job_stats_recent s
         JOIN (
           SELECT DISTINCT appl_name, jobname
-          FROM edoops.esp_job_config
+          FROM edoops.esp_job_config`
           WHERE pltf_name = $1
             AND appl_name IS NOT NULL
             AND jobname IS NOT NULL
