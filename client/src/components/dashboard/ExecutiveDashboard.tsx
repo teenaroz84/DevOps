@@ -43,10 +43,10 @@ const SOURCES: {
   sub: string
 }[] = [
   { key: 'overview',   label: 'Overview',        icon: <DashboardIcon />,    accent: TRUIST.sky, sub: 'Executive Summary' },
+  { key: 'servicenow', label: 'ServiceNow',      icon: <SupportAgentIcon />, accent: TRUIST.dawn, sub: '' },
   { key: 'logs',       label: 'Talend',          icon: <AccountTreeIcon />,  accent: TRUIST.dawn, sub: '' },
   { key: 'dmf',        label: 'DMF',             icon: <StorageIcon />,      accent: TRUIST.darkGray, sub: '' },
   { key: 'pipeline',   label: 'ESP',             icon: <CloudIcon />,        accent: TRUIST.dusk, sub: '' },
-  { key: 'servicenow', label: 'ServiceNow',      icon: <SupportAgentIcon />, accent: TRUIST.dawn, sub: '' },
   { key: 'snowflake',  label: 'Snowflake',       icon: <AcUnitIcon />,       accent: TRUIST.sky, sub: '' },
 ]
 
@@ -308,6 +308,32 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
 
   const snapshots: SnapshotDef[] = [
     {
+      key: 'servicenow',
+      prefKey: 'snapServiceNow',
+      title: 'ServiceNow',
+      accent: '#c62828',
+      source: 'ITSM · open incidents · last 7 days',
+      kpis: [
+        { label: 'P1 Incidents', value: p1Incidents,
+          color: p1Incidents > 0 ? '#c62828' : '#2e7d32', bg: p1Incidents > 0 ? '#fce4ec' : '#e8f5e9',
+          description: 'Critical P1 incidents currently open (last 7 days).',
+          dialogStats: [{ label: 'P2', value: p2Incidents }, { label: 'P3', value: p3Incidents }] },
+        { label: 'P2 Incidents', value: p2Incidents,
+          color: p2Incidents > 0 ? '#f57c00' : '#2e7d32', bg: p2Incidents > 0 ? '#fff3e0' : '#e8f5e9',
+          description: 'High priority P2 incidents open in the last 7 days.',
+          dialogStats: [{ label: 'P1', value: p1Incidents }, { label: 'P3', value: p3Incidents }] },
+        { label: 'Open Tickets', value: openTickets,
+          color: '#1565c0', bg: '#e3f2fd',
+          description: 'Total unresolved tickets across all priorities (last 7 days).',
+          dialogStats: [{ label: 'SLA Breached', value: slaBreached }] },
+        { label: 'SLA Breached', value: slaBreached,
+          color: slaBreached > 0 ? '#c62828' : '#2e7d32', bg: slaBreached > 0 ? '#fce4ec' : '#e8f5e9',
+          description: 'Tickets that have violated their SLA commitment (last 7 days).',
+          dialogStats: [{ label: 'Open', value: openTickets }, { label: 'P1', value: p1Incidents }] },
+      ],
+      alert: p1Incidents > 0 ? `⚠ ${p1Incidents} P1 incident${p1Incidents > 1 ? 's' : ''} active` : undefined,
+    },
+    {
       key: 'logs',
       prefKey: 'snapLogs',
       title: 'Talend',
@@ -386,32 +412,6 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
           dialogStats: [{ label: 'Applications', value: totalEspApps }, { label: 'Total Jobs', value: capCount(totalEspJobs) }] },
       ],
       alert: undefined,
-    },
-    {
-      key: 'servicenow',
-      prefKey: 'snapServiceNow',
-      title: 'ServiceNow',
-      accent: '#c62828',
-      source: 'ITSM · open incidents · last 7 days',
-      kpis: [
-        { label: 'P1 Incidents', value: p1Incidents,
-          color: p1Incidents > 0 ? '#c62828' : '#2e7d32', bg: p1Incidents > 0 ? '#fce4ec' : '#e8f5e9',
-          description: 'Critical P1 incidents currently open (last 7 days).',
-          dialogStats: [{ label: 'P2', value: p2Incidents }, { label: 'P3', value: p3Incidents }] },
-        { label: 'P2 Incidents', value: p2Incidents,
-          color: p2Incidents > 0 ? '#f57c00' : '#2e7d32', bg: p2Incidents > 0 ? '#fff3e0' : '#e8f5e9',
-          description: 'High priority P2 incidents open in the last 7 days.',
-          dialogStats: [{ label: 'P1', value: p1Incidents }, { label: 'P3', value: p3Incidents }] },
-        { label: 'Open Tickets', value: openTickets,
-          color: '#1565c0', bg: '#e3f2fd',
-          description: 'Total unresolved tickets across all priorities (last 7 days).',
-          dialogStats: [{ label: 'SLA Breached', value: slaBreached }] },
-        { label: 'SLA Breached', value: slaBreached,
-          color: slaBreached > 0 ? '#c62828' : '#2e7d32', bg: slaBreached > 0 ? '#fce4ec' : '#e8f5e9',
-          description: 'Tickets that have violated their SLA commitment (last 7 days).',
-          dialogStats: [{ label: 'Open', value: openTickets }, { label: 'P1', value: p1Incidents }] },
-      ],
-      alert: p1Incidents > 0 ? `⚠ ${p1Incidents} P1 incident${p1Incidents > 1 ? 's' : ''} active` : undefined,
     },
   ]
 
@@ -573,6 +573,13 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
                   <MetricBarList
                     items={[
                       {
+                        label: 'ServiceNow P1 Incidents',
+                        value: p1Incidents,
+                        max: Math.max(p1Incidents + p2Incidents + p3Incidents, 1),
+                        color: p1Incidents > 0 ? '#c62828' : '#2e7d32',
+                        sublabel: `${openTickets} open tickets · ${slaBreached} SLA breached`,
+                      },
+                      {
                         label: 'DMF Success Rate',
                         value: dmfSummary?.successRate?.value ?? 0,
                         suffix: '%',
@@ -587,13 +594,6 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
                         max: 100,
                         color: talendFailed > 10 ? '#c62828' : talendFailed > 0 ? '#f57c00' : '#2e7d32',
                         sublabel: `${talendSuccess} success · ${talendFailed} failed · ${talendRunning} running`,
-                      },
-                      {
-                        label: 'ServiceNow P1 Incidents',
-                        value: p1Incidents,
-                        max: Math.max(p1Incidents + p2Incidents + p3Incidents, 1),
-                        color: p1Incidents > 0 ? '#c62828' : '#2e7d32',
-                        sublabel: `${openTickets} open tickets · ${slaBreached} SLA breached`,
                       },
                       {
                         label: 'Credits Used',
