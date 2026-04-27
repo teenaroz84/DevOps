@@ -517,60 +517,37 @@ router.get('/hourly-queries', async (req: Request, res: Response) => {
 
 // ─── GET /api/snowflake/top-slow-queries ──────────────────
 router.get('/top-slow-queries', async (req: Request, res: Response) => {
-  const windowEndTimestamp = sqlRefTimestamp(req);
-  const lookbackDays = getEffectiveLookbackDays(req, 30);
-  const rollingWindowStartTimestamp = sqlEffectiveSinceTimestamp(req, 30);
-  const cacheKey = `top-slow-queries:${getAsOfDate(req) ?? 'current'}:${lookbackDays}`;
+  const cacheKey = 'top-slow-queries:exact-p95-query';
   const rows = await safeCachedQuery(cacheKey, `
-    WITH base AS MATERIALIZED (
+    WITH q AS (
       SELECT
         COALESCE(query_hash::text, MD5(COALESCE(query_text::text, ''))) AS query_pattern,
-        NULLIF(start_time::text, '')::timestamp AS start_ts,
-        NULLIF(total_elapsed_time::text, '')::numeric AS elapsed_ms,
-        COALESCE(execution_status::text, '') AS execution_status,
-        NULLIF(error_message::text, '') AS error_message
-      FROM edoops.sf_query_history
-      WHERE NULLIF(start_time::text, '')::timestamp >= ${rollingWindowStartTimestamp}
-        AND NULLIF(start_time::text, '')::timestamp < (${windowEndTimestamp} + INTERVAL '1 day')
-        AND NULLIF(total_elapsed_time::text, '')::numeric IS NOT NULL
-    ),
-    candidates AS MATERIALIZED (
-      SELECT
-        query_pattern,
-        MAX(start_ts) AS last_run,
-        (ARRAY_AGG(elapsed_ms ORDER BY start_ts DESC NULLS LAST))[1] AS last_elapsed_ms,
-        ROUND(AVG(elapsed_ms), 2) AS avg_elapsed_ms,
-        MAX(elapsed_ms) AS max_elapsed_ms,
+        MAX(NULLIF(start_time::text, '')::timestamp) AS last_run,
+        ROUND(AVG(NULLIF(total_elapsed_time::text, '')::numeric)::numeric, 2) AS avg_elapsed_ms,
+        ROUND(
+          (PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY NULLIF(total_elapsed_time::text, '')::numeric))::numeric,
+          2
+        ) AS p95_elapsed_ms,
         COUNT(*) FILTER (WHERE execution_status NOT ILIKE 'SUCCESS%') AS error_count,
         MAX(error_message) AS latest_error_message
-      FROM base
-      GROUP BY query_pattern
-      ORDER BY error_count DESC, max_elapsed_ms DESC NULLS LAST, avg_elapsed_ms DESC NULLS LAST
-      LIMIT 25
-    ),
-    ranked AS (
-      SELECT
-        b.query_pattern,
-        ROUND((PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY b.elapsed_ms))::numeric, 2) AS p95_elapsed_ms
-      FROM base b
-      JOIN candidates c ON c.query_pattern = b.query_pattern
-      GROUP BY b.query_pattern
+      FROM edoops.sf_query_history
+      WHERE NULLIF(total_elapsed_time::text, '')::numeric IS NOT NULL
+      GROUP BY COALESCE(query_hash::text, MD5(COALESCE(query_text::text, '')))
     )
     SELECT
-      c.query_pattern AS pipeline,
-      TO_CHAR(c.last_run, 'YYYY-MM-DD') AS start_date,
-      ROUND(c.last_elapsed_ms, 0) AS duration_ms,
-      CASE WHEN c.error_count > 0 THEN 'ERROR' ELSE 'SLOW' END AS error_type,
-      CASE WHEN c.error_count > 0 OR ranked.p95_elapsed_ms >= 15000 THEN FALSE ELSE TRUE END AS sla_ok,
+      q.query_pattern AS pipeline,
+      TO_CHAR(q.last_run, 'YYYY-MM-DD') AS start_date,
+      ROUND(q.p95_elapsed_ms, 0) AS duration_ms,
+      CASE WHEN q.error_count > 0 THEN 'ERROR' ELSE 'SLOW' END AS error_type,
+      CASE WHEN q.error_count > 0 OR q.p95_elapsed_ms >= 15000 THEN FALSE ELSE TRUE END AS sla_ok,
       CASE
-        WHEN ranked.p95_elapsed_ms >= 60000 THEN 'Consider clustering, pruning, or materialized view'
-        WHEN ranked.p95_elapsed_ms >= 15000 THEN 'Review joins and warehouse sizing'
+        WHEN q.p95_elapsed_ms >= 60000 THEN 'Consider clustering, pruning, or materialized view'
+        WHEN q.p95_elapsed_ms >= 15000 THEN 'Review joins and warehouse sizing'
         ELSE 'Monitor pattern'
-      END AS fix
-      ,TO_CHAR(c.last_run, 'HH24:MI') AS last_run
-    FROM candidates c
-    JOIN ranked ON ranked.query_pattern = c.query_pattern
-    ORDER BY ranked.p95_elapsed_ms DESC NULLS LAST, c.error_count DESC, c.max_elapsed_ms DESC NULLS LAST
+      END AS fix,
+      TO_CHAR(q.last_run, 'HH24:MI') AS last_run
+    FROM q
+    ORDER BY q.p95_elapsed_ms DESC
     LIMIT 10
   `, [], 45_000);
   res.json((rows ?? []).map((r: any) => ({
