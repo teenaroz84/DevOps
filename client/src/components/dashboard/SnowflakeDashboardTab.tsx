@@ -79,25 +79,12 @@ const formatDisplayDate = (isoDate: string) => new Intl.DateTimeFormat('en-US', 
   timeZone: 'UTC',
 }).format(new Date(`${isoDate}T00:00:00Z`))
 
-const fmtK = (n: number) => `$${(n / 1000).toFixed(1)}k`
-const fmtKpiDollar = (n?: number) => n != null ? `$${Math.round(n).toLocaleString('en-US')}` : '—'
-const fmtCompactUsd = (n?: number) => {
-  if (n == null) return '—'
-  const abs = Math.abs(n)
-  if (abs < 1_000_000) return fmtKpiDollar(n)
-
-  const units = [
-    { value: 1_000_000_000, suffix: 'B' },
-    { value: 1_000_000, suffix: 'M' },
-  ]
-  const unit = units.find((item) => abs >= item.value) ?? units[units.length - 1]
-  const scaled = n / unit.value
-  const formatted = new Intl.NumberFormat('en-US', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  }).format(scaled)
-  return `$${formatted} ${unit.suffix}`
+const fmtK = (n: number) => {
+  if (!Number.isFinite(n)) return '—'
+  if (Math.abs(n) < 1000) return `$${Math.round(n).toLocaleString('en-US')}`
+  return `$${(n / 1000).toFixed(1)}k`
 }
+const fmtKpiDollar = (n?: number) => n != null ? `$${Math.round(n).toLocaleString('en-US')}` : '—'
 
 const ERROR_COLOR: Record<string, string> = {
   TIMEOUT:    '#e53935',
@@ -270,11 +257,11 @@ const CostEfficiencyScreen: React.FC<{ data: CostData; costDayLabel: string }> =
       {/* 6 KPIs matching screenshot */}
       <StatCardGrid items={[
         { label: costDayLabel,           value: fmtKpiDollar(s.cost_today),                           color: '#1565c0', bg: '#e3f2fd' },
-        { label: costDayLabel === 'Cost Today' ? 'Cost MTD' : 'Cost', value: fmtKpiDollar(s.cost_mtd), color: '#37474f', bg: '#f5f5f5' },
-        { label: costDayLabel === 'Cost Today' ? 'Avg Daily Burn (30d)' : 'Daily Burn', value: fmtKpiDollar(s.avg_daily_burn_30d), color: '#6a1b9a', bg: '#f3e5f5' },
-        { label: 'Remaining Balance',    value: fmtCompactUsd(s.remaining_balance),                   color: '#2e7d32', bg: '#e8f5e9' },
-        { label: 'Days Remaining',       value: s.days_remaining != null ? String(s.days_remaining) : '—', color: '#e65100', bg: '#fff3e0' },
-        { label: costDayLabel === 'Cost Today' ? 'Savings Opp (7d)' : 'Savings Opp', value: fmtKpiDollar(s.optimization_opportunity_currency_7d), color: '#c62828', bg: '#fce4ec' },
+        { label: 'Cost MTD' , value: fmtKpiDollar(s.cost_mtd), color: '#37474f', bg: '#f5f5f5' },
+        { label: 'Avg Daily Burn (30d)', value: fmtKpiDollar(s.avg_daily_burn_30d), color: '#6a1b9a', bg: '#f3e5f5' },
+      //  { label: 'Remaining Balance',    value: fmtCompactUsd(s.remaining_balance),                   color: '#2e7d32', bg: '#e8f5e9' },
+      //  { label: 'Days Remaining',       value: s.days_remaining != null ? String(s.days_remaining) : '—', color: '#e65100', bg: '#fff3e0' },
+        { label:  'Savings Opp (7d)' , value: fmtKpiDollar(s.optimization_opportunity_currency_7d), color: '#c62828', bg: '#fce4ec' },
       ]} />
 
       {/* Row 1: Cost by Service Type + Daily Cost Trend */}
