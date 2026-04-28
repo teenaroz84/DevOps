@@ -435,14 +435,9 @@ const PlatformIntelligenceScreen: React.FC<{ data: PlatformData; queriesDayLabel
   ]
 
   const formatQueryDuration = (durationMs?: number) => {
-    const totalSeconds = Math.max(0, Math.round((Number(durationMs) || 0) / 1000))
-    const hours = Math.floor(totalSeconds / 3600)
-    const minutes = Math.floor((totalSeconds % 3600) / 60)
-    const seconds = totalSeconds % 60
-
-    if (hours > 0) return `${hours}h ${minutes}m`
-    if (minutes > 0) return `${minutes}m ${seconds}s`
-    return `${seconds}s`
+    const totalMinutes = Math.max(0, (Number(durationMs) || 0) / 60000)
+    if (totalMinutes >= 10) return `${Math.round(totalMinutes)} min`
+    return `${totalMinutes.toFixed(1)} min`
   }
 
   const queryCols: ColumnDef[] = [
