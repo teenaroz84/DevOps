@@ -25,9 +25,10 @@ const AGENTS_FOUNDRY_STORAGE_KEY = 'agents-foundry-expanded'
 interface NavigationProps {
   activeMenu: 'dashboard' | 'preferences' | 'executive' | 'quicksight-demo' | FullscreenAgentMenuId
   onMenuChange: (menu: 'dashboard' | 'preferences' | 'executive' | 'quicksight-demo' | FullscreenAgentMenuId) => void
+  loggedInUserId?: string
 }
 
-export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuChange }) => {
+export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuChange, loggedInUserId }) => {
   const [isExpanded, setIsExpanded] = useState(true)
   const [isAgentsFoundryExpanded, setIsAgentsFoundryExpanded] = useState(() => {
     if (typeof window === 'undefined') return false
@@ -188,22 +189,39 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuChange
         }}
       >
         {isExpanded && (
-          <Typography
-            variant="h6"
-            sx={{
-              fontWeight: 700,
-              color: APP_COLORS.primary,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 1,
-              fontSize: '14px',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            }}
-          >
-            📊 DataOps
-          </Typography>
+          <Box sx={{ minWidth: 0, overflow: 'hidden' }}>
+            <Typography
+              variant="h6"
+              sx={{
+                fontWeight: 700,
+                color: APP_COLORS.primary,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+                fontSize: '14px',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              📊 DataOps
+            </Typography>
+            {loggedInUserId && (
+              <Typography
+                sx={{
+                  mt: 0.25,
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  color: TRUIST.dusk,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                Signed in as {loggedInUserId}
+              </Typography>
+            )}
+          </Box>
         )}
         <IconButton
           onClick={() => setIsExpanded(!isExpanded)}

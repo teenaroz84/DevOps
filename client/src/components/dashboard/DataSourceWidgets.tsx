@@ -688,17 +688,28 @@ export const IncidentListWidget: React.FC<{ platform?: string | null; days?: num
   const normalizeIncidentState = (state?: string | null) => (state || '').trim().toLowerCase().replace(/\s+/g, ' ')
   const getIncidentStatusGroup = (state?: string | null) => {
     const normalized = normalizeIncidentState(state)
+     if (['new', 'open'].includes(normalized)) return 'New'
+    if (normalized === 'in progress') return 'In Progress'
     if (['on hold', 'onhold'].includes(normalized)) return 'On Hold'
     if (['closed', 'resolved', 'canceled', 'cancelled'].includes(normalized)) return 'Resolved/Closed/Canceled'
-    return 'Open/In Progress'
+    return 'Open'
   }
   const getIncidentStatusRank = (state?: string | null) => {
     const statusGroup = getIncidentStatusGroup(state)
-    if (statusGroup === 'Open/In Progress') return 0
-    if (statusGroup === 'On Hold') return 1
+    if (statusGroup === 'New') return 0
+    if (statusGroup === 'In Progress') return 1
+    if (statusGroup === 'On Hold') return 3
     return 2
   }
-  const statusFilterOptions = ['All', 'Open/In Progress', 'Resolved/Closed/Canceled', 'On Hold']
+  const getIncidentStateRank = (state?: string | null) => {
+    const normalized = normalizeIncidentState(state)
+    if (normalized === 'new') return 0
+    if (normalized === 'in progress') return 1
+    if (normalized === 'on hold' || normalized === 'onhold') return 3
+    if (['resolved', 'closed', 'canceled', 'cancelled'].includes(normalized)) return 2
+    return 4
+  }
+  const statusFilterOptions = ['All', 'New', 'In Progress', 'Resolved/Closed/Canceled', 'On Hold']
   const formatOpenedAt = (value?: string | null) => {
     if (!value) return '—'
     const date = new Date(value)
@@ -740,8 +751,11 @@ export const IncidentListWidget: React.FC<{ platform?: string | null; days?: num
         const rankDifference = getIncidentStatusRank(a.sninc_state) - getIncidentStatusRank(b.sninc_state)
         if (rankDifference !== 0) return rankDifference
 
-        const stateDifference = normalizeIncidentState(a.sninc_state).localeCompare(normalizeIncidentState(b.sninc_state))
+        const stateDifference = getIncidentStateRank(a.sninc_state) - getIncidentStateRank(b.sninc_state)
         if (stateDifference !== 0) return stateDifference
+
+        const stateLabelDifference = normalizeIncidentState(a.sninc_state).localeCompare(normalizeIncidentState(b.sninc_state))
+        if (stateLabelDifference !== 0) return stateLabelDifference
 
         return getOpenedAtTime(b.sninc_opened_at) - getOpenedAtTime(a.sninc_opened_at)
       }),
@@ -824,8 +838,10 @@ export const IncidentListWidget: React.FC<{ platform?: string | null; days?: num
             ))}
             {statusFilterOptions.map(status => {
               const isActive = statusFilter === status
-              const colors = status === 'Open/In Progress'
+              const colors = status === 'New'
                 ? { color: '#c62828', bg: '#ffebee' }
+                : status === 'In Progress'
+                  ? { color: '#1565c0', bg: '#e3f2fd' }
                 : status === 'Resolved/Closed/Canceled'
                   ? { color: '#2e7d32', bg: '#e8f5e9' }
                   : status === 'On Hold'

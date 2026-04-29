@@ -6,8 +6,10 @@
  * DELETE /api/sessions/:sessionId/:agentId  → { ok: true }
  *
  * Schema matches the deployed Lambda + CloudFormation table exactly:
- *   PK  session_id  String  — browser session UUID
+ *   PK  session_id  String  — chat session UUID
  *   SK  agent_id    String  — agent identifier (knowledge | esp | dmf …)
+ *       user_id     String  — authenticated user id (admin | developer)
+ *       browser_session_id String — persistent browser session UUID
  *       messages    String  — JSON-serialised Message[]
  *       updated_at  String  — ISO timestamp
  *       ttl         Number  — Unix epoch; DynamoDB TTL (30 days)
@@ -84,6 +86,10 @@ type SessionRecordInput = {
   messages?: unknown[] | string;
   updated_at?: string;
   updatedAt?: string;
+  browser_session_id?: string;
+  browserSessionId?: string;
+  user_id?: string;
+  userId?: string;
   ttl?: number;
 };
 
@@ -91,6 +97,7 @@ type SessionItem = {
   session_id: string;
   agent_id: string;
   browser_session_id?: string;
+  user_id?: string;
   messages: string;
   updated_at: string;
   ttl: number;
@@ -128,6 +135,11 @@ function toSessionItem(record: SessionRecordInput): SessionItem | null {
       : typeof (record as any).browserSessionId === 'string'
         ? (record as any).browserSessionId
         : undefined,
+    user_id: typeof (record as any).user_id === 'string'
+      ? (record as any).user_id
+      : typeof (record as any).userId === 'string'
+        ? (record as any).userId
+        : undefined,
     messages: JSON.stringify(rawMessages),
     updated_at: record.updated_at ?? record.updatedAt ?? new Date().toISOString(),
     ttl: Number.isFinite(record.ttl) ? Number(record.ttl) : Math.floor(Date.now() / 1000) + TTL_SECONDS,
@@ -153,6 +165,7 @@ function buildSessionItem(
   agentId: string,
   messages: unknown[],
   browserSessionId: string | undefined,
+  userId: string | undefined,
   partitionKey: string,
   sortKey?: string | null,
 ): Record<string, unknown> {
@@ -169,10 +182,26 @@ function buildSessionItem(
   if (browserSessionId) {
     item.browser_session_id = browserSessionId;
   }
+  if (userId) {
+    item.user_id = userId;
+  }
   if (sortKey) {
     item[sortKey] = getSortKeyValue(sortKey, sessionId, agentId);
   }
   return item;
+}
+
+function getRequestUserId(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function getStoredUserId(item: Record<string, unknown> | undefined): string | undefined {
+  if (!item) return undefined;
+  return typeof item.user_id === 'string'
+    ? item.user_id
+    : typeof item.userId === 'string'
+      ? item.userId
+      : undefined;
 }
 
 function buildSessionSummary(sessionId: string, messages: unknown[], updatedAt: string | undefined): SessionSummary {
@@ -395,6 +424,8 @@ router.post('/bulk', async (req: Request, res: Response) => {
         ...(keys.sortKey ? { [keys.sortKey]: getSortKeyValue(keys.sortKey, item.session_id, item.agent_id) } : {}),
         session_id: item.session_id,
         agent_id: item.agent_id,
+        ...(item.browser_session_id ? { browser_session_id: item.browser_session_id } : {}),
+        ...(item.user_id ? { user_id: item.user_id } : {}),
         messages: item.messages,
         updated_at: item.updated_at,
         ttl: item.ttl,
@@ -432,10 +463,11 @@ router.get('/agent/:agentId', async (req: Request, res: Response) => {
   const browserSessionId = typeof req.query.browserSessionId === 'string'
     ? req.query.browserSessionId
     : '';
+  const userId = getRequestUserId(req.query.userId);
 
-  debugLog('LIST', { agentId, browserSessionId });
+  debugLog('LIST', { agentId, browserSessionId, userId });
 
-  if (!browserSessionId) {
+  if (!browserSessionId || !userId) {
     res.json({ sessions: [] });
     return;
   }
@@ -447,10 +479,11 @@ router.get('/agent/:agentId', async (req: Request, res: Response) => {
     for (let page = 0; page < 25; page += 1) {
       const result = await getClient().send(new ScanCommand({
         TableName: TABLE,
-        FilterExpression: 'agent_id = :agentId AND browser_session_id = :browserSessionId',
+        FilterExpression: 'agent_id = :agentId AND browser_session_id = :browserSessionId AND user_id = :userId',
         ExpressionAttributeValues: {
           ':agentId': agentId,
           ':browserSessionId': browserSessionId,
+          ':userId': userId,
         },
         ExclusiveStartKey: cursor,
       }));
@@ -477,7 +510,7 @@ router.get('/agent/:agentId', async (req: Request, res: Response) => {
       cursor = result.LastEvaluatedKey as Record<string, unknown>;
     }
 
-    const sessions = Array.from(sessionsById.values()).sort((a, b) => b.updatedAt - a.updatedAt);
+    const sessions = Array.from(sessionsById.values()).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 3);
     res.json({ sessions });
   } catch (err: any) {
     console.warn('[sessions] LIST failed, returning empty session list:', err.message);
@@ -488,7 +521,8 @@ router.get('/agent/:agentId', async (req: Request, res: Response) => {
 // GET /api/sessions/:sessionId/:agentId
 router.get('/:sessionId/:agentId', async (req: Request, res: Response) => {
   const { sessionId, agentId } = req.params;
-  debugLog('GET', { sessionId, agentId });
+  const userId = getRequestUserId(req.query.userId);
+  debugLog('GET', { sessionId, agentId, userId });
   try {
     const keys = await resolveKeySchema();
     let item: Record<string, unknown> | undefined;
@@ -522,6 +556,11 @@ router.get('/:sessionId/:agentId', async (req: Request, res: Response) => {
       }
     }
 
+    const storedUserId = getStoredUserId(item);
+    if (userId && storedUserId && storedUserId !== userId) {
+      item = undefined;
+    }
+
     const messages = item ? JSON.parse((item.messages as string) || '[]') : [];
     res.json({ messages });
   } catch (err: any) {
@@ -539,11 +578,12 @@ router.post('/:sessionId/:agentId', async (req: Request, res: Response) => {
     : typeof req.body.browser_session_id === 'string'
       ? req.body.browser_session_id
       : undefined;
-  debugLog('POST', { sessionId, agentId, messageCount: messages.length });
+  const userId = getRequestUserId(req.body.userId) ?? getRequestUserId(req.body.user_id);
+  debugLog('POST', { sessionId, agentId, messageCount: messages.length, userId });
   let writeKeyMeta: { partitionKey: string; partitionValue: string; sortKey: string | null; sortValue: string | null } | null = null;
   try {
     const keys = await resolveKeySchema();
-    const item = buildSessionItem(sessionId, agentId, messages, browserSessionId, keys.partitionKey, keys.sortKey);
+    const item = buildSessionItem(sessionId, agentId, messages, browserSessionId, userId, keys.partitionKey, keys.sortKey);
     writeKeyMeta = {
       partitionKey: keys.partitionKey,
       partitionValue: String(item[keys.partitionKey] ?? ''),

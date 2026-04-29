@@ -1,28 +1,23 @@
 /**
- * session — generates a stable session ID for the current browser tab.
+ * session — generates a stable browser session ID stored in localStorage.
  *
- * Uses sessionStorage so the ID:
- *   • persists across page refreshes within the same tab
- *   • resets when the tab is closed or a new tab is opened
- *
- * All dashboard preference storage is scoped to this ID so different
- * sessions never overwrite each other.
+ * The ID survives page refreshes and browser restarts so authenticated users
+ * can reload the app and continue loading their full-screen chat sessions.
  */
 
-const SESSION_STORAGE_KEY = 'dataops-session-id'
+const SESSION_STORAGE_KEY = 'dataops-browser-session-id'
 
-function getOrCreateSessionId(): string {
+export function getSessionId(): string {
   try {
-    let id = sessionStorage.getItem(SESSION_STORAGE_KEY)
+    let id = localStorage.getItem(SESSION_STORAGE_KEY)
     if (!id) {
       id = crypto.randomUUID()
-      sessionStorage.setItem(SESSION_STORAGE_KEY, id)
+      localStorage.setItem(SESSION_STORAGE_KEY, id)
     }
     return id
   } catch {
-    // sessionStorage unavailable (e.g. private browsing, iframe) — use in-memory ID
     return crypto.randomUUID()
   }
 }
 
-export const SESSION_ID = getOrCreateSessionId()
+export const SESSION_ID = getSessionId()

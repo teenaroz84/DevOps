@@ -1,15 +1,16 @@
 import { useState, useEffect, useCallback } from 'react'
-import { SESSION_ID } from './services/session'
 import { ThemeProvider, createTheme, CssBaseline } from '@mui/material'
 import { Box } from '@mui/material'
 import { Navigation } from './components/layout/Navigation'
 import { Dashboard } from './components/dashboard/Dashboard'
 import { ChatPanel } from './components/chat/ChatPanel'
+import { LoginScreen } from './components/auth/LoginScreen'
 import { UserPreferences, WidgetPreferences } from './components/settings/UserPreferences'
 import { ExecutiveDashboard, type SourceKey } from './components/dashboard/ExecutiveDashboard'
 import ExecutiveDashboardEnhanced from './components/dashboard/ExecutiveDashboardEnhanced'
 import { MockDataProvider } from './context/MockDataContext'
 import { AGENTS, FULLSCREEN_AGENT_MENUS, type FullscreenAgentMenuId } from './config/agentConfig'
+import { authService, type AuthSession } from './services/auth'
 import { APP_COLORS } from './theme/truistPalette'
 
 // Default preferences
@@ -67,20 +68,34 @@ const theme = createTheme({
 })
 
 function App() {
+  const [authSession, setAuthSession] = useState<AuthSession | null>(() => authService.getSession())
+  const isLoginRoute = typeof window !== 'undefined' && window.location.pathname === '/login'
   const [activeMenu, setActiveMenu] = useState<'dashboard' | 'preferences' | 'executive' | 'quicksight-demo' | FullscreenAgentMenuId>('executive')
   // null = closed; 'knowledge' | 'esp' | 'dmf' | etc = open panel for that agent
   const [openAgentId, setOpenAgentId] = useState<string | null>(null)
   const [executiveSource, setExecutiveSource] = useState<SourceKey>('overview')
   const [preferences, setPreferences] = useState<WidgetPreferences>(DEFAULT_PREFERENCES)
   const [widgetOrder, setWidgetOrder] = useState<string[]>(DEFAULT_WIDGET_ORDER)
+  const activeBrowserSessionId = authSession?.sessionId
 
   const handleOpenAgent = useCallback((agentId: string) => setOpenAgentId(agentId), [])
   const handleCloseAgent = useCallback(() => setOpenAgentId(null), [])
   const handleChatClick = useCallback(() => setOpenAgentId('knowledge'), [])
+  const handleLogin = useCallback((session: AuthSession) => {
+    setAuthSession(session)
+    if (typeof window !== 'undefined' && window.location.pathname === '/login') {
+      window.history.replaceState({}, '', '/')
+    }
+  }, [])
 
   // Load preferences and widget order from localStorage on mount
   useEffect(() => {
-    const savedPreferences = localStorage.getItem(`dashboardPreferences:${SESSION_ID}`)
+    if (!activeBrowserSessionId) return
+
+    setPreferences(DEFAULT_PREFERENCES)
+    setWidgetOrder(DEFAULT_WIDGET_ORDER)
+
+    const savedPreferences = localStorage.getItem(`dashboardPreferences:${activeBrowserSessionId}`)
     if (savedPreferences) {
       try {
         const parsed = JSON.parse(savedPreferences)
@@ -90,7 +105,7 @@ function App() {
       }
     }
 
-    const savedWidgetOrder = localStorage.getItem(`dashboardWidgetOrder:${SESSION_ID}`)
+    const savedWidgetOrder = localStorage.getItem(`dashboardWidgetOrder:${activeBrowserSessionId}`)
     if (savedWidgetOrder) {
       try {
         const parsed = JSON.parse(savedWidgetOrder)
@@ -99,17 +114,19 @@ function App() {
         console.error('Failed to parse saved widget order:', error)
       }
     }
-  }, [])
+  }, [activeBrowserSessionId])
 
   // Save preferences to localStorage whenever they change
   useEffect(() => {
-    localStorage.setItem(`dashboardPreferences:${SESSION_ID}`, JSON.stringify(preferences))
-  }, [preferences])
+    if (!activeBrowserSessionId) return
+    localStorage.setItem(`dashboardPreferences:${activeBrowserSessionId}`, JSON.stringify(preferences))
+  }, [activeBrowserSessionId, preferences])
 
   // Save widget order to localStorage whenever it changes
   useEffect(() => {
-    localStorage.setItem(`dashboardWidgetOrder:${SESSION_ID}`, JSON.stringify(widgetOrder))
-  }, [widgetOrder])
+    if (!activeBrowserSessionId) return
+    localStorage.setItem(`dashboardWidgetOrder:${activeBrowserSessionId}`, JSON.stringify(widgetOrder))
+  }, [activeBrowserSessionId, widgetOrder])
 
   const fullscreenAgentMenu = FULLSCREEN_AGENT_MENUS.find((item) => item.menuId === activeMenu)
   const fullscreenAgentSourceMap: Partial<Record<FullscreenAgentMenuId, SourceKey>> = {
@@ -133,7 +150,9 @@ function App() {
     <MockDataProvider>
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      {fullscreenAgentMenu ? (
+      {!authSession || isLoginRoute ? (
+        <LoginScreen onLogin={handleLogin} />
+      ) : fullscreenAgentMenu ? (
         // Full-screen agent layout (nav shortcut)
         <ChatPanel
           isOpen={true}
@@ -144,7 +163,7 @@ function App() {
       ) : activeMenu === 'preferences' ? (
         // Preferences layout
         <Box sx={{ display: 'flex', height: '100vh', backgroundColor: APP_COLORS.background }}>
-          <Navigation activeMenu={activeMenu} onMenuChange={setActiveMenu} />
+          <Navigation activeMenu={activeMenu} onMenuChange={setActiveMenu} loggedInUserId={authSession?.userId} />
           <Box sx={{ flex: 1, overflow: 'auto' }}>
             <UserPreferences preferences={preferences} onPreferencesChange={setPreferences} />
           </Box>
@@ -153,7 +172,7 @@ function App() {
         // Dashboard layout with sidebar
         <Box sx={{ display: 'flex', height: '100vh', backgroundColor: APP_COLORS.background }}>
           {/* Navigation Sidebar */}
-          <Navigation activeMenu={activeMenu} onMenuChange={setActiveMenu} />
+          <Navigation activeMenu={activeMenu} onMenuChange={setActiveMenu} loggedInUserId={authSession?.userId} />
 
           {/* Main Content */}
           <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>

@@ -434,6 +434,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
                     bars={[{ key: 'count', label: 'Log Count', color: '#e65100' }]}
                     lines={[]}
                     height={180}
+                    margin={{ top: 24, right: 35, left: 0, bottom: 5 }}
                     showBarLabels
                   />
                 </Box>
