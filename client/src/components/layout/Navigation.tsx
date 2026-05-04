@@ -11,6 +11,7 @@ import {
 import DashboardIcon from '@mui/icons-material/Dashboard'
 import TuneIcon from '@mui/icons-material/Tune'
 import AnalyticsIcon from '@mui/icons-material/Analytics'
+import LogoutIcon from '@mui/icons-material/Logout'
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import DataObjectIcon from '@mui/icons-material/DataObject'
@@ -26,9 +27,10 @@ interface NavigationProps {
   activeMenu: 'dashboard' | 'preferences' | 'executive' | 'quicksight-demo' | FullscreenAgentMenuId
   onMenuChange: (menu: 'dashboard' | 'preferences' | 'executive' | 'quicksight-demo' | FullscreenAgentMenuId) => void
   loggedInUserId?: string
+  onLogout?: () => void
 }
 
-export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuChange, loggedInUserId }) => {
+export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuChange, loggedInUserId, onLogout }) => {
   const [isExpanded, setIsExpanded] = useState(true)
   const [isAgentsFoundryExpanded, setIsAgentsFoundryExpanded] = useState(() => {
     if (typeof window === 'undefined') return false
@@ -207,19 +209,37 @@ export const Navigation: React.FC<NavigationProps> = ({ activeMenu, onMenuChange
               📊 DataOps
             </Typography>
             {loggedInUserId && (
-              <Typography
-                sx={{
-                  mt: 0.25,
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  color: TRUIST.dusk,
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                }}
-              >
-                Signed in as {loggedInUserId}
-              </Typography>
+              <Box sx={{ mt: 0.25, display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                <Typography
+                  sx={{
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    color: TRUIST.dusk,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  Signed in as {loggedInUserId}
+                </Typography>
+                {onLogout && (
+                  <Tooltip title="Log off" placement="bottom">
+                    <IconButton
+                      onClick={onLogout}
+                      size="small"
+                      sx={{
+                        width: 24,
+                        height: 24,
+                        color: TRUIST.dusk,
+                        border: `1px solid ${TRUIST.dawn}`,
+                        '&:hover': { backgroundColor: TRUIST.shell, color: APP_COLORS.primary },
+                      }}
+                    >
+                      <LogoutIcon sx={{ fontSize: 14 }} />
+                    </IconButton>
+                  </Tooltip>
+                )}
+              </Box>
             )}
           </Box>
         )}

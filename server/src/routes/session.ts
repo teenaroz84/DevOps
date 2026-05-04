@@ -29,6 +29,7 @@ const PARTITION_KEY = process.env.SESSIONS_PARTITION_KEY || process.env.SESSIONS
 const SORT_KEY = process.env.SESSIONS_SORT_KEY || process.env.SESSIONS_SK || 'agent_id';
 const TTL_SECONDS = 30 * 24 * 60 * 60; // 30 days
 const DEBUG_SESSIONS = process.env.DEBUG_SESSIONS === '1';
+const ENV_USER = process.env.username || process.env.USERNAME || process.env.USER || 'unknown';
 
 let ddb: DynamoDBDocumentClient | null = null;
 let keySchemaCache: { partitionKey: string; sortKey: string | null } | null = null;
@@ -193,6 +194,11 @@ function buildSessionItem(
 
 function getRequestUserId(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function getEffectiveUserId(userId: string | undefined): string | undefined {
+  if (!userId) return undefined;
+  return `${userId}:${ENV_USER}`;
 }
 
 function getStoredUserId(item: Record<string, unknown> | undefined): string | undefined {
@@ -463,7 +469,7 @@ router.get('/agent/:agentId', async (req: Request, res: Response) => {
   const browserSessionId = typeof req.query.browserSessionId === 'string'
     ? req.query.browserSessionId
     : '';
-  const userId = getRequestUserId(req.query.userId);
+  const userId = getEffectiveUserId(getRequestUserId(req.query.userId));
 
   debugLog('LIST', { agentId, browserSessionId, userId });
 
@@ -521,7 +527,7 @@ router.get('/agent/:agentId', async (req: Request, res: Response) => {
 // GET /api/sessions/:sessionId/:agentId
 router.get('/:sessionId/:agentId', async (req: Request, res: Response) => {
   const { sessionId, agentId } = req.params;
-  const userId = getRequestUserId(req.query.userId);
+  const userId = getEffectiveUserId(getRequestUserId(req.query.userId));
   debugLog('GET', { sessionId, agentId, userId });
   try {
     const keys = await resolveKeySchema();
@@ -578,7 +584,7 @@ router.post('/:sessionId/:agentId', async (req: Request, res: Response) => {
     : typeof req.body.browser_session_id === 'string'
       ? req.body.browser_session_id
       : undefined;
-  const userId = getRequestUserId(req.body.userId) ?? getRequestUserId(req.body.user_id);
+  const userId = getEffectiveUserId(getRequestUserId(req.body.userId) ?? getRequestUserId(req.body.user_id));
   debugLog('POST', { sessionId, agentId, messageCount: messages.length, userId });
   let writeKeyMeta: { partitionKey: string; partitionValue: string; sortKey: string | null; sortValue: string | null } | null = null;
   try {
@@ -618,17 +624,27 @@ router.post('/:sessionId/:agentId', async (req: Request, res: Response) => {
 // DELETE /api/sessions/:sessionId/:agentId
 router.delete('/:sessionId/:agentId', async (req: Request, res: Response) => {
   const { sessionId, agentId } = req.params;
-  debugLog('DELETE', { sessionId, agentId });
+  const userId = getEffectiveUserId(getRequestUserId(req.query.userId));
+  debugLog('DELETE', { sessionId, agentId, userId });
   try {
     const keys = await resolveKeySchema();
     if (keys.sortKey === 'agent_id') {
-      await getClient().send(new DeleteCommand({
+      const result = await getClient().send(new GetCommand({
         TableName: TABLE,
         Key: buildSessionKey(sessionId, agentId, keys.partitionKey, keys.sortKey, agentId),
       }));
+      const item = result.Item as Record<string, unknown> | undefined;
+      const storedUserId = getStoredUserId(item);
+      if (!userId || !storedUserId || storedUserId === userId) {
+        await getClient().send(new DeleteCommand({
+          TableName: TABLE,
+          Key: buildSessionKey(sessionId, agentId, keys.partitionKey, keys.sortKey, agentId),
+        }));
+      }
     } else if (keys.sortKey) {
       const item = await findLatestAgentItem(sessionId, agentId, keys.partitionKey, keys.sortKey);
-      if (item) {
+      const storedUserId = getStoredUserId(item);
+      if (item && (!userId || !storedUserId || storedUserId === userId)) {
         const sortValue = String(item[keys.sortKey] ?? '');
         if (sortValue) {
           await getClient().send(new DeleteCommand({
@@ -638,10 +654,18 @@ router.delete('/:sessionId/:agentId', async (req: Request, res: Response) => {
         }
       }
     } else {
-      await getClient().send(new DeleteCommand({
+      const result = await getClient().send(new GetCommand({
         TableName: TABLE,
         Key: buildSessionKey(sessionId, agentId, keys.partitionKey, null),
       }));
+      const item = result.Item as Record<string, unknown> | undefined;
+      const storedUserId = getStoredUserId(item);
+      if (!userId || !storedUserId || storedUserId === userId) {
+        await getClient().send(new DeleteCommand({
+          TableName: TABLE,
+          Key: buildSessionKey(sessionId, agentId, keys.partitionKey, null),
+        }));
+      }
     }
     res.json({ ok: true, persisted: true });
   } catch (err: any) {

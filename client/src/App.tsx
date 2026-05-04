@@ -87,6 +87,15 @@ function App() {
       window.history.replaceState({}, '', '/')
     }
   }, [])
+  const handleLogout = useCallback(() => {
+    authService.logout()
+    setOpenAgentId(null)
+    setActiveMenu('executive')
+    setAuthSession(null)
+    if (typeof window !== 'undefined') {
+      window.history.replaceState({}, '', '/login')
+    }
+  }, [])
 
   // Load preferences and widget order from localStorage on mount
   useEffect(() => {
@@ -163,7 +172,7 @@ function App() {
       ) : activeMenu === 'preferences' ? (
         // Preferences layout
         <Box sx={{ display: 'flex', height: '100vh', backgroundColor: APP_COLORS.background }}>
-          <Navigation activeMenu={activeMenu} onMenuChange={setActiveMenu} loggedInUserId={authSession?.userId} />
+          <Navigation activeMenu={activeMenu} onMenuChange={setActiveMenu} loggedInUserId={authSession?.userId} onLogout={handleLogout} />
           <Box sx={{ flex: 1, overflow: 'auto' }}>
             <UserPreferences preferences={preferences} onPreferencesChange={setPreferences} />
           </Box>
@@ -172,7 +181,7 @@ function App() {
         // Dashboard layout with sidebar
         <Box sx={{ display: 'flex', height: '100vh', backgroundColor: APP_COLORS.background }}>
           {/* Navigation Sidebar */}
-          <Navigation activeMenu={activeMenu} onMenuChange={setActiveMenu} loggedInUserId={authSession?.userId} />
+          <Navigation activeMenu={activeMenu} onMenuChange={setActiveMenu} loggedInUserId={authSession?.userId} onLogout={handleLogout} />
 
           {/* Main Content */}
           <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>

@@ -10,7 +10,7 @@ export interface AuthSession {
 
 const AUTH_STORAGE_KEY = 'dataops-auth-session'
 const VALID_CREDENTIALS: Record<AuthUserId, string> = {
-  admin: 'admin',
+  admin: 'dataops',
   developer: 'developer',
 }
 
