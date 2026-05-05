@@ -27,30 +27,41 @@ router.get('/incidents', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
     const platform = req.query.platform as string | undefined;
-    const platformClause = platform ? `AND sn.sninc_applkp_pltf_nm = $1` : '';
+    const platformClause = platform ? `AND sn.sninc_applkp_pltf_nm IS NOT NULL AND sn.sninc_applkp_pltf_nm = $1` : 'AND sn.sninc_applkp_pltf_nm is NOT NULL ';
     const params = platform ? [platform] : [];
     const result = await pool.query(`
-      SELECT sg.short_priority AS priority_field,
+      select sg.short_priority AS priority_field,
              COUNT(*)::int     AS incident_count
-      FROM (
-        SELECT DISTINCT ON (sn.sninc_inc_num)
-               sn.sninc_priority
-        FROM   edoops.service_now_inc sn
-        WHERE  ${OPEN_INCIDENT_FILTER}
-          ${platformClause}
-        ORDER BY sn.sninc_inc_num, sn.sninc_last_updt_dttm DESC
-      ) sn
-      JOIN   edoops.sla_glossary sg
-        ON   sn.sninc_priority = sg.snow_priority
+      from (
+        select snc.sninc_inc_num,
+               snc.sninc_priority,
+               snc.sninc_applkp_pltf_nm
+        from (
+          SELECT sninc_inc_num,
+                 sninc_priority,
+                 sninc_applkp_pltf_nm,
+                 sninc_state,
+                 sninc_last_updt_dttm,
+                 ROW_NUMBER() over(
+                   partition by sninc_inc_num
+                   order by sninc_last_updt_dttm desc
+                 ) as latest_rec
+          FROM   edoops.service_now_inc
+        ) sn
+        WHERE sn.latest_rec = 1 ${platformClause}
+          AND sn.sninc_applkp_pltf_nm IS NOT NULL
+          AND COALESCE(LOWER(TRIM(sn.sninc_state)), '') IN ('new','in progress','on hold')
+      ) snc
+      JOIN edoops.sla_glossary sg ON snc.sninc_priority = sg.snow_priority
       GROUP BY sg.short_priority
       ORDER BY CASE sg.short_priority
-                 WHEN 'P1' THEN 1
-                 WHEN 'P2' THEN 2
-                 WHEN 'P3' THEN 3
-                 WHEN 'P4' THEN 4
-                 WHEN 'P5' THEN 5
-                 ELSE 99
-               END, sg.short_priority
+        WHEN 'P1' THEN 1
+        WHEN 'P2' THEN 2
+        WHEN 'P3' THEN 3
+        WHEN 'P4' THEN 4
+        WHEN 'P5' THEN 5
+        ELSE 99
+      END, sg.short_priority
     `, params);
     res.json(result.rows);
   } catch (err: any) {
@@ -66,47 +77,47 @@ router.get('/missed-incidents', async (req: Request, res: Response) => {
     const pool = getPgPool();
     const days = parseDays(req.query);
     const platform = req.query.platform as string | undefined;
-    const platformClause = platform ? `AND sn.sninc_applkp_pltf_nm = $1` : '';
+    const platformClause = platform ? `AND sn.sninc_applkp_pltf_nm = $1 AND sn.sninc_applkp_pltf_nm is not null` : `AND sn.sninc_applkp_pltf_nm is not null`;
     const params = platform ? [platform] : [];
     const result = await pool.query(`
       SELECT sg.short_priority AS priority_field,
-            COUNT(*)::int     AS incident_count,
-            COUNT(CASE WHEN sla_breached THEN 1 END)::int AS breached_count,
-            MAX(sg.response_sla)   AS response_sla,
-            MAX(sg.resolution_sla) AS resolution_sla,
-            MAX(sg.details_url)    AS details_url
+             COUNT(*)::int AS incident_count,
+             COUNT(CASE WHEN sla_breached THEN 1 END)::int AS breached_count,
+             MAX(sg.response_sla) AS response_sla,
+             MAX(sg.resolution_sla) AS resolution_sla,
+             MAX(sg.details_url) AS details_url
       FROM (
         SELECT DISTINCT ON (sn.sninc_inc_num)
                sn.sninc_priority,
                sn.sninc_applkp_pltf_nm,
-               CASE 
-                 WHEN EXTRACT(EPOCH FROM (NOW() - sn.sninc_opened_at::timestamp)) / 3600 > 
-                      SUBSTRING(sg.resolution_sla, 1, POSITION(' ' IN sg.resolution_sla) - 1)::int * 
+               CASE
+                 WHEN EXTRACT(EPOCH FROM (NOW() - sn.sninc_opened_at::timestamp)) / 3600 >
+                      SUBSTRING(sg.resolution_sla, 1, POSITION(' ' IN sg.resolution_sla) - 1)::int *
                       CASE WHEN sg.resolution_sla ILIKE '%day%' THEN 24
                            WHEN sg.resolution_sla ILIKE '%hr%' THEN 1
                            ELSE 1 END
                  THEN true
                  ELSE false
                END AS sla_breached
-        FROM   edoops.service_now_inc sn
-        JOIN   edoops.sla_glossary sg
-          ON   sn.sninc_priority = sg.snow_priority
-        WHERE  sn.sninc_opened_at::timestamp >= NOW() - INTERVAL '${days} days'
+        FROM edoops.service_now_inc sn
+        JOIN edoops.sla_glossary sg
+          ON sn.sninc_priority = sg.snow_priority
+        WHERE sn.sninc_opened_at::timestamp >= NOW() - INTERVAL '${days} days'
         ORDER BY sn.sninc_inc_num, sn.sninc_last_updt_dttm DESC
       ) sn
-      JOIN   edoops.sla_glossary sg
-        ON   sn.sninc_priority = sg.snow_priority
-        WHERE  sg.short_priority IN ('P1', 'P2', 'P3', 'P4', 'P5')
+      JOIN edoops.sla_glossary sg
+        ON sn.sninc_priority = sg.snow_priority
+      WHERE sg.short_priority IN ('P1', 'P2', 'P3', 'P4', 'P5')
         ${platformClause}
-        GROUP BY sg.short_priority, sg.response_sla, sg.resolution_sla, sg.details_url
-        ORDER  BY incident_count DESC,
-                  CASE sg.short_priority
-                    WHEN 'P1' THEN 1
-                    WHEN 'P2' THEN 2
-                    WHEN 'P3' THEN 3
-                    WHEN 'P4' THEN 4
-                    ELSE 99
-                  END, sg.short_priority
+      GROUP BY sg.short_priority, sg.response_sla, sg.resolution_sla, sg.details_url
+      ORDER BY incident_count DESC,
+        CASE sg.short_priority
+          WHEN 'P1' THEN 1
+          WHEN 'P2' THEN 2
+          WHEN 'P3' THEN 3
+          WHEN 'P4' THEN 4
+          ELSE 99
+        END, sg.short_priority
     `, params);
     res.json(result.rows);
   } catch (err: any) {
@@ -126,46 +137,44 @@ router.get('/incident-list', async (req: Request, res: Response) => {
     const params = platform ? [platform] : [];
     const result = await pool.query(`
       SELECT latest.sninc_inc_num,
-             sg.short_priority       AS priority_field,
+             sg.short_priority AS priority_field,
              latest.sninc_state,
              latest.sninc_opened_at,
+             latest.sninc_last_updt_dttm,
              latest.sninc_capability,
              latest.sninc_short_desc,
              latest.sninc_assignment_grp
       FROM (
-        SELECT *
-        FROM (
-          SELECT sn.sninc_inc_num,
-                 sn.sninc_priority,
-                 sn.sninc_state,
-                 sn.sninc_capability,
-                 sn.sninc_short_desc,
-                 sn.sninc_assignment_grp,
-                 sn.sninc_applkp_pltf_nm,
-                 sn.sninc_opened_at,
-                 sn.sninc_closed_at,
-                 sn.sninc_resolved_at,
-                 sn.sninc_last_updt_dttm,
-                 ROW_NUMBER() OVER (
-                   PARTITION BY sn.sninc_inc_num
-                   ORDER BY sn.sninc_last_updt_dttm DESC
-                 ) AS latest_rec
-          FROM edoops.service_now_inc sn
+        select * from (
+          SELECT sninc_inc_num,
+                 sninc_priority,
+                 sninc_state,
+                 sninc_capability,
+                 sninc_short_desc,
+                 sninc_opened_at,
+                 sninc_assignment_grp,
+                 sninc_applkp_pltf_nm,
+                 sninc_closed_at,
+                 sninc_resolved_at,
+                 sninc_last_updt_dttm,
+                 ROW_NUMBER() over(
+                   partition by sninc_inc_num
+                   order by sninc_last_updt_dttm desc
+                 ) as latest_rec
+          FROM edoops.service_now_inc
         ) sn
         WHERE sn.latest_rec = 1
           AND sn.sninc_applkp_pltf_nm IS NOT NULL
           AND (
             COALESCE(LOWER(TRIM(sn.sninc_state)), '') NOT IN ('closed', 'resolved', 'canceled')
             OR sn.sninc_closed_at::timestamp >= NOW() - INTERVAL '${days} days'
-            OR COALESCE(sn.sninc_resolved_at, sn.sninc_last_updt_dttm)::timestamp >= NOW() - INTERVAL '${days} days'
+            OR (COALESCE(sn.sninc_resolved_at, sn.sninc_last_updt_dttm)::timestamp >= NOW() - INTERVAL '${days} days')
           )
+        ORDER BY sn.sninc_opened_at, sn.sninc_inc_num, sn.sninc_last_updt_dttm DESC
       ) latest
       JOIN edoops.sla_glossary sg ON latest.sninc_priority = sg.snow_priority
       WHERE 1=1
         ${platformClause}
-      ORDER BY latest.sninc_opened_at DESC NULLS LAST,
-               latest.sninc_last_updt_dttm DESC NULLS LAST,
-               latest.sninc_inc_num
     `, params);
     res.json(result.rows);
   } catch (err: any) {
@@ -262,21 +271,31 @@ router.get('/by-capability', async (req: Request, res: Response) => {
     const pool = getPgPool();
     const days = parseDays(req.query);
     const platform = req.query.platform as string | undefined;
-    const platformClause = platform ? `AND latest.sninc_applkp_pltf_nm = $1` : '';
+    const platformClause = platform ? `AND sn.sninc_applkp_pltf_nm IS NOT NULL AND sn.sninc_applkp_pltf_nm = $1` : `AND sn.sninc_applkp_pltf_nm IS NOT NULL`;
     const params = platform ? [platform] : [];
     const result = await pool.query(`
-      SELECT sninc_capability AS capability,
-             COUNT(*)::int    AS incident_count
+      select sninc_capability AS capability,
+             COUNT(*)::int AS incident_count
       FROM (
-        SELECT DISTINCT ON (sn.sninc_inc_num)
+        select sn.sninc_inc_num,
                sn.sninc_capability,
                sn.sninc_applkp_pltf_nm
-        FROM   edoops.service_now_inc sn
-        WHERE  sn.sninc_opened_at::timestamp >= NOW() - INTERVAL '${days} days'
-        ORDER BY sn.sninc_inc_num, sn.sninc_last_updt_dttm DESC
-      ) latest
-      WHERE  sninc_capability IS NOT NULL
-        ${platformClause}
+        from (
+          SELECT sninc_inc_num,
+                 sninc_capability,
+                 sninc_applkp_pltf_nm,
+                 sninc_opened_at,
+                 ROW_NUMBER() over(
+                   partition by sninc_inc_num
+                   order by sninc_last_updt_dttm desc
+                 ) as latest_rec
+          FROM edoops.service_now_inc
+        ) sn
+        WHERE sn.latest_rec = 1
+          ${platformClause}
+          and sn.sninc_opened_at::timestamp >= NOW() - INTERVAL '${days} days'
+          AND sn.sninc_capability IS NOT NULL
+      )
       GROUP BY sninc_capability
       ORDER BY incident_count DESC
       LIMIT 10
@@ -295,21 +314,31 @@ router.get('/by-assignment-group', async (req: Request, res: Response) => {
     const pool = getPgPool();
     const days = parseDays(req.query);
     const platform = req.query.platform as string | undefined;
-    const platformClause = platform ? `AND latest.sninc_applkp_pltf_nm = $1` : '';
+    const platformClause = platform ? `AND sn.sninc_applkp_pltf_nm IS NOT NULL AND sn.sninc_applkp_pltf_nm = $1` : `AND sn.sninc_applkp_pltf_nm IS NOT NULL`;
     const params = platform ? [platform] : [];
     const result = await pool.query(`
-      SELECT sninc_assignment_grp AS assignment_group,
-             COUNT(*)::int        AS incident_count
+      select sninc_assignment_grp AS assignment_group,
+             COUNT(*)::int AS incident_count
       FROM (
-        SELECT DISTINCT ON (sn.sninc_inc_num)
+        select sn.sninc_inc_num,
                sn.sninc_assignment_grp,
                sn.sninc_applkp_pltf_nm
-        FROM   edoops.service_now_inc sn
-        WHERE  sn.sninc_opened_at::timestamp >= NOW() - INTERVAL '${days} days'
-        ORDER BY sn.sninc_inc_num, sn.sninc_last_updt_dttm DESC
-      ) latest
-      WHERE  sninc_assignment_grp IS NOT NULL
-        ${platformClause}
+        from (
+          SELECT sninc_inc_num,
+                 sninc_assignment_grp,
+                 sninc_applkp_pltf_nm,
+                 sninc_opened_at,
+                 ROW_NUMBER() over(
+                   partition by sninc_inc_num
+                   order by sninc_last_updt_dttm desc
+                 ) as latest_rec
+          FROM edoops.service_now_inc
+        ) sn
+        WHERE sn.latest_rec = 1
+          ${platformClause}
+          AND sn.sninc_opened_at::timestamp >= NOW() - INTERVAL '${days} days'
+          AND sn.sninc_assignment_grp IS NOT NULL
+      )
       GROUP BY sninc_assignment_grp
       ORDER BY incident_count DESC
       LIMIT 10

@@ -1,17 +1,39 @@
-# ESP Dashboard — Standalone SQL Queries
+# ESP Standalone Queries
 
-All queries run against **PostgreSQL** (`edoops` schema). Replace `$platform`, `$appl_name`, `$jobname`, and `$N_days` with actual values.
+Schema: `edoops`
 
----
+Main tables:
+- `edoops.esp_job_config`
+- `edoops.esp_job_cmnd`
+- `edoops.esp_job_stats_recent`
+- `edoops.esp_job_dpndt`
+- `edoops.job_sla_missed`
 
-## Platform-Level Widgets
+Replace these placeholders before running:
+- `{{platform_name}}`: `pltf_name` from `esp_job_config`
+- `{{platform_id}}`: same value as `{{platform_name}}` in the current code
+- `{{appl_name}}`: application library name
+- `{{jobname}}`: ESP job name
+- `{{days}}`: lookback window, for example `2`
+- `{{limit}}`: page size
+- `{{offset}}`: page offset
+- `{{search_text}}`: text fragment for `ILIKE` filtering
 
-### Platform List (Summary Cards)
+Notes:
+- Most platform routes resolve membership through `edoops.esp_job_config`.
+- Application summary routes are composites. The standalone blocks below are the SQL fragments that back the individual widgets.
+
+## Platform Summary
+
+Used by: `/api/esp/platform-summary`
+
 ```sql
 WITH config_jobs AS MATERIALIZED (
   SELECT cfg.pltf_name, cfg.appl_name, cfg.jobname
   FROM edoops.esp_job_config cfg
-  WHERE cfg.pltf_name IS NOT NULL AND cfg.appl_name IS NOT NULL AND cfg.jobname IS NOT NULL
+  WHERE cfg.pltf_name IS NOT NULL
+    AND cfg.appl_name IS NOT NULL
+    AND cfg.jobname IS NOT NULL
 ),
 per_job AS (
   SELECT cfg.pltf_name, c.jobname, MAX(c.last_run_date) AS last_run_date
@@ -24,673 +46,377 @@ counts AS (
     pltf_name,
     COUNT(*)::int AS total,
     COUNT(CASE WHEN last_run_date IS NOT NULL
-                 AND last_run_date::timestamp < NOW() - INTERVAL '2 days' THEN 1 END)::int AS idle,
-    COUNT(CASE WHEN jobname LIKE '%JSDELAY%' OR jobname LIKE '%RETRIG%' THEN 1 END)::int AS special
+                 AND last_run_date::timestamp < NOW() - INTERVAL '2 days'
+               THEN 1 END)::int AS idle,
+    COUNT(CASE WHEN jobname LIKE '%JSDELAY%' OR jobname LIKE '%RETRIG%'
+               THEN 1 END)::int AS special
   FROM per_job
   GROUP BY pltf_name
 ),
 platforms AS (
   SELECT DISTINCT pltf_name AS platform_id, pltf_name AS platform_name
-  FROM edoops.esp_job_config WHERE pltf_name IS NOT NULL
+  FROM edoops.esp_job_config
+  WHERE pltf_name IS NOT NULL
 )
 SELECT p.platform_id, p.platform_name,
-       COALESCE(c.total, 0)   AS total_jobs,
-       COALESCE(c.idle, 0)    AS idle_jobs,
-       COALESCE(c.special, 0) AS special_jobs
+       COALESCE(c.total, 0) AS total,
+       COALESCE(c.idle, 0) AS idle,
+       COALESCE(c.special, 0) AS special
 FROM platforms p
 LEFT JOIN counts c ON c.pltf_name = p.platform_name
 ORDER BY p.platform_name;
 ```
 
----
+## Platform Applications
 
-### Job Count (KPI)
+Used by: `/api/esp/platform-applications/:platformId`
+
 ```sql
-SELECT COUNT(DISTINCT c.jobname)::int AS job_count
-FROM edoops.esp_job_cmnd c
-WHERE (c.appl_name, c.jobname) IN (
+SELECT DISTINCT appl_name
+FROM edoops.esp_job_config
+WHERE pltf_name = '{{platform_id}}'
+  AND appl_name ILIKE '%{{search_text}}%'
+ORDER BY appl_name
+LIMIT {{limit}} OFFSET {{offset}};
+```
+
+## Platform Job Count
+
+Used inside: `/api/esp/platform-detail/:platformId`
+
+```sql
+SELECT COUNT(DISTINCT jobname)::int AS job_count
+FROM edoops.esp_job_cmnd
+WHERE (appl_name, jobname) IN (
   SELECT DISTINCT appl_name, jobname
   FROM edoops.esp_job_config
-  WHERE pltf_name = '$platform'
+  WHERE pltf_name = '{{platform_name}}'
     AND appl_name IS NOT NULL
     AND jobname IS NOT NULL
 );
 ```
 
----
+## Platform Idle Job Count
 
-### Idle Job Count (KPI)
 ```sql
-SELECT COUNT(DISTINCT c.jobname)::int AS idle_count
-FROM edoops.esp_job_cmnd c
-WHERE (c.appl_name, c.jobname) IN (
-  SELECT DISTINCT appl_name, jobname
-  FROM edoops.esp_job_config
-  WHERE pltf_name = '$platform'
-    AND appl_name IS NOT NULL
-    AND jobname IS NOT NULL
-)
-AND c.last_run_date IS NOT NULL
-AND c.last_run_date::timestamp < NOW() - INTERVAL '2 days';
+SELECT COUNT(*)::int AS idle_count
+FROM (
+  SELECT jobname
+  FROM edoops.esp_job_cmnd
+  WHERE (appl_name, jobname) IN (
+    SELECT DISTINCT appl_name, jobname
+    FROM edoops.esp_job_config
+    WHERE pltf_name = '{{platform_name}}'
+      AND appl_name IS NOT NULL
+      AND jobname IS NOT NULL
+  )
+  GROUP BY jobname
+  HAVING MAX(last_run_date) IS NOT NULL
+     AND MAX(last_run_date)::timestamp < NOW() - INTERVAL '2 days'
+) s;
 ```
 
----
+## Platform Special Job Count
 
-### Special Job Count (KPI)
 ```sql
-SELECT COUNT(DISTINCT c.jobname)::int AS special_count
-FROM edoops.esp_job_cmnd c
-WHERE (c.appl_name, c.jobname) IN (
+SELECT COUNT(DISTINCT jobname)::int AS special_count
+FROM edoops.esp_job_cmnd
+WHERE (appl_name, jobname) IN (
   SELECT DISTINCT appl_name, jobname
   FROM edoops.esp_job_config
-  WHERE pltf_name = '$platform'
+  WHERE pltf_name = '{{platform_name}}'
     AND appl_name IS NOT NULL
     AND jobname IS NOT NULL
 )
-AND (c.jobname LIKE '%JSDELAY%' OR c.jobname LIKE '%RETRIG%');
+  AND (jobname LIKE '%JSDELAY%' OR jobname LIKE '%RETRIG%');
 ```
 
----
+## Platform Agent Breakdown
 
-### Agent Breakdown (Donut / Bar Chart)
 ```sql
-SELECT COALESCE(c.agent, 'Null') AS name, COUNT(*)::int AS count
-FROM edoops.esp_job_cmnd c
-WHERE (c.appl_name, c.jobname) IN (
+SELECT COALESCE(agent, 'Null') AS name, COUNT(*)::int AS count
+FROM edoops.esp_job_cmnd
+WHERE (appl_name, jobname) IN (
   SELECT DISTINCT appl_name, jobname
   FROM edoops.esp_job_config
-  WHERE pltf_name = '$platform'
+  WHERE pltf_name = '{{platform_name}}'
     AND appl_name IS NOT NULL
     AND jobname IS NOT NULL
 )
-GROUP BY c.agent
+GROUP BY agent
 ORDER BY count DESC;
 ```
 
----
+## Platform Job Type Breakdown
 
-### Job Type Breakdown (Donut / Bar Chart)
 ```sql
-SELECT COALESCE(c.jobtype, 'Null') AS name, COUNT(*)::int AS count
-FROM edoops.esp_job_cmnd c
-WHERE (c.appl_name, c.jobname) IN (
+SELECT COALESCE(jobtype, 'Null') AS name, COUNT(*)::int AS count
+FROM edoops.esp_job_cmnd
+WHERE (appl_name, jobname) IN (
   SELECT DISTINCT appl_name, jobname
   FROM edoops.esp_job_config
-  WHERE pltf_name = '$platform'
+  WHERE pltf_name = '{{platform_name}}'
     AND appl_name IS NOT NULL
     AND jobname IS NOT NULL
 )
-GROUP BY c.jobtype
+GROUP BY jobtype
 ORDER BY count DESC;
 ```
 
----
+## Platform User Job Breakdown
 
-### User Jobs Breakdown (Donut / Bar Chart)
 ```sql
-SELECT COALESCE(c.user_job, 'Null') AS name, COUNT(*)::int AS count
-FROM edoops.esp_job_cmnd c
-WHERE (c.appl_name, c.jobname) IN (
+SELECT COALESCE(user_job, 'Null') AS name, COUNT(*)::int AS count
+FROM edoops.esp_job_cmnd
+WHERE (appl_name, jobname) IN (
   SELECT DISTINCT appl_name, jobname
   FROM edoops.esp_job_config
-  WHERE pltf_name = '$platform'
+  WHERE pltf_name = '{{platform_name}}'
     AND appl_name IS NOT NULL
     AND jobname IS NOT NULL
 )
-GROUP BY c.user_job
+GROUP BY user_job
 ORDER BY count DESC;
 ```
 
----
+## Platform Job List
 
-### Successor Dependencies (Dependency Table)
-```sql
-SELECT DISTINCT d.jobname, d.appl_name, d.release AS successor_job
-FROM edoops.esp_job_dpndt d
-JOIN edoops.esp_job_config cfgSrc  ON cfgSrc.appl_name  = d.appl_name AND cfgSrc.jobname  = d.jobname
-JOIN edoops.esp_job_config cfgDest ON cfgDest.appl_name = d.appl_name AND cfgDest.jobname = d.release
-WHERE d.appl_name IN (
-  SELECT DISTINCT appl_name FROM edoops.esp_job_config WHERE pltf_name = '$platform'
-)
-ORDER BY d.jobname
-LIMIT 200;
-```
+Used by: `/api/esp/platform-job-list/:platformId`
 
----
-
-### Predecessor Dependencies (Dependency Table)
-```sql
-SELECT DISTINCT d.jobname, d.appl_name, d.release AS predecessor_job
-FROM edoops.esp_job_dpndt d
-JOIN edoops.esp_job_config cfgSrc  ON cfgSrc.appl_name  = d.appl_name AND cfgSrc.jobname  = d.jobname
-JOIN edoops.esp_job_config cfgDest ON cfgDest.appl_name = d.appl_name AND cfgDest.jobname = d.release
-WHERE d.appl_name IN (
-  SELECT DISTINCT appl_name FROM edoops.esp_job_config WHERE pltf_name = '$platform'
-)
-ORDER BY d.jobname
-LIMIT 200;
-```
-
----
-
-### Platform Job List (Paginated Table)
 ```sql
 SELECT DISTINCT ON (c.jobname)
-  c.jobname, c.appl_name, c.jobtype AS job_type, c.last_run_date
+  c.jobname,
+  c.appl_name,
+  c.jobtype AS job_type,
+  c.last_run_date
 FROM edoops.esp_job_cmnd c
 JOIN (
-  SELECT DISTINCT appl_name, jobname FROM edoops.esp_job_config
-  WHERE pltf_name = '$platform' AND appl_name IS NOT NULL AND jobname IS NOT NULL
+  SELECT DISTINCT appl_name, jobname
+  FROM edoops.esp_job_config
+  WHERE pltf_name = '{{platform_name}}'
+    AND appl_name IS NOT NULL
+    AND jobname IS NOT NULL
 ) cfg ON cfg.appl_name = c.appl_name AND cfg.jobname = c.jobname
--- AND c.appl_name = '$appl_name'   -- optional: filter to one applib
 ORDER BY c.jobname, c.last_run_date DESC NULLS LAST
-LIMIT 2000 OFFSET 0;
+LIMIT {{limit}} OFFSET {{offset}};
 ```
 
----
+## Platform Run Trend
 
-### Platform Run Trend (Hourly Chart)
+Used by: `/api/esp/platform-run-trend/:platformId`
+
 ```sql
 WITH base AS (
   SELECT s.end_date, s.end_time::time AS et, s.job_longname AS jobname, s.ccfail
   FROM edoops.esp_job_stats_recent s
   JOIN (
-    SELECT DISTINCT appl_name, jobname FROM edoops.esp_job_config
-    WHERE pltf_name = '$platform' AND appl_name IS NOT NULL AND jobname IS NOT NULL
+    SELECT DISTINCT appl_name, jobname
+    FROM edoops.esp_job_config
+    WHERE pltf_name = '{{platform_name}}'
+      AND appl_name IS NOT NULL
+      AND jobname IS NOT NULL
   ) cfg ON cfg.appl_name = s.appl_name AND cfg.jobname = s.job_longname
-  WHERE s.end_date >= CURRENT_DATE - INTERVAL '$N_days days'
+  WHERE s.end_date >= CURRENT_DATE - INTERVAL '{{days}} days'
 )
-SELECT
-  end_date AS day,
-  EXTRACT(HOUR FROM et)::int AS hour,
-  COUNT(jobname)::int AS job_count,
-  SUM(CASE WHEN ccfail = 'YES' THEN 1 ELSE 0 END)::int AS job_fail_count
+SELECT end_date AS day,
+       EXTRACT(HOUR FROM et)::int AS hour,
+       COUNT(jobname)::int AS job_count,
+       SUM(CASE WHEN ccfail = 'YES' THEN 1 ELSE 0 END)::int AS job_fail_count
 FROM base
 GROUP BY end_date, EXTRACT(HOUR FROM et)
 ORDER BY end_date, EXTRACT(HOUR FROM et);
 ```
 
----
+## Platform Metadata
 
-### Platform Job Run History Table
+Used by: `/api/esp/platform-metadata/:platformId`
+
+```sql
+SELECT jobname, command, argument, agent, jobtype AS job_type,
+       esp_command AS comp_code, runs, user_job, appl_name
+FROM edoops.esp_job_cmnd
+WHERE (appl_name, jobname) IN (
+  SELECT DISTINCT appl_name, jobname
+  FROM edoops.esp_job_config
+  WHERE pltf_name = '{{platform_name}}'
+    AND appl_name IS NOT NULL
+    AND jobname IS NOT NULL
+)
+ORDER BY jobname;
+```
+
+## Platform Job Run Table
+
+Used by: `/api/esp/platform-job-run-table/:platformId`
+
 ```sql
 SELECT ec.appl_name, es.job_longname, ec.command, ec.argument, ec.runs,
        es.start_date, es.start_time, es.end_date, es.end_time,
        es.exec_qtime, es.ccfail, es.comp_code
 FROM edoops.esp_job_cmnd ec
 JOIN (
-  SELECT DISTINCT appl_name, jobname FROM edoops.esp_job_config
-  WHERE pltf_name = '$platform' AND appl_name IS NOT NULL AND jobname IS NOT NULL
+  SELECT DISTINCT appl_name, jobname
+  FROM edoops.esp_job_config
+  WHERE pltf_name = '{{platform_name}}'
+    AND appl_name IS NOT NULL
+    AND jobname IS NOT NULL
 ) cfg ON cfg.appl_name = ec.appl_name AND cfg.jobname = ec.jobname
 JOIN edoops.esp_job_stats_recent es
   ON ec.appl_name = es.appl_name AND ec.jobname = es.job_longname
-WHERE es.end_date >= CURRENT_DATE - INTERVAL '$N_days days'
+WHERE es.end_date >= CURRENT_DATE - INTERVAL '{{days}} days'
 ORDER BY es.end_date DESC, es.end_time DESC;
 ```
 
----
+## SLA Violations
 
-### Platform Metadata Table
+Used by: `/api/esp/sla-violations`
+
 ```sql
-SELECT jobname, command, argument, agent, jobtype AS job_type,
-       esp_command AS comp_code, runs, user_job, appl_name
-FROM edoops.esp_job_cmnd
-WHERE (appl_name, jobname) IN (
-  SELECT DISTINCT appl_name, jobname FROM edoops.esp_job_config
-  WHERE pltf_name = '$platform' AND appl_name IS NOT NULL AND jobname IS NOT NULL
-)
-ORDER BY jobname;
+SELECT *
+FROM edoops.job_sla_missed
+WHERE jslmis_batch_dt >= CURRENT_DATE - INTERVAL '{{days}} days'
+  AND jslmis_pltf_nm = '{{platform_name}}'
+ORDER BY jslmis_batch_dt DESC, jslmis_last_updt_dttm DESC
+LIMIT 250;
 ```
 
----
+## Application List
 
-## Application-Level Widgets
+Used by: `/api/esp/applications`
 
-All application-level queries accept an optional platform filter (`AND cfg.pltf_name = '$platform'`) to scope counts correctly when an applib belongs to a specific platform. Shown as a commented line below.
-
-### Job Count (KPI)
 ```sql
-SELECT COUNT(DISTINCT c.jobname)::int AS job_count
-FROM edoops.esp_job_cmnd c
-JOIN edoops.esp_job_config cfg ON cfg.appl_name = c.appl_name AND cfg.jobname = c.jobname
-WHERE c.appl_name = '$appl_name'
--- AND cfg.pltf_name = '$platform';
+SELECT DISTINCT ON (cfg.appl_name)
+  cfg.appl_name,
+  cfg.pltf_name AS platform_id,
+  cfg.pltf_name AS platform_name
+FROM edoops.esp_job_config cfg
+WHERE cfg.appl_name IS NOT NULL
+ORDER BY cfg.appl_name, cfg.pltf_name;
 ```
 
----
+## Application Summary Job Count
 
-### Idle Job Count (KPI)
+Used inside: `/api/esp/summary/:appl_name`
+
 ```sql
-SELECT COUNT(DISTINCT c.jobname)::int AS idle_count
+SELECT COUNT(DISTINCT c.jobname) AS cnt
 FROM edoops.esp_job_cmnd c
 JOIN edoops.esp_job_config cfg ON cfg.appl_name = c.appl_name AND cfg.jobname = c.jobname
-WHERE c.appl_name = '$appl_name'
--- AND cfg.pltf_name = '$platform'
+WHERE c.appl_name = '{{appl_name}}'
+  AND cfg.pltf_name = '{{platform_name}}';
+```
+
+## Application Idle Job Count
+
+```sql
+SELECT COUNT(DISTINCT c.jobname) AS cnt
+FROM edoops.esp_job_cmnd c
+JOIN edoops.esp_job_config cfg ON cfg.appl_name = c.appl_name AND cfg.jobname = c.jobname
+WHERE c.appl_name = '{{appl_name}}'
+  AND cfg.pltf_name = '{{platform_name}}'
   AND c.last_run_date IS NOT NULL
   AND c.last_run_date::timestamp < NOW() - INTERVAL '2 days';
 ```
 
----
+## Application Special Job Count
 
-### Special Job Count (KPI)
 ```sql
-SELECT COUNT(DISTINCT c.jobname)::int AS special_count
+SELECT COUNT(DISTINCT c.jobname) AS cnt
 FROM edoops.esp_job_cmnd c
 JOIN edoops.esp_job_config cfg ON cfg.appl_name = c.appl_name AND cfg.jobname = c.jobname
-WHERE c.appl_name = '$appl_name'
--- AND cfg.pltf_name = '$platform'
+WHERE c.appl_name = '{{appl_name}}'
+  AND cfg.pltf_name = '{{platform_name}}'
   AND (c.jobname LIKE '%JSDELAY%' OR c.jobname LIKE '%RETRIG%');
 ```
 
----
+## Application Metadata
 
-### Agent Breakdown (Donut / Bar Chart)
+Used by: `/api/esp/metadata/:appl_name`
+
 ```sql
-SELECT COALESCE(c.agent, 'Null') AS name, COUNT(*)::int AS count
+SELECT c.jobname,
+       c.command,
+       c.argument,
+       c.agent,
+       c.jobtype AS job_type,
+       c.esp_command AS comp_code,
+       c.runs,
+       c.user_job
 FROM edoops.esp_job_cmnd c
 JOIN edoops.esp_job_config cfg ON cfg.appl_name = c.appl_name AND cfg.jobname = c.jobname
-WHERE c.appl_name = '$appl_name'
--- AND cfg.pltf_name = '$platform'
-GROUP BY c.agent
-ORDER BY count DESC;
-```
-
----
-
-### Job Type Breakdown (Donut / Bar Chart)
-```sql
-SELECT COALESCE(c.jobtype, 'Null') AS name, COUNT(*)::int AS count
-FROM edoops.esp_job_cmnd c
-JOIN edoops.esp_job_config cfg ON cfg.appl_name = c.appl_name AND cfg.jobname = c.jobname
-WHERE c.appl_name = '$appl_name'
--- AND cfg.pltf_name = '$platform'
-GROUP BY c.jobtype
-ORDER BY count DESC;
-```
-
----
-
-### Completion Codes (Donut / Bar Chart)
-```sql
-SELECT COALESCE(CAST(c.cmpl_cd AS TEXT), 'Null') AS name, COUNT(*)::int AS count
-FROM edoops.esp_job_cmnd c
-JOIN edoops.esp_job_config cfg ON cfg.appl_name = c.appl_name AND cfg.jobname = c.jobname
-WHERE c.appl_name = '$appl_name'
--- AND cfg.pltf_name = '$platform'
-GROUP BY c.cmpl_cd
-ORDER BY count DESC;
-```
-
----
-
-### User Jobs Breakdown (Donut / Bar Chart)
-```sql
-SELECT COALESCE(c.user_job, 'Null') AS name, COUNT(*)::int AS count
-FROM edoops.esp_job_cmnd c
-JOIN edoops.esp_job_config cfg ON cfg.appl_name = c.appl_name AND cfg.jobname = c.jobname
-WHERE c.appl_name = '$appl_name'
--- AND cfg.pltf_name = '$platform'
-GROUP BY c.user_job
-ORDER BY count DESC;
-```
-
----
-
-### Job List (Table)
-```sql
-SELECT DISTINCT ON (c.jobname)
-  c.jobname, c.jobtype AS job_type, c.last_run_date
-FROM edoops.esp_job_cmnd c
-JOIN edoops.esp_job_config cfg ON cfg.appl_name = c.appl_name AND cfg.jobname = c.jobname
-WHERE c.appl_name = '$appl_name'
--- AND cfg.pltf_name = '$platform'
-ORDER BY c.jobname, c.last_run_date DESC NULLS LAST;
-```
-
----
-
-### Job Run Trend (Hourly Chart)
-```sql
-WITH base AS (
-  SELECT end_date, end_time::time AS et, job_longname AS jobname, ccfail
-  FROM edoops.esp_job_stats_recent
-  WHERE appl_name = '$appl_name'
-    AND end_date >= CURRENT_DATE - INTERVAL '$N_days days'
-)
-SELECT
-  end_date AS day,
-  EXTRACT(HOUR FROM et)::int AS hour,
-  COUNT(jobname)::int AS job_count,
-  SUM(CASE WHEN ccfail = 'YES' THEN 1 ELSE 0 END)::int AS job_fail_count
-FROM base
-GROUP BY end_date, EXTRACT(HOUR FROM et)
-ORDER BY end_date, EXTRACT(HOUR FROM et);
-```
-
----
-
-### Job Run History Table
-```sql
-SELECT ec.appl_name, es.job_longname, ec.command, ec.argument, ec.runs,
-       es.start_date, es.start_time, es.end_date, es.end_time,
-       es.exec_qtime, es.ccfail, es.comp_code
-FROM edoops.esp_job_cmnd ec
-JOIN edoops.esp_job_stats_recent es
-  ON ec.appl_name = es.appl_name AND ec.jobname = es.job_longname
-JOIN edoops.esp_job_config cfg ON cfg.appl_name = ec.appl_name AND cfg.jobname = ec.jobname
-WHERE ec.appl_name = '$appl_name'
-  AND es.end_date >= CURRENT_DATE - INTERVAL '$N_days days'
-ORDER BY es.end_date DESC, es.end_time DESC;
-```
-
----
-
-### Metadata Table
-```sql
-SELECT c.jobname, c.command, c.argument, c.agent,
-       c.jobtype AS job_type, c.esp_command AS comp_code, c.runs, c.user_job
-FROM edoops.esp_job_cmnd c
-JOIN edoops.esp_job_config cfg ON cfg.appl_name = c.appl_name AND cfg.jobname = c.jobname
-WHERE c.appl_name = '$appl_name'
--- AND cfg.pltf_name = '$platform'
+WHERE c.appl_name = '{{appl_name}}'
 ORDER BY c.jobname;
 ```
 
----
+## Application Job Run Table
 
-### Successor Jobs (Dependency Table)
+Used by: `/api/esp/job-run-table/:appl_name`
+
 ```sql
-SELECT DISTINCT d.jobname, d.appl_name, d.release AS successor_job
-FROM edoops.esp_job_dpndt d
-JOIN edoops.esp_job_config cfgSrc  ON cfgSrc.appl_name  = d.appl_name AND cfgSrc.jobname  = d.jobname
-JOIN edoops.esp_job_config cfgDest ON cfgDest.appl_name = d.appl_name AND cfgDest.jobname = d.release
-WHERE d.appl_name = '$appl_name'
-ORDER BY d.jobname;
+SELECT ec.appl_name,
+       es.job_longname,
+       ec.command,
+       ec.argument,
+       ec.runs,
+       es.start_date,
+       es.start_time,
+       es.end_date,
+       es.end_time,
+       es.exec_qtime,
+       es.ccfail,
+       es.comp_code
+FROM edoops.esp_job_cmnd ec
+JOIN edoops.esp_job_stats_recent es
+   ON ec.appl_name = es.appl_name
+  AND ec.jobname   = es.job_longname
+JOIN edoops.esp_job_config cfg ON cfg.appl_name = ec.appl_name AND cfg.jobname = ec.jobname
+WHERE ec.appl_name = '{{appl_name}}'
+  AND es.end_date >= CURRENT_DATE - INTERVAL '{{days}} days'
+ORDER BY es.end_date DESC, es.end_time DESC;
 ```
 
----
+## Application Job Run Trend
 
-### Predecessor Jobs (Dependency Table)
-```sql
-SELECT DISTINCT d.jobname, d.appl_name, d.release AS predecessor_job
-FROM edoops.esp_job_dpndt d
-JOIN edoops.esp_job_config cfgSrc  ON cfgSrc.appl_name  = d.appl_name AND cfgSrc.jobname  = d.jobname
-JOIN edoops.esp_job_config cfgDest ON cfgDest.appl_name = d.appl_name AND cfgDest.jobname = d.release
-WHERE d.release = '$appl_name'
-ORDER BY d.jobname;
-```
+Used by: `/api/esp/job-run-trend/:appl_name`
 
----
-
-### Run Trend by Single Job
 ```sql
 WITH base AS (
-  SELECT end_date, end_time::time AS et, job_longname, ccfail
+  SELECT end_date,
+         end_time::time AS et,
+         jobname,
+         ccfail
   FROM edoops.esp_job_stats_recent
-  WHERE job_longname = '$jobname'
-    AND end_date >= CURRENT_DATE - INTERVAL '$N_days days'
+  WHERE appl_name = '{{appl_name}}'
+    AND end_date >= CURRENT_DATE - INTERVAL '{{days}} days'
 )
-SELECT
-  end_date AS day,
-  EXTRACT(HOUR FROM et)::int AS hour,
-  COUNT(job_longname)::int AS job_count,
-  SUM(CASE WHEN ccfail = 'YES' THEN 1 ELSE 0 END)::int AS job_fail_count
+SELECT end_date AS day,
+       EXTRACT(HOUR FROM et)::int AS hour,
+       COUNT(jobname)::int AS job_count,
+       SUM(CASE WHEN ccfail = 'YES' THEN 1 ELSE 0 END)::int AS job_fail_count
 FROM base
 GROUP BY end_date, EXTRACT(HOUR FROM et)
 ORDER BY end_date, EXTRACT(HOUR FROM et);
 ```
 
----
+## Run Trend by Job
 
-### Run Trend by Dimension (agent / job_type / user_job)
-Replace `<col>` with `agent`, `jobtype`, or `user_job`, and `<value>` with the selected value.
+Used by: `/api/esp/run-trend-by-job/:jobname`
+
 ```sql
 WITH base AS (
-  SELECT es.end_date, es.end_time::time AS et, es.job_longname, es.ccfail
-  FROM edoops.esp_job_stats_recent es
-  JOIN edoops.esp_job_cmnd ec ON ec.appl_name = es.appl_name AND ec.jobname = es.job_longname
-  WHERE ec.<col> = '<value>'                      -- or: ec.<col> IS NULL for 'Null'
-    AND es.end_date >= CURRENT_DATE - INTERVAL '$N_days days'
+  SELECT end_date,
+         end_time::time AS et,
+         job_longname,
+         ccfail
+  FROM edoops.esp_job_stats_recent
+  WHERE job_longname = '{{jobname}}'
+    AND end_date >= CURRENT_DATE - INTERVAL '{{days}} days'
 )
-SELECT
-  end_date AS day,
-  EXTRACT(HOUR FROM et)::int AS hour,
-  COUNT(job_longname)::int AS job_count,
-  SUM(CASE WHEN ccfail = 'YES' THEN 1 ELSE 0 END)::int AS job_fail_count
+SELECT end_date AS day,
+       EXTRACT(HOUR FROM et)::int AS hour,
+       COUNT(job_longname)::int AS job_count,
+       SUM(CASE WHEN ccfail = 'YES' THEN 1 ELSE 0 END)::int AS job_fail_count
 FROM base
 GROUP BY end_date, EXTRACT(HOUR FROM et)
 ORDER BY end_date, EXTRACT(HOUR FROM et);
-```
-
----
-
-## SLA Widgets
-
-### KPI Cards
-```sql
-SELECT
-  COUNT(*) FILTER (WHERE jslmis_batch_dt = CURRENT_DATE)::int            AS total_sla_missed_today,
-  COUNT(*) FILTER (WHERE jslmis_job_end_time IS NULL)::int               AS open_missed_jobs,
-  COUNT(DISTINCT jslmis_application_desc)
-    FILTER (WHERE jslmis_batch_dt = CURRENT_DATE)::int                   AS apps_impacted,
-  COUNT(DISTINCT jslmis_bus_unit)
-    FILTER (WHERE jslmis_batch_dt = CURRENT_DATE)::int                   AS bus_units_impacted,
-  ROUND(AVG(CASE WHEN jslmis_job_start_time IS NOT NULL
-    THEN EXTRACT(EPOCH FROM (COALESCE(jslmis_job_end_time, CURRENT_TIMESTAMP) - jslmis_job_start_time)) / 60
-  END)::numeric, 2)                                                       AS avg_delay_minutes,
-  ROUND(MAX(CASE WHEN jslmis_job_start_time IS NOT NULL
-    THEN EXTRACT(EPOCH FROM (COALESCE(jslmis_job_end_time, CURRENT_TIMESTAMP) - jslmis_job_start_time)) / 60
-  END)::numeric, 2)                                                       AS longest_delay_minutes
-FROM edoops.job_sla_missed
-WHERE jslmis_pltf_nm = '$platform';
-```
-
----
-
-### Daily SLA Misses (14-day Trend Chart)
-```sql
-SELECT jslmis_batch_dt AS day, COUNT(*)::int AS sla_misses
-FROM edoops.job_sla_missed
-WHERE jslmis_pltf_nm = '$platform'
-  AND jslmis_batch_dt >= CURRENT_DATE - INTERVAL '14 days'
-GROUP BY jslmis_batch_dt
-ORDER BY jslmis_batch_dt;
-```
-
----
-
-### Hourly SLA Misses (7-day Heatmap)
-```sql
-SELECT EXTRACT(HOUR FROM jslmis_job_start_time)::int AS hour, COUNT(*)::int AS sla_misses
-FROM edoops.job_sla_missed
-WHERE jslmis_pltf_nm = '$platform'
-  AND jslmis_job_start_time IS NOT NULL
-  AND jslmis_batch_dt >= CURRENT_DATE - INTERVAL '7 days'
-GROUP BY EXTRACT(HOUR FROM jslmis_job_start_time)
-ORDER BY hour;
-```
-
----
-
-### SLA Misses by Platform (7-day Bar Chart)
-```sql
-SELECT COALESCE(jslmis_pltf_nm, 'Unknown') AS name, COUNT(*)::int AS sla_misses
-FROM edoops.job_sla_missed
-WHERE jslmis_batch_dt >= CURRENT_DATE - INTERVAL '7 days'
-GROUP BY COALESCE(jslmis_pltf_nm, 'Unknown')
-ORDER BY sla_misses DESC;
-```
-
----
-
-### SLA Misses by SLA Type (7-day Bar Chart)
-```sql
-SELECT COALESCE(jslmis_sla_typ, 'Unknown') AS name, COUNT(*)::int AS sla_misses
-FROM edoops.job_sla_missed
-WHERE jslmis_pltf_nm = '$platform'
-  AND jslmis_batch_dt >= CURRENT_DATE - INTERVAL '7 days'
-GROUP BY COALESCE(jslmis_sla_typ, 'Unknown')
-ORDER BY sla_misses DESC;
-```
-
----
-
-### SLA Misses by Run Criteria (Top 10, 7-day)
-```sql
-SELECT COALESCE(jslmis_run_criteria, 'Unknown') AS name, COUNT(*)::int AS sla_misses
-FROM edoops.job_sla_missed
-WHERE jslmis_pltf_nm = '$platform'
-  AND jslmis_batch_dt >= CURRENT_DATE - INTERVAL '7 days'
-GROUP BY COALESCE(jslmis_run_criteria, 'Unknown')
-ORDER BY sla_misses DESC
-LIMIT 10;
-```
-
----
-
-### Top 10 Applications by SLA Misses (7-day)
-```sql
-SELECT COALESCE(jslmis_application_desc, 'Unknown') AS name, COUNT(*)::int AS sla_misses
-FROM edoops.job_sla_missed
-WHERE jslmis_pltf_nm = '$platform'
-  AND jslmis_batch_dt >= CURRENT_DATE - INTERVAL '7 days'
-GROUP BY COALESCE(jslmis_application_desc, 'Unknown')
-ORDER BY sla_misses DESC
-LIMIT 10;
-```
-
----
-
-### Top 10 Business Units by SLA Misses (7-day)
-```sql
-SELECT COALESCE(jslmis_bus_unit, 'Unknown') AS name, COUNT(*)::int AS sla_misses
-FROM edoops.job_sla_missed
-WHERE jslmis_pltf_nm = '$platform'
-  AND jslmis_batch_dt >= CURRENT_DATE - INTERVAL '7 days'
-GROUP BY COALESCE(jslmis_bus_unit, 'Unknown')
-ORDER BY sla_misses DESC
-LIMIT 10;
-```
-
----
-
-### Top Repeated Jobs (30-day)
-```sql
-SELECT jslmis_job_nm AS job_name, COUNT(*)::int AS sla_miss_count
-FROM edoops.job_sla_missed
-WHERE jslmis_pltf_nm = '$platform'
-  AND jslmis_batch_dt >= CURRENT_DATE - INTERVAL '30 days'
-GROUP BY jslmis_job_nm
-ORDER BY sla_miss_count DESC
-LIMIT 10;
-```
-
----
-
-### Open Queue (Jobs with No End Time)
-```sql
-SELECT jslmis_pltf_nm, jslmis_batch_dt, jslmis_appl_lib, jslmis_application_desc,
-       jslmis_job_nm, jslmis_run_criteria, jslmis_sla_time, jslmis_sla_typ, jslmis_sla_status,
-       jslmis_job_start_time, jslmis_job_end_time, jslmis_time_diff,
-       jslmis_bus_unit, jslmis_sub_bus_unit, jslmis_bus_summary, jslmis_last_updt_dttm,
-       ROUND(EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - jslmis_job_start_time)) / 60, 2) AS running_minutes
-FROM edoops.job_sla_missed
-WHERE jslmis_pltf_nm = '$platform'
-  AND jslmis_job_end_time IS NULL
-ORDER BY jslmis_job_start_time ASC NULLS LAST
-LIMIT 25;
-```
-
----
-
-### Longest Running Jobs (Top 10)
-```sql
-SELECT jslmis_pltf_nm, jslmis_batch_dt, jslmis_appl_lib, jslmis_application_desc,
-       jslmis_job_nm, jslmis_sla_time, jslmis_sla_typ, jslmis_sla_status,
-       jslmis_job_start_time, jslmis_job_end_time, jslmis_bus_unit,
-       ROUND(EXTRACT(EPOCH FROM (COALESCE(jslmis_job_end_time, CURRENT_TIMESTAMP) - jslmis_job_start_time)) / 60, 2)
-         AS duration_minutes
-FROM edoops.job_sla_missed
-WHERE jslmis_pltf_nm = '$platform'
-  AND jslmis_job_start_time IS NOT NULL
-ORDER BY duration_minutes DESC NULLS LAST
-LIMIT 10;
-```
-
----
-
-### Recently Updated (Top 10)
-```sql
-SELECT jslmis_pltf_nm, jslmis_batch_dt, jslmis_appl_lib, jslmis_application_desc,
-       jslmis_job_nm, jslmis_sla_time, jslmis_sla_typ, jslmis_sla_status,
-       jslmis_job_start_time, jslmis_job_end_time, jslmis_bus_unit, jslmis_last_updt_dttm
-FROM edoops.job_sla_missed
-WHERE jslmis_pltf_nm = '$platform'
-ORDER BY jslmis_last_updt_dttm DESC NULLS LAST
-LIMIT 10;
-```
-
----
-
-### Daily Open vs Closed (14-day Chart)
-```sql
-SELECT
-  jslmis_batch_dt AS day,
-  SUM(CASE WHEN jslmis_job_end_time IS NULL     THEN 1 ELSE 0 END)::int AS open_jobs,
-  SUM(CASE WHEN jslmis_job_end_time IS NOT NULL THEN 1 ELSE 0 END)::int AS closed_jobs
-FROM edoops.job_sla_missed
-WHERE jslmis_pltf_nm = '$platform'
-  AND jslmis_batch_dt >= CURRENT_DATE - INTERVAL '14 days'
-GROUP BY jslmis_batch_dt
-ORDER BY jslmis_batch_dt;
-```
-
----
-
-### Avg Duration by Application (Top 10, 7-day)
-```sql
-SELECT
-  COALESCE(jslmis_application_desc, 'Unknown') AS name,
-  ROUND(AVG(EXTRACT(EPOCH FROM (COALESCE(jslmis_job_end_time, CURRENT_TIMESTAMP) - jslmis_job_start_time)) / 60)::numeric, 2)
-    AS avg_duration_minutes
-FROM edoops.job_sla_missed
-WHERE jslmis_pltf_nm = '$platform'
-  AND jslmis_job_start_time IS NOT NULL
-  AND jslmis_batch_dt >= CURRENT_DATE - INTERVAL '7 days'
-GROUP BY COALESCE(jslmis_application_desc, 'Unknown')
-ORDER BY avg_duration_minutes DESC NULLS LAST
-LIMIT 10;
-```
-
----
-
-### SLA Violations List
-```sql
-SELECT jslmis_pltf_nm, jslmis_batch_dt, jslmis_appl_lib, jslmis_application_desc,
-       jslmis_job_nm, jslmis_run_criteria, jslmis_sla_time, jslmis_sla_typ, jslmis_sla_status,
-       jslmis_job_start_time, jslmis_job_end_time, jslmis_time_diff,
-       jslmis_ccfail, jslmis_bus_unit, jslmis_sub_bus_unit, jslmis_bus_summary, jslmis_last_updt_dttm
-FROM edoops.job_sla_missed
-WHERE jslmis_pltf_nm = '$platform'
-  -- AND jslmis_appl_lib = '$appl_name'    -- uncomment to filter by application
-ORDER BY jslmis_batch_dt DESC NULLS LAST,
-         jslmis_job_start_time DESC NULLS LAST,
-         jslmis_job_nm ASC
-LIMIT 250;
-```
-
----
-
-### SLA Job Drill-Down (Single Job History)
-```sql
-SELECT jslmis_pltf_nm, jslmis_batch_dt, jslmis_appl_lib, jslmis_application_desc,
-       jslmis_job_nm, jslmis_run_criteria, jslmis_sla_time, jslmis_sla_typ, jslmis_sla_status,
-       jslmis_job_start_time, jslmis_job_end_time, jslmis_time_diff,
-       jslmis_bus_unit, jslmis_sub_bus_unit, jslmis_bus_summary, jslmis_last_updt_dttm
-FROM edoops.job_sla_missed
-WHERE jslmis_job_nm = '$jobname'
-  -- AND jslmis_pltf_nm = '$platform'      -- uncomment to narrow by platform
-  -- AND jslmis_appl_lib = '$appl_name'    -- uncomment to narrow by application
-ORDER BY jslmis_last_updt_dttm DESC NULLS LAST
-LIMIT 100;
 ```

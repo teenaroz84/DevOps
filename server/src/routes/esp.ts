@@ -444,7 +444,7 @@ router.get('/platform-run-trend/:platformId', async (req: Request, res: Response
         FROM edoops.esp_job_stats_recent s
         JOIN (
           SELECT DISTINCT appl_name, jobname
-          FROM edoops.esp_job_config`
+          FROM edoops.esp_job_config
           WHERE pltf_name = $1
             AND appl_name IS NOT NULL
             AND jobname IS NOT NULL
