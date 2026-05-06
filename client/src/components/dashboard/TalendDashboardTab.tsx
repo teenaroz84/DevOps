@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react'
+import React, { startTransition, useState, useEffect, useMemo, useRef } from 'react'
 import { Box, Typography, Chip, Paper, CircularProgress, TextField, InputAdornment, Button, Slider, Tooltip } from '@mui/material'
 import IntegrationInstructionsIcon from '@mui/icons-material/IntegrationInstructions'
 import SearchIcon from '@mui/icons-material/Search'
@@ -143,16 +143,24 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
   const [taskSearch,   setTaskSearch]   = useState('')
   const [statusFilter, setStatusFilter] = useState('All')
   const [levelFilter,  setLevelFilter]  = useState('All')
-  const [days,         setDays]         = useState(30)
-  const [sliderDays,   setSliderDays]   = useState(30)
+  const [days,         setDays]         = useState(15)
+  const [selectedDays, setSelectedDays] = useState(15)
+  const [sliderDays,   setSliderDays]   = useState(15)
 
   const commitDays = (nextDays: number) => {
+    setSelectedDays(nextDays)
     setSliderDays(nextDays)
-    setDays(prev => prev === nextDays ? prev : nextDays)
+    startTransition(() => {
+      setDays(prev => prev === nextDays ? prev : nextDays)
+    })
   }
 
   useEffect(() => {
     setSliderDays(days)
+  }, [days])
+
+  useEffect(() => {
+    setSelectedDays(days)
   }, [days])
 
   useEffect(() => {
@@ -229,6 +237,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
     name:  r.level,
     count: r.count,
   }))
+  const hasData = summary !== null || levelCounts.length > 0 || recentTasks.length > 0 || recentErrors.length > 0
 
   // ── Task table columns ────────────────────────────────────
   const taskCols: ColumnDef[] = [
@@ -346,6 +355,12 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
           {useMock && (
             <Chip label="MOCK DATA" size="small" sx={{ fontSize: '9px', height: 18, bgcolor: '#fff3e0', color: '#f57c00', fontWeight: 700, border: '1px solid #f57c0040' }} />
           )}
+          {loading && hasData && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+              <CircularProgress size={12} sx={{ color: '#e65100' }} />
+              <Typography sx={{ fontSize: '10px', color: '#e65100', fontWeight: 600 }}>Refreshing…</Typography>
+            </Box>
+          )}
           <Typography sx={{ fontSize: '11px', color: '#aaa', ml: 'auto' }}>
             Source: edoops.talend_logs_dashboard
           </Typography>
@@ -373,7 +388,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
 
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
             {TALEND_DAY_PRESETS.map((presetDays) => {
-              const isActive = days === presetDays
+              const isActive = selectedDays === presetDays
               return (
                 <Chip
                   key={presetDays}
@@ -419,20 +434,20 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
       </Paper>
 
       {/* ── Loading ── */}
-      {loading && (
+      {loading && !hasData && (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
           <CircularProgress sx={{ color: '#e65100' }} />
         </Box>
       )}
 
       {/* ── Error ── */}
-      {error && !loading && (
+      {error && !hasData && !loading && (
         <Paper elevation={0} sx={{ borderRadius: 2, p: 4, textAlign: 'center', border: '1px solid #fce4ec', bgcolor: '#fff8f8' }}>
           <Typography sx={{ fontSize: '13px', color: '#c62828' }}>{error}</Typography>
         </Paper>
       )}
 
-      {!loading && !error && (
+      {hasData && !error && (
         <>
           {/* ── Row 1: Stat cards ── */}
           <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #e65100', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
