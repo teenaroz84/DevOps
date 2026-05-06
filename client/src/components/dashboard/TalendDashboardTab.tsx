@@ -146,10 +146,17 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
   const [days,         setDays]         = useState(15)
   const [selectedDays, setSelectedDays] = useState(15)
   const [sliderDays,   setSliderDays]   = useState(15)
+  const [refreshPending, setRefreshPending] = useState(false)
 
   const commitDays = (nextDays: number) => {
+    if (nextDays === days) {
+      setSelectedDays(nextDays)
+      setSliderDays(nextDays)
+      return
+    }
     setSelectedDays(nextDays)
     setSliderDays(nextDays)
+    setRefreshPending(true)
     setDays(prev => prev === nextDays ? prev : nextDays)
   }
 
@@ -170,6 +177,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
       setLevelCounts(MOCK_TALEND_LEVEL_COUNTS)
       setRecentTasks(MOCK_TALEND_RECENT_TASKS)
       setRecentErrors(MOCK_TALEND_RECENT_ERRORS)
+      setRefreshPending(false)
       setLoading(false)
       return
     }
@@ -185,11 +193,13 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
         setLevelCounts(Array.isArray(lc) ? lc : [])
         setRecentTasks(Array.isArray(rt) ? rt : [])
         setRecentErrors(Array.isArray(re) ? re : [])
+        setRefreshPending(false)
         setLoading(false)
       })
       .catch(err => {
         if (requestId !== requestIdRef.current) return
         setError(err.message || 'Failed to load Talend data')
+        setRefreshPending(false)
         setLoading(false)
       })
   }, [useMock, days])
@@ -236,7 +246,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
     count: r.count,
   }))
   const hasData = summary !== null || levelCounts.length > 0 || recentTasks.length > 0 || recentErrors.length > 0
-  const widgetsRefreshing = loading && hasData
+  const widgetsRefreshing = hasData && (loading || refreshPending)
 
   // ── Task table columns ────────────────────────────────────
   const taskCols: ColumnDef[] = [
