@@ -132,21 +132,29 @@ const ExpandableErrorText: React.FC<{ value?: string | null }> = ({ value }) => 
 
 export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void }> = ({ onOpenAgent }) => {
   const { useMock } = useMockData()
-  const requestIdRef = useRef(0)
+  const summaryRequestIdRef = useRef(0)
+  const levelCountsRequestIdRef = useRef(0)
+  const recentTasksRequestIdRef = useRef(0)
+  const recentErrorsRequestIdRef = useRef(0)
 
   const [summary,      setSummary]      = useState<any>(null)
+  const [summaryLoading, setSummaryLoading] = useState(true)
+  const [summaryError, setSummaryError] = useState<string | null>(null)
   const [levelCounts,  setLevelCounts]  = useState<any[]>([])
+  const [levelCountsLoading, setLevelCountsLoading] = useState(true)
+  const [levelCountsError, setLevelCountsError] = useState<string | null>(null)
   const [recentTasks,  setRecentTasks]  = useState<any[]>([])
+  const [recentTasksLoading, setRecentTasksLoading] = useState(true)
+  const [recentTasksError, setRecentTasksError] = useState<string | null>(null)
   const [recentErrors, setRecentErrors] = useState<any[]>([])
-  const [loading,      setLoading]      = useState(true)
-  const [error,        setError]        = useState<string | null>(null)
+  const [recentErrorsLoading, setRecentErrorsLoading] = useState(true)
+  const [recentErrorsError, setRecentErrorsError] = useState<string | null>(null)
   const [taskSearch,   setTaskSearch]   = useState('')
   const [statusFilter, setStatusFilter] = useState('All')
   const [levelFilter,  setLevelFilter]  = useState('All')
   const [days,         setDays]         = useState(15)
   const [selectedDays, setSelectedDays] = useState(15)
   const [sliderDays,   setSliderDays]   = useState(15)
-  const [refreshPending, setRefreshPending] = useState(false)
 
   const commitDays = (nextDays: number) => {
     if (nextDays === days) {
@@ -156,7 +164,10 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
     }
     setSelectedDays(nextDays)
     setSliderDays(nextDays)
-    setRefreshPending(true)
+    setSummaryLoading(true)
+    setLevelCountsLoading(true)
+    setRecentTasksLoading(true)
+    setRecentErrorsLoading(true)
     setDays(prev => prev === nextDays ? prev : nextDays)
   }
 
@@ -169,38 +180,90 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
   }, [days])
 
   useEffect(() => {
-    const requestId = ++requestIdRef.current
-    setLoading(true)
-    setError(null)
+    const requestId = ++summaryRequestIdRef.current
+    setSummaryLoading(true)
+    setSummaryError(null)
     if (useMock) {
       setSummary(MOCK_TALEND_SUMMARY)
-      setLevelCounts(MOCK_TALEND_LEVEL_COUNTS)
-      setRecentTasks(MOCK_TALEND_RECENT_TASKS)
-      setRecentErrors(MOCK_TALEND_RECENT_ERRORS)
-      setRefreshPending(false)
-      setLoading(false)
+      setSummaryLoading(false)
       return
     }
-    Promise.all([
-      talendService.getSummary(days),
-      talendService.getLevelCounts(days),
-      talendService.getRecentTasks(days),
-      talendService.getRecentErrors(days),
-    ])
-      .then(([s, lc, rt, re]) => {
-        if (requestId !== requestIdRef.current) return
-        setSummary(s)
-        setLevelCounts(Array.isArray(lc) ? lc : [])
-        setRecentTasks(Array.isArray(rt) ? rt : [])
-        setRecentErrors(Array.isArray(re) ? re : [])
-        setRefreshPending(false)
-        setLoading(false)
+    talendService.getSummary(days)
+      .then((data) => {
+        if (requestId !== summaryRequestIdRef.current) return
+        setSummary(data)
+        setSummaryLoading(false)
       })
-      .catch(err => {
-        if (requestId !== requestIdRef.current) return
-        setError(err.message || 'Failed to load Talend data')
-        setRefreshPending(false)
-        setLoading(false)
+      .catch((err) => {
+        if (requestId !== summaryRequestIdRef.current) return
+        setSummaryError(err.message || 'Failed to load Talend summary')
+        setSummaryLoading(false)
+      })
+  }, [useMock, days])
+
+  useEffect(() => {
+    const requestId = ++levelCountsRequestIdRef.current
+    setLevelCountsLoading(true)
+    setLevelCountsError(null)
+    if (useMock) {
+      setLevelCounts(MOCK_TALEND_LEVEL_COUNTS)
+      setLevelCountsLoading(false)
+      return
+    }
+    talendService.getLevelCounts(days)
+      .then((data) => {
+        if (requestId !== levelCountsRequestIdRef.current) return
+        setLevelCounts(Array.isArray(data) ? data : [])
+        setLevelCountsLoading(false)
+      })
+      .catch((err) => {
+        if (requestId !== levelCountsRequestIdRef.current) return
+        setLevelCountsError(err.message || 'Failed to load log level distribution')
+        setLevelCountsLoading(false)
+      })
+  }, [useMock, days])
+
+  useEffect(() => {
+    const requestId = ++recentTasksRequestIdRef.current
+    setRecentTasksLoading(true)
+    setRecentTasksError(null)
+    if (useMock) {
+      setRecentTasks(MOCK_TALEND_RECENT_TASKS)
+      setRecentTasksLoading(false)
+      return
+    }
+    talendService.getRecentTasks(days)
+      .then((data) => {
+        if (requestId !== recentTasksRequestIdRef.current) return
+        setRecentTasks(Array.isArray(data) ? data : [])
+        setRecentTasksLoading(false)
+      })
+      .catch((err) => {
+        if (requestId !== recentTasksRequestIdRef.current) return
+        setRecentTasksError(err.message || 'Failed to load recent tasks')
+        setRecentTasksLoading(false)
+      })
+  }, [useMock, days])
+
+  useEffect(() => {
+    const requestId = ++recentErrorsRequestIdRef.current
+    setRecentErrorsLoading(true)
+    setRecentErrorsError(null)
+    if (useMock) {
+      setRecentErrors(MOCK_TALEND_RECENT_ERRORS)
+      setRecentErrorsLoading(false)
+      return
+    }
+    talendService.getRecentErrors(days)
+      .then((data) => {
+        if (requestId !== recentErrorsRequestIdRef.current) return
+        setRecentErrors(Array.isArray(data) ? data : [])
+        setRecentErrorsLoading(false)
+      })
+      .catch((err) => {
+        if (requestId !== recentErrorsRequestIdRef.current) return
+        setRecentErrorsError(err.message || 'Failed to load recent errors')
+        setRecentErrorsLoading(false)
       })
   }, [useMock, days])
 
@@ -245,8 +308,8 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
     name:  r.level,
     count: r.count,
   }))
-  const hasData = summary !== null || levelCounts.length > 0 || recentTasks.length > 0 || recentErrors.length > 0
-  const widgetsRefreshing = hasData && (loading || refreshPending)
+  const hasAnyData = summary !== null || levelCounts.length > 0 || recentTasks.length > 0 || recentErrors.length > 0
+  const initialLoading = !hasAnyData && (summaryLoading || levelCountsLoading || recentTasksLoading || recentErrorsLoading)
 
   // ── Task table columns ────────────────────────────────────
   const taskCols: ColumnDef[] = [
@@ -437,26 +500,13 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
       </Paper>
 
       {/* ── Loading ── */}
-      {loading && !hasData && (
+      {initialLoading && (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
           <CircularProgress sx={{ color: '#e65100' }} />
         </Box>
       )}
 
-      {/* ── Error ── */}
-      {error && !hasData && !loading && (
-        <Paper elevation={0} sx={{ borderRadius: 2, p: 4, textAlign: 'center', border: '1px solid #fce4ec', bgcolor: '#fff8f8' }}>
-          <Typography sx={{ fontSize: '13px', color: '#c62828' }}>{error}</Typography>
-        </Paper>
-      )}
-
-      {error && hasData && (
-        <Paper elevation={0} sx={{ borderRadius: 2, px: 2, py: 1.25, border: '1px solid #fde0dc', bgcolor: '#fff8f8' }}>
-          <Typography sx={{ fontSize: '11px', color: '#c62828' }}>{error}</Typography>
-        </Paper>
-      )}
-
-      {hasData && (
+      {!initialLoading && (
         <>
           {/* ── Row 1: Stat cards ── */}
           <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #e65100', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
@@ -464,7 +514,8 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
               title="Talend Execution Summary"
               titleIcon={<IntegrationInstructionsIcon sx={{ color: '#e65100', fontSize: 18 }} />}
               source="edoops.talend_logs_dashboard"
-              loading={widgetsRefreshing}
+              loading={summaryLoading}
+              error={summaryError ?? undefined}
             >
               <Box sx={{ px: 1.5, py: 1 }}>
                 <StatCardGrid items={statCards} columns={6} compact />
@@ -479,7 +530,8 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
                 title="Execution Status Breakdown"
                 titleIcon={<CheckCircleOutlineIcon sx={{ color: '#2e7d32', fontSize: 18 }} />}
                 source="edoops.talend_logs_dashboard"
-                loading={widgetsRefreshing}
+                loading={summaryLoading}
+                error={summaryError ?? undefined}
               >
                 <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
                   <DonutChart data={donutData} centerLabel={total} showLegend size={150} />
@@ -492,7 +544,8 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
                 title="Log Level Distribution"
                 titleIcon={<ErrorOutlineIcon sx={{ color: '#c62828', fontSize: 18 }} />}
                 source="edoops.talend_logs_dashboard · fatal_count / error_count / warn_count / info_count"
-                loading={widgetsRefreshing}
+                loading={levelCountsLoading}
+                error={levelCountsError ?? undefined}
               >
                 <Box sx={{ px: 1, py: 1 }}>
                   <ComposedBarLineChart
@@ -515,7 +568,8 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
               title="Recent Task Executions"
               titleIcon={<ListAltIcon sx={{ color: '#1565c0', fontSize: 18 }} />}
               source="edoops.talend_logs_dashboard · latest 50"
-              loading={widgetsRefreshing}
+              loading={recentTasksLoading}
+              error={recentTasksError ?? undefined}
             >
               <Box sx={{ px: 1.5, pt: 1, pb: 0, display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
                 <TextField
@@ -566,7 +620,8 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
               title="Recent Errors & Fatal Logs"
               titleIcon={<ErrorOutlineIcon sx={{ color: '#c62828', fontSize: 18 }} />}
               source="edoops.talend_logs_dashboard · execution_status NOT IN (SUCCESS) · latest"
-              loading={widgetsRefreshing}
+              loading={recentErrorsLoading}
+              error={recentErrorsError ?? undefined}
             >
               <Box sx={{ px: 1.5, pt: 1, pb: 0, display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
                 {['All', 'FATAL', 'ERROR', 'WARN'].map(l => (
