@@ -347,7 +347,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
             <Chip label="MOCK DATA" size="small" sx={{ fontSize: '9px', height: 18, bgcolor: '#fff3e0', color: '#f57c00', fontWeight: 700, border: '1px solid #f57c0040' }} />
           )}
           <Typography sx={{ fontSize: '11px', color: '#aaa', ml: 'auto' }}>
-            Source: PostgreSQL · edoops.talend_logs_dashboard
+            Source: edoops.talend_logs_dashboard
           </Typography>
 
           {/* ── Date range slider ── */}
