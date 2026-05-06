@@ -17,6 +17,8 @@ import {
   MOCK_TALEND_RECENT_ERRORS,
 } from '../../services/talendMockData'
 
+const TALEND_DAY_PRESETS = [30, 60, 90]
+
 const STATUS_COLOR: Record<string, { color: string; bg: string }> = {
   EXECUTION_SUCCESS: { color: '#2e7d32', bg: '#e8f5e9' },
   SUCCESS:           { color: '#2e7d32', bg: '#e8f5e9' },
@@ -130,6 +132,7 @@ const ExpandableErrorText: React.FC<{ value?: string | null }> = ({ value }) => 
 
 export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void }> = ({ onOpenAgent }) => {
   const { useMock } = useMockData()
+  const requestIdRef = useRef(0)
 
   const [summary,      setSummary]      = useState<any>(null)
   const [levelCounts,  setLevelCounts]  = useState<any[]>([])
@@ -140,15 +143,22 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
   const [taskSearch,   setTaskSearch]   = useState('')
   const [statusFilter, setStatusFilter] = useState('All')
   const [levelFilter,  setLevelFilter]  = useState('All')
-  const [days,         setDays]         = useState(7)
+  const [days,         setDays]         = useState(30)
+  const [sliderDays,   setSliderDays]   = useState(30)
+
+  const commitDays = (nextDays: number) => {
+    setSliderDays(nextDays)
+    setDays(prev => prev === nextDays ? prev : nextDays)
+  }
 
   useEffect(() => {
+    setSliderDays(days)
+  }, [days])
+
+  useEffect(() => {
+    const requestId = ++requestIdRef.current
     setLoading(true)
     setError(null)
-    setSummary(null)
-    setLevelCounts([])
-    setRecentTasks([])
-    setRecentErrors([])
     if (useMock) {
       setSummary(MOCK_TALEND_SUMMARY)
       setLevelCounts(MOCK_TALEND_LEVEL_COUNTS)
@@ -164,13 +174,18 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
       talendService.getRecentErrors(days),
     ])
       .then(([s, lc, rt, re]) => {
+        if (requestId !== requestIdRef.current) return
         setSummary(s)
         setLevelCounts(Array.isArray(lc) ? lc : [])
         setRecentTasks(Array.isArray(rt) ? rt : [])
         setRecentErrors(Array.isArray(re) ? re : [])
         setLoading(false)
       })
-      .catch(err => { setError(err.message || 'Failed to load Talend data'); setLoading(false) })
+      .catch(err => {
+        if (requestId !== requestIdRef.current) return
+        setError(err.message || 'Failed to load Talend data')
+        setLoading(false)
+      })
   }, [useMock, days])
 
   // ── Filtered rows ──────────────────────────────────────────
@@ -337,13 +352,14 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
 
           {/* ── Date range slider ── */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, ml: 2, minWidth: 220 }}>
-            <Typography sx={{ fontSize: '11px', color: '#777', whiteSpace: 'nowrap' }}>Last {days}d</Typography>
+            <Typography sx={{ fontSize: '11px', color: '#777', whiteSpace: 'nowrap' }}>Last {sliderDays}d</Typography>
             <Slider
-              value={days}
+              value={sliderDays}
               min={1}
-              max={15}
+              max={90}
               step={1}
-              onChange={(_e, v) => setDays(v as number)}
+              onChange={(_e, v) => setSliderDays(v as number)}
+              onChangeCommitted={(_e, v) => commitDays(v as number)}
               size="small"
               sx={{
                 color: '#e65100',
@@ -352,7 +368,31 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
                 '& .MuiSlider-rail': { opacity: 0.3 },
               }}
             />
-            <Typography sx={{ fontSize: '10px', color: '#bbb', whiteSpace: 'nowrap' }}>15d</Typography>
+            <Typography sx={{ fontSize: '10px', color: '#bbb', whiteSpace: 'nowrap' }}>90d</Typography>
+          </Box>
+
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
+            {TALEND_DAY_PRESETS.map((presetDays) => {
+              const isActive = days === presetDays
+              return (
+                <Chip
+                  key={presetDays}
+                  label={`${presetDays}d`}
+                  size="small"
+                  onClick={() => commitDays(presetDays)}
+                  sx={{
+                    height: 22,
+                    fontSize: '10px',
+                    fontWeight: isActive ? 700 : 500,
+                    cursor: 'pointer',
+                    backgroundColor: isActive ? '#fff3e0' : '#f5f5f5',
+                    color: isActive ? '#e65100' : '#78909c',
+                    border: isActive ? '1px solid #e6510040' : '1px solid transparent',
+                    '& .MuiChip-label': { px: 1 },
+                  }}
+                />
+              )
+            })}
           </Box>
 
           {onOpenAgent && (

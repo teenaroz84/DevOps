@@ -46,6 +46,7 @@ const TREND_FAIL_COLORS = ['#e53935', '#f57c00', '#d81b60', '#ff6f00']
 
 
 const BAR_COLORS = ['#1976d2', '#f57c00', '#c62828', '#2e7d32', '#6a1b9a', '#00838f']
+const ESP_DAY_PRESETS = [30, 60, 90]
 const ESP_PLATFORM_RECENT_JOB_LIMIT = 500
 const ESP_WIDGET_PANEL_HEIGHT = 260
 const isSpecialEspJob = (jobname: string) => /JSDELAY|RETRIG/i.test(jobname)
@@ -108,7 +109,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   const [jobListLimited, setJobListLimited] = React.useState<{ showing: number; total: number } | null>(null)
   const [jobListHasMore, setJobListHasMore] = React.useState(false)
 
-  const [days, setDays] = React.useState(15)
+  const [days, setDays] = React.useState(30)
 
   // Reset job filter + drill-down when application or platform changes
   React.useEffect(() => { setSelectedJobs([]); setDrillJob(null); setWidgetFilter(null); setStatusFilter('All') }, [selected, selectedPlatform])
@@ -665,7 +666,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                 <Slider
                   value={days}
                   min={1}
-                  max={30}
+                  max={90}
                   step={1}
                   onChange={(_e, v) => setDays(v as number)}
                   size="small"
@@ -676,7 +677,32 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                     '& .MuiSlider-rail': { opacity: 0.3 },
                   }}
                 />
-                <Typography sx={{ fontSize: '10px', color: '#bbb', whiteSpace: 'nowrap' }}>30d</Typography>
+                <Typography sx={{ fontSize: '10px', color: '#bbb', whiteSpace: 'nowrap' }}>90d</Typography>
+              </Box>
+            )} 
+            {dashboardView === 'operations' && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
+                {ESP_DAY_PRESETS.map((presetDays) => {
+                  const isActive = days === presetDays
+                  return (
+                    <Chip
+                      key={presetDays}
+                      label={`${presetDays}d`}
+                      size="small"
+                      onClick={() => setDays(presetDays)}
+                      sx={{
+                        height: 22,
+                        fontSize: '10px',
+                        fontWeight: isActive ? 700 : 500,
+                        cursor: 'pointer',
+                        backgroundColor: isActive ? '#e8f5e9' : '#f5f5f5',
+                        color: isActive ? '#2e7d32' : '#78909c',
+                        border: isActive ? '1px solid #2e7d3240' : '1px solid transparent',
+                        '& .MuiChip-label': { px: 1 },
+                      }}
+                    />
+                  )
+                })}
               </Box>
             )}
             {onOpenAgent && (

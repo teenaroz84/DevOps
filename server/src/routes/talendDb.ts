@@ -6,9 +6,15 @@ import { getPgPool } from '../db/postgres';
 
 const router = Router();
 
-// Parse ?days= query param (1–15, default 7)
+const TALEND_DEFAULT_DAYS = 30;
+const TALEND_MAX_DAYS = 90;
+
+// Parse ?days= query param (1–90, default 30)
 function daysClause(query: any): { clause: string; params: any[] } {
-  const days = Math.min(15, Math.max(1, parseInt(String(query.days ?? '7'), 10) || 7));
+  const days = Math.min(
+    TALEND_MAX_DAYS,
+    Math.max(1, parseInt(String(query.days ?? String(TALEND_DEFAULT_DAYS)), 10) || TALEND_DEFAULT_DAYS)
+  );
   return {
     clause: `AND start_timestamp >= NOW() - INTERVAL '${days} days'`,
     params: [],
