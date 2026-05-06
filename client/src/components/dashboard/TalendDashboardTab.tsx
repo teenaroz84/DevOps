@@ -1,4 +1,4 @@
-import React, { startTransition, useState, useEffect, useMemo, useRef } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { Box, Typography, Chip, Paper, CircularProgress, TextField, InputAdornment, Button, Slider, Tooltip } from '@mui/material'
 import IntegrationInstructionsIcon from '@mui/icons-material/IntegrationInstructions'
 import SearchIcon from '@mui/icons-material/Search'
@@ -150,9 +150,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
   const commitDays = (nextDays: number) => {
     setSelectedDays(nextDays)
     setSliderDays(nextDays)
-    startTransition(() => {
-      setDays(prev => prev === nextDays ? prev : nextDays)
-    })
+    setDays(prev => prev === nextDays ? prev : nextDays)
   }
 
   useEffect(() => {
@@ -238,6 +236,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
     count: r.count,
   }))
   const hasData = summary !== null || levelCounts.length > 0 || recentTasks.length > 0 || recentErrors.length > 0
+  const widgetsRefreshing = loading && hasData
 
   // ── Task table columns ────────────────────────────────────
   const taskCols: ColumnDef[] = [
@@ -355,12 +354,6 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
           {useMock && (
             <Chip label="MOCK DATA" size="small" sx={{ fontSize: '9px', height: 18, bgcolor: '#fff3e0', color: '#f57c00', fontWeight: 700, border: '1px solid #f57c0040' }} />
           )}
-          {loading && hasData && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-              <CircularProgress size={12} sx={{ color: '#e65100' }} />
-              <Typography sx={{ fontSize: '10px', color: '#e65100', fontWeight: 600 }}>Refreshing…</Typography>
-            </Box>
-          )}
           <Typography sx={{ fontSize: '11px', color: '#aaa', ml: 'auto' }}>
             Source: edoops.talend_logs_dashboard
           </Typography>
@@ -447,7 +440,13 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
         </Paper>
       )}
 
-      {hasData && !error && (
+      {error && hasData && (
+        <Paper elevation={0} sx={{ borderRadius: 2, px: 2, py: 1.25, border: '1px solid #fde0dc', bgcolor: '#fff8f8' }}>
+          <Typography sx={{ fontSize: '11px', color: '#c62828' }}>{error}</Typography>
+        </Paper>
+      )}
+
+      {hasData && (
         <>
           {/* ── Row 1: Stat cards ── */}
           <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #e65100', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
@@ -455,6 +454,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
               title="Talend Execution Summary"
               titleIcon={<IntegrationInstructionsIcon sx={{ color: '#e65100', fontSize: 18 }} />}
               source="edoops.talend_logs_dashboard"
+              loading={widgetsRefreshing}
             >
               <Box sx={{ px: 1.5, py: 1 }}>
                 <StatCardGrid items={statCards} columns={6} compact />
@@ -469,6 +469,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
                 title="Execution Status Breakdown"
                 titleIcon={<CheckCircleOutlineIcon sx={{ color: '#2e7d32', fontSize: 18 }} />}
                 source="edoops.talend_logs_dashboard"
+                loading={widgetsRefreshing}
               >
                 <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
                   <DonutChart data={donutData} centerLabel={total} showLegend size={150} />
@@ -481,6 +482,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
                 title="Log Level Distribution"
                 titleIcon={<ErrorOutlineIcon sx={{ color: '#c62828', fontSize: 18 }} />}
                 source="edoops.talend_logs_dashboard · fatal_count / error_count / warn_count / info_count"
+                loading={widgetsRefreshing}
               >
                 <Box sx={{ px: 1, py: 1 }}>
                   <ComposedBarLineChart
@@ -503,6 +505,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
               title="Recent Task Executions"
               titleIcon={<ListAltIcon sx={{ color: '#1565c0', fontSize: 18 }} />}
               source="edoops.talend_logs_dashboard · latest 50"
+              loading={widgetsRefreshing}
             >
               <Box sx={{ px: 1.5, pt: 1, pb: 0, display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
                 <TextField
@@ -553,6 +556,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
               title="Recent Errors & Fatal Logs"
               titleIcon={<ErrorOutlineIcon sx={{ color: '#c62828', fontSize: 18 }} />}
               source="edoops.talend_logs_dashboard · execution_status NOT IN (SUCCESS) · latest"
+              loading={widgetsRefreshing}
             >
               <Box sx={{ px: 1.5, pt: 1, pb: 0, display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
                 {['All', 'FATAL', 'ERROR', 'WARN'].map(l => (
