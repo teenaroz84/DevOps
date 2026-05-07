@@ -6,8 +6,8 @@ import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline'
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
 import ListAltIcon from '@mui/icons-material/ListAlt'
 import { WidgetShell, StatCardGrid, DonutChart, DataTable, ColumnDef, ComposedBarLineChart } from '../widgets'
-import { IncidentListWidget } from './DataSourceWidgets'
-import { talendService } from '../../services'
+import { IncidentListWidget, IncidentsWidget, IncidentTrendWidget } from './DataSourceWidgets'
+import { servicenowService, talendService } from '../../services'
 import { useMockData } from '../../context/MockDataContext'
 import { AGENTS } from '../../config/agentConfig'
 import { APP_COLORS, TRUIST } from '../../theme/truistPalette'
@@ -17,6 +17,10 @@ import {
   MOCK_TALEND_RECENT_TASKS,
   MOCK_TALEND_RECENT_ERRORS,
 } from '../../services/talendMockData'
+import {
+  MOCK_SERVICENOW_INCIDENTS,
+  MOCK_SERVICENOW_MISSED_INCIDENTS,
+} from '../../services/servicenowMockData'
 
 const TALEND_DAY_PRESETS = [30, 60, 90]
 const TALEND_SERVICENOW_PLATFORM = 'Talend'
@@ -135,6 +139,7 @@ const ExpandableErrorText: React.FC<{ value?: string | null }> = ({ value }) => 
 export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void }> = ({ onOpenAgent }) => {
   const { useMock } = useMockData()
   const summaryRequestIdRef = useRef(0)
+  const serviceNowKpisRequestIdRef = useRef(0)
   const levelCountsRequestIdRef = useRef(0)
   const recentTasksRequestIdRef = useRef(0)
   const recentErrorsRequestIdRef = useRef(0)
@@ -142,6 +147,10 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
   const [summary,      setSummary]      = useState<any>(null)
   const [summaryLoading, setSummaryLoading] = useState(true)
   const [summaryError, setSummaryError] = useState<string | null>(null)
+  const [serviceNowKpisLoading, setServiceNowKpisLoading] = useState(true)
+  const [serviceNowKpisError, setServiceNowKpisError] = useState<string | null>(null)
+  const [serviceNowOpenIncidents, setServiceNowOpenIncidents] = useState<any[]>([])
+  const [serviceNowMissedIncidents, setServiceNowMissedIncidents] = useState<any[]>([])
   const [levelCounts,  setLevelCounts]  = useState<any[]>([])
   const [levelCountsLoading, setLevelCountsLoading] = useState(true)
   const [levelCountsError, setLevelCountsError] = useState<string | null>(null)
@@ -200,6 +209,35 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
         if (requestId !== summaryRequestIdRef.current) return
         setSummaryError(err.message || 'Failed to load Talend summary')
         setSummaryLoading(false)
+      })
+  }, [useMock, days])
+
+  useEffect(() => {
+    const requestId = ++serviceNowKpisRequestIdRef.current
+    setServiceNowKpisLoading(true)
+    setServiceNowKpisError(null)
+
+    if (useMock) {
+      setServiceNowOpenIncidents(MOCK_SERVICENOW_INCIDENTS)
+      setServiceNowMissedIncidents(MOCK_SERVICENOW_MISSED_INCIDENTS)
+      setServiceNowKpisLoading(false)
+      return
+    }
+
+    Promise.all([
+      servicenowService.getIncidents(TALEND_SERVICENOW_PLATFORM),
+      servicenowService.getMissedIncidents(TALEND_SERVICENOW_PLATFORM, days),
+    ])
+      .then(([openData, missedData]) => {
+        if (requestId !== serviceNowKpisRequestIdRef.current) return
+        setServiceNowOpenIncidents(Array.isArray(openData) ? openData : [])
+        setServiceNowMissedIncidents(Array.isArray(missedData) ? missedData : [])
+        setServiceNowKpisLoading(false)
+      })
+      .catch((err) => {
+        if (requestId !== serviceNowKpisRequestIdRef.current) return
+        setServiceNowKpisError(err.message || 'Failed to load Talend ServiceNow KPIs')
+        setServiceNowKpisLoading(false)
       })
   }, [useMock, days])
 
@@ -287,17 +325,20 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
   const total   = statusBreakdown.reduce((s: number, r: any) => s + r.count, 0)
   const success = statusBreakdown.find((r: any) => r.status?.includes('SUCCESS'))?.count ?? 0
   const failed  = statusBreakdown.find((r: any) => r.status?.includes('FAILED'))?.count  ?? 0
-  const running = statusBreakdown.find((r: any) => r.status?.includes('RUNNING'))?.count ?? 0
-  const fatal   = levelCounts.find((r: any) => r.level === 'FATAL')?.count ?? 0
-  const successRate = total > 0 ? Math.round((success / total) * 100) : 0
+  const serviceNowOpenTotal = serviceNowOpenIncidents.reduce((sum, row) => sum + (row.incident_count || 0), 0)
+  const serviceNowIncidentVolume = serviceNowMissedIncidents.reduce((sum, row) => sum + (row.incident_count || 0), 0)
+  const serviceNowSlaBreaches = serviceNowMissedIncidents.reduce((sum, row) => sum + (row.breached_count || 0), 0)
 
   const statCards = [
     { label: 'Total Executions', value: total,        color: '#1565c0', bg: '#e3f2fd' },
     { label: 'Success',          value: success,      color: '#2e7d32', bg: '#e8f5e9' },
     { label: 'Failed',           value: failed,       color: '#c62828', bg: '#fce4ec' },
-    { label: 'Running',          value: running,      color: '#f57c00', bg: '#fff8e1' },
-    { label: 'Success Rate',     value: `${successRate}%`, color: successRate >= 90 ? '#2e7d32' : '#c62828', bg: successRate >= 90 ? '#e8f5e9' : '#fce4ec' },
-    { label: 'FATAL Logs',       value: fatal,        color: fatal > 0 ? '#c62828' : '#2e7d32', bg: fatal > 0 ? '#fce4ec' : '#e8f5e9' },
+    // { label: 'Running',          value: running,      color: '#f57c00', bg: '#fff8e1' },
+    // { label: 'Success Rate',     value: `${successRate}%`, color: successRate >= 90 ? '#2e7d32' : '#c62828', bg: successRate >= 90 ? '#e8f5e9' : '#fce4ec' },
+    // { label: 'FATAL Logs',       value: fatal,        color: fatal > 0 ? '#c62828' : '#2e7d32', bg: fatal > 0 ? '#fce4ec' : '#e8f5e9' },
+    { label: 'SN Open Incidents', value: serviceNowOpenTotal, color: '#8e24aa', bg: '#f3e5f5' },
+    { label: `SN Volume ${days}d`, value: serviceNowIncidentVolume, color: '#1565c0', bg: '#e3f2fd' },
+    { label: 'SN SLA Breaches', value: serviceNowSlaBreaches, color: '#ef6c00', bg: '#fff3e0' },
   ]
 
   const donutData = statusBreakdown.map((r: any) => ({
@@ -516,8 +557,8 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
               title="Talend Execution Summary"
               titleIcon={<IntegrationInstructionsIcon sx={{ color: '#e65100', fontSize: 18 }} />}
               source="edoops.talend_logs_dashboard"
-              loading={summaryLoading}
-              error={summaryError ?? undefined}
+              loading={summaryLoading || serviceNowKpisLoading}
+              error={summaryError ?? serviceNowKpisError ?? undefined}
             >
               <Box sx={{ px: 1.5, py: 1 }}>
                 <StatCardGrid items={statCards} columns={6} compact />
@@ -659,8 +700,17 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
               </Box>
             </WidgetShell>
           </Paper>
-
           {/* ── Row 5: Talend-specific ServiceNow incidents ── */}
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1.35fr', gap: 2, alignItems: 'stretch' }}>
+            <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #c62828', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+              <IncidentsWidget platform={TALEND_SERVICENOW_PLATFORM} />
+            </Paper>
+
+            <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #7b1fa2', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+              <IncidentTrendWidget platform={TALEND_SERVICENOW_PLATFORM} days={days} />
+            </Paper>
+          </Box>
+
           <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #7b1fa2', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
             <IncidentListWidget platform={TALEND_SERVICENOW_PLATFORM} days={days} />
           </Paper>
