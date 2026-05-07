@@ -6,6 +6,7 @@ import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline'
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
 import ListAltIcon from '@mui/icons-material/ListAlt'
 import { WidgetShell, StatCardGrid, DonutChart, DataTable, ColumnDef, ComposedBarLineChart } from '../widgets'
+import { IncidentListWidget } from './DataSourceWidgets'
 import { talendService } from '../../services'
 import { useMockData } from '../../context/MockDataContext'
 import { AGENTS } from '../../config/agentConfig'
@@ -18,6 +19,7 @@ import {
 } from '../../services/talendMockData'
 
 const TALEND_DAY_PRESETS = [30, 60, 90]
+const TALEND_SERVICENOW_PLATFORM = 'Talend'
 
 const STATUS_COLOR: Record<string, { color: string; bg: string }> = {
   EXECUTION_SUCCESS: { color: '#2e7d32', bg: '#e8f5e9' },
@@ -656,6 +658,11 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
                 />
               </Box>
             </WidgetShell>
+          </Paper>
+
+          {/* ── Row 5: Talend-specific ServiceNow incidents ── */}
+          <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #7b1fa2', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+            <IncidentListWidget platform={TALEND_SERVICENOW_PLATFORM} days={days} />
           </Paper>
         </>
       )}
