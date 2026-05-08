@@ -6,11 +6,13 @@ import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline'
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
 import ListAltIcon from '@mui/icons-material/ListAlt'
 import { WidgetShell, StatCardGrid, DonutChart, DataTable, ColumnDef, ComposedBarLineChart } from '../widgets'
-import { IncidentListWidget, IncidentsWidget, IncidentTrendWidget } from './DataSourceWidgets'
-import { servicenowService, talendService } from '../../services'
+import WorkIcon from '@mui/icons-material/Work'
+import { IncidentListWidget } from './DataSourceWidgets'
+import { espService, servicenowService, talendService } from '../../services'
 import { useMockData } from '../../context/MockDataContext'
 import { AGENTS } from '../../config/agentConfig'
 import { APP_COLORS, TRUIST } from '../../theme/truistPalette'
+import { getMockPlatformData } from '../../services/espMockData'
 import {
   MOCK_TALEND_SUMMARY,
   MOCK_TALEND_LEVEL_COUNTS,
@@ -24,6 +26,8 @@ import {
 
 const TALEND_DAY_PRESETS = [30, 60, 90]
 const TALEND_SERVICENOW_PLATFORM = 'Talend'
+const TALEND_ESP_PLATFORM = 'Talend'
+const TALEND_ESP_JOB_LIMIT = 500
 
 const STATUS_COLOR: Record<string, { color: string; bg: string }> = {
   EXECUTION_SUCCESS: { color: '#2e7d32', bg: '#e8f5e9' },
@@ -43,6 +47,11 @@ const LEVEL_COLOR: Record<string, { color: string; bg: string }> = {
 
 const statusLabel = (s: string) =>
   s.replace('EXECUTION_', '').replace('_', ' ')
+
+const normalizeEspRunStatusLabel = (value?: string | null) => {
+  const trimmed = typeof value === 'string' ? value.trim() : ''
+  return trimmed || 'UNKNOWN'
+}
 
 const fmtTs = (ts: string | null) => {
   if (!ts) return '—'
@@ -143,6 +152,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
   const levelCountsRequestIdRef = useRef(0)
   const recentTasksRequestIdRef = useRef(0)
   const recentErrorsRequestIdRef = useRef(0)
+  const espJobsRequestIdRef = useRef(0)
 
   const [summary,      setSummary]      = useState<any>(null)
   const [summaryLoading, setSummaryLoading] = useState(true)
@@ -160,6 +170,10 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
   const [recentErrors, setRecentErrors] = useState<any[]>([])
   const [recentErrorsLoading, setRecentErrorsLoading] = useState(true)
   const [recentErrorsError, setRecentErrorsError] = useState<string | null>(null)
+  const [espJobs, setEspJobs] = useState<any[]>([])
+  const [espJobsLoading, setEspJobsLoading] = useState(true)
+  const [espJobsError, setEspJobsError] = useState<string | null>(null)
+  const [espStatusFilter, setEspStatusFilter] = useState('All')
   const [taskSearch,   setTaskSearch]   = useState('')
   const [statusFilter, setStatusFilter] = useState('All')
   const [levelFilter,  setLevelFilter]  = useState('All')
@@ -242,6 +256,33 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
   }, [useMock, days])
 
   useEffect(() => {
+    const requestId = ++espJobsRequestIdRef.current
+    setEspJobsLoading(true)
+    setEspJobsError(null)
+
+    if (useMock) {
+      const mockPlatformData = getMockPlatformData(TALEND_ESP_PLATFORM)
+      const mockJobs = Array.isArray(mockPlatformData?.job_list) ? mockPlatformData.job_list : []
+      setEspJobs(mockJobs.slice(0, TALEND_ESP_JOB_LIMIT))
+      setEspJobsLoading(false)
+      return
+    }
+
+    espService.getPlatformJobList(TALEND_ESP_PLATFORM, TALEND_ESP_JOB_LIMIT, 0)
+      .then((data: any) => {
+        if (requestId !== espJobsRequestIdRef.current) return
+        const jobs = Array.isArray(data?.jobs) ? data.jobs : []
+        setEspJobs(jobs.slice(0, TALEND_ESP_JOB_LIMIT))
+        setEspJobsLoading(false)
+      })
+      .catch((err) => {
+        if (requestId !== espJobsRequestIdRef.current) return
+        setEspJobsError(err.message || 'Failed to load Talend ESP job execution status')
+        setEspJobsLoading(false)
+      })
+  }, [useMock])
+
+  useEffect(() => {
     const requestId = ++levelCountsRequestIdRef.current
     setLevelCountsLoading(true)
     setLevelCountsError(null)
@@ -319,6 +360,23 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
       .filter(e => levelFilter === 'All' || String(e.derived_level || '').toUpperCase() === levelFilter)
       .filter(e => !taskSearch || (e.task_name || '').toLowerCase().includes(taskSearch.toLowerCase())),
   [recentErrors, levelFilter, taskSearch])
+
+  const espStatusOptions = useMemo(() => {
+    const statuses = new Set(espJobs.map((job) => normalizeEspRunStatusLabel(job.run_status)))
+    return ['All', 'SUCCESS', 'FAILED', 'NEVER RUN', 'UNKNOWN'].filter((status, index, all) => status === 'All' || statuses.has(status) || all.indexOf(status) !== index)
+  }, [espJobs])
+
+  const filteredEspJobs = useMemo(() =>
+    espJobs
+      .filter((job) => espStatusFilter === 'All' || normalizeEspRunStatusLabel(job.run_status) === espStatusFilter)
+      .sort((left, right) => {
+        if (!left.last_run_date && !right.last_run_date) return String(left.jobname || '').localeCompare(String(right.jobname || ''))
+        if (!left.last_run_date) return 1
+        if (!right.last_run_date) return -1
+        const diff = new Date(right.last_run_date).getTime() - new Date(left.last_run_date).getTime()
+        return diff !== 0 ? diff : String(left.jobname || '').localeCompare(String(right.jobname || ''))
+      }),
+  [espJobs, espStatusFilter])
 
   // ── Derived summary stats ─────────────────────────────────
   const statusBreakdown: any[] = summary?.statusBreakdown ?? []
@@ -456,6 +514,85 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
     { key: 'workspace_name',    header: 'Workspace', width: 140, render: row => <Typography sx={{ fontSize: '10px', color: '#888' }}>{row.workspace_name || '—'}</Typography> },
     { key: 'remote_engine_name', header: 'Engine',   width: 160, render: row => <Typography sx={{ fontSize: '10px', color: '#888' }}>{row.remote_engine_name || '—'}</Typography> },
     { key: 'start_timestamp',   header: 'Time',      width: 140, render: row => <Typography sx={{ fontSize: '10px', color: '#aaa' }}>{fmtTs(row.start_timestamp)}</Typography> },
+  ]
+
+  const espJobCols: ColumnDef[] = [
+    {
+      key: 'jobname_application',
+      header: 'Application|JOB NAME',
+      flex: 1,
+      noWrap: true,
+      render: row => {
+        const applicationName = row.appl_name ?? '—'
+        return (
+          <Tooltip title={`${applicationName}|${row.jobname || '—'}`} placement="top" arrow>
+            <Typography
+              component="span"
+              sx={{
+                fontSize: '11px',
+                color: '#333',
+                minWidth: 0,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                display: 'block',
+              }}
+            >
+              {`${applicationName}|${row.jobname || '—'}`}
+            </Typography>
+          </Tooltip>
+        )
+      },
+    },
+    {
+      key: 'last_run_date',
+      header: 'Last Run',
+      width: 180,
+      render: row => (
+        <Typography sx={{ fontSize: '11px', color: row.last_run_date ? '#666' : '#9e9e9e' }}>
+          {row.last_run_date
+            ? new Date(row.last_run_date).toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+            : '—'}
+        </Typography>
+      ),
+    },
+    {
+      key: 'job_type',
+      header: 'Job Type',
+      width: 100,
+      noWrap: true,
+      render: row => <Typography sx={{ fontSize: '11px', color: '#666' }}>{row.job_type ?? '—'}</Typography>,
+    },
+    {
+      key: 'run_status',
+      header: 'Status',
+      width: 120,
+      noWrap: true,
+      render: row => {
+        const status = normalizeEspRunStatusLabel(row.run_status)
+        const statusStyle = status === 'SUCCESS'
+          ? { color: '#2e7d32', bgcolor: '#e8f5e9', borderColor: '#a5d6a7' }
+          : status === 'FAILED'
+            ? { color: '#c62828', bgcolor: '#ffebee', borderColor: '#ef9a9a' }
+            : status === 'NEVER RUN'
+              ? { color: '#ef6c00', bgcolor: '#fff3e0', borderColor: '#ffcc80' }
+              : { color: '#616161', bgcolor: '#f5f5f5', borderColor: '#e0e0e0' }
+        return (
+          <Chip
+            label={status}
+            size="small"
+            sx={{
+              height: 20,
+              fontSize: '10px',
+              fontWeight: 700,
+              color: statusStyle.color,
+              bgcolor: statusStyle.bgcolor,
+              border: `1px solid ${statusStyle.borderColor}`,
+            }}
+          />
+        )
+      },
+    },
   ]
 
   return (
@@ -702,18 +839,69 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
             </WidgetShell>
           </Paper>
           {/* ── Row 5: Talend-specific ServiceNow incidents ── */}
-          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1.35fr', gap: 2, alignItems: 'stretch' }}>
-            <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #c62828', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-              <IncidentsWidget platform={TALEND_SERVICENOW_PLATFORM} />
-            </Paper>
-
-            <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #7b1fa2', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-              <IncidentTrendWidget platform={TALEND_SERVICENOW_PLATFORM} days={days} />
-            </Paper>
-          </Box>
-
           <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #7b1fa2', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
             <IncidentListWidget platform={TALEND_SERVICENOW_PLATFORM} days={days} />
+          </Paper>
+
+          <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #1976d2', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+            <WidgetShell
+              title="ESP Job Execution Status"
+              source={espJobsLoading
+                ? 'Loading Talend ESP jobs…'
+                : `Top ${Math.min(filteredEspJobs.length, TALEND_ESP_JOB_LIMIT)} Talend platform jobs from ESP`}
+              titleIcon={<WorkIcon sx={{ color: '#1976d2', fontSize: 18 }} />}
+              loading={espJobsLoading}
+              error={espJobsError ?? undefined}
+            >
+              <Box sx={{ px: 1.5, pt: 1, pb: 0, display: 'flex', gap: 0.75, alignItems: 'center', flexWrap: 'wrap' }}>
+                {espStatusOptions.map((status) => {
+                  const isActive = espStatusFilter === status
+                  const colors = status === 'SUCCESS'
+                    ? { color: '#2e7d32', bg: '#e8f5e9', border: '#a5d6a7' }
+                    : status === 'FAILED'
+                      ? { color: '#c62828', bg: '#ffebee', border: '#ef9a9a' }
+                      : status === 'NEVER RUN'
+                        ? { color: '#ef6c00', bg: '#fff3e0', border: '#ffcc80' }
+                        : status === 'UNKNOWN'
+                          ? { color: '#616161', bg: '#f5f5f5', border: '#e0e0e0' }
+                          : { color: '#1565c0', bg: '#e3f2fd', border: '#90caf9' }
+                  const count = status === 'All'
+                    ? espJobs.length
+                    : espJobs.filter((job) => normalizeEspRunStatusLabel(job.run_status) === status).length
+                  return (
+                    <Chip
+                      key={status}
+                      label={`${status} (${count})`}
+                      size="small"
+                      onClick={() => setEspStatusFilter(status)}
+                      sx={{
+                        height: 22,
+                        fontSize: '10px',
+                        cursor: 'pointer',
+                        fontWeight: isActive ? 700 : 500,
+                        color: isActive ? colors.color : '#777',
+                        bgcolor: isActive ? colors.bg : '#fafafa',
+                        border: `1px solid ${isActive ? colors.border : '#e0e0e0'}`,
+                        '& .MuiChip-label': { px: 1 },
+                      }}
+                    />
+                  )
+                })}
+                <Typography sx={{ fontSize: '10px', color: '#aaa', ml: 'auto' }}>{filteredEspJobs.length} jobs</Typography>
+              </Box>
+              <Box sx={{ px: 1.5, pb: 1.5 }}>
+                <DataTable
+                  columns={espJobCols}
+                  rows={filteredEspJobs}
+                  rowKey="jobname"
+                  compact
+                  maxHeight={320}
+                  pageSize={200}
+                  accentColor="#1976d2"
+                  emptyMessage={espJobsLoading ? 'Loading jobs…' : 'No Talend ESP jobs found'}
+                />
+              </Box>
+            </WidgetShell>
           </Paper>
         </>
       )}
