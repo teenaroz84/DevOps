@@ -325,9 +325,10 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
   const total   = statusBreakdown.reduce((s: number, r: any) => s + r.count, 0)
   const success = statusBreakdown.find((r: any) => r.status?.includes('SUCCESS'))?.count ?? 0
   const failed  = statusBreakdown.find((r: any) => r.status?.includes('FAILED'))?.count  ?? 0
+  const fatal   = levelCounts.find((r: any) => r.level === 'FATAL')?.count ?? 0
   const serviceNowOpenTotal = serviceNowOpenIncidents.reduce((sum, row) => sum + (row.incident_count || 0), 0)
   const serviceNowIncidentVolume = serviceNowMissedIncidents.reduce((sum, row) => sum + (row.incident_count || 0), 0)
-  const serviceNowSlaBreaches = serviceNowMissedIncidents.reduce((sum, row) => sum + (row.breached_count || 0), 0)
+  //const serviceNowSlaBreaches = serviceNowMissedIncidents.reduce((sum, row) => sum + (row.breached_count || 0), 0)
 
   const statCards = [
     { label: 'Total Executions', value: total,        color: '#1565c0', bg: '#e3f2fd' },
@@ -335,10 +336,10 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
     { label: 'Failed',           value: failed,       color: '#c62828', bg: '#fce4ec' },
     // { label: 'Running',          value: running,      color: '#f57c00', bg: '#fff8e1' },
     // { label: 'Success Rate',     value: `${successRate}%`, color: successRate >= 90 ? '#2e7d32' : '#c62828', bg: successRate >= 90 ? '#e8f5e9' : '#fce4ec' },
-    // { label: 'FATAL Logs',       value: fatal,        color: fatal > 0 ? '#c62828' : '#2e7d32', bg: fatal > 0 ? '#fce4ec' : '#e8f5e9' },
+     { label: 'FATAL Logs',       value: fatal,        color: fatal > 0 ? '#c62828' : '#2e7d32', bg: fatal > 0 ? '#fce4ec' : '#e8f5e9' },
     { label: 'SN Open Incidents', value: serviceNowOpenTotal, color: '#8e24aa', bg: '#f3e5f5' },
     { label: `SN Volume ${days}d`, value: serviceNowIncidentVolume, color: '#1565c0', bg: '#e3f2fd' },
-    { label: 'SN SLA Breaches', value: serviceNowSlaBreaches, color: '#ef6c00', bg: '#fff3e0' },
+    //{ label: 'SN SLA Breaches', value: serviceNowSlaBreaches, color: '#ef6c00', bg: '#fff3e0' },
   ]
 
   const donutData = statusBreakdown.map((r: any) => ({

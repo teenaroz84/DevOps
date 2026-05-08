@@ -104,17 +104,6 @@ interface ChatSessionSummary {
   preview: string
   updatedAt: number
 }
-
-interface PersistedPopupChatSession extends ChatSessionSummary {
-  messages: Message[]
-}
-
-interface PersistedPopupChatState {
-  activeSessionId: string
-  sessions: PersistedPopupChatSession[]
-}
-
-const POPUP_CHAT_STORAGE_PREFIX = 'dataops:popup-chat:'
 const FULLSCREEN_CHAT_STORAGE_PREFIX = 'dataops:fullscreen-chat:'
 const MAX_FULLSCREEN_SESSION_SUMMARIES = 3
 
@@ -128,45 +117,6 @@ function createSessionId(scope: 'chat' | 'popup' = 'chat'): string {
     return `${prefix}-${crypto.randomUUID()}`
   } catch {
     return `${prefix}-${Date.now()}-${Math.round(Math.random() * 1_000_000)}`
-  }
-}
-
-function readPersistedPopupChats(storageKey: string): PersistedPopupChatState | null {
-  if (typeof window === 'undefined') return null
-
-  try {
-    const raw = window.localStorage.getItem(storageKey)
-    if (!raw) return null
-
-    const parsed = JSON.parse(raw) as PersistedPopupChatState
-    if (!parsed || !Array.isArray(parsed.sessions)) return null
-
-    const sessions = parsed.sessions.filter(session => (
-      typeof session.sessionId === 'string'
-      && typeof session.title === 'string'
-      && typeof session.preview === 'string'
-      && typeof session.updatedAt === 'number'
-      && Array.isArray(session.messages)
-    ))
-
-    if (sessions.length === 0) return null
-
-    return {
-      activeSessionId: typeof parsed.activeSessionId === 'string' ? parsed.activeSessionId : sessions[0].sessionId,
-      sessions,
-    }
-  } catch {
-    return null
-  }
-}
-
-function writePersistedPopupChats(storageKey: string, state: PersistedPopupChatState): void {
-  if (typeof window === 'undefined') return
-
-  try {
-    window.localStorage.setItem(storageKey, JSON.stringify(state))
-  } catch (error) {
-    console.warn('[ChatPanel] Failed to persist popup chat sessions', error)
   }
 }
 
@@ -251,7 +201,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
   const headerMutedTextColor = useDarkHeaderText ? TRUIST.darkGray : 'rgba(255,255,255,0.82)'
   const headerActionBorder = useDarkHeaderText ? `1px solid ${TRUIST.charcoal}55` : '1px solid rgba(255,255,255,0.4)'
   const headerActionHover = useDarkHeaderText ? 'rgba(52,52,59,0.08)' : 'rgba(255,255,255,0.15)'
-  const authenticatedUserId = fullScreen ? getAuthenticatedUserId() ?? undefined : undefined
+  const authenticatedUserId = getAuthenticatedUserId() ?? undefined
   const userBubbleColor = APP_COLORS.primary
   const userBubbleTextColor = TRUIST.white
   const renderAgentIcon = (size: number) => {
@@ -280,7 +230,6 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
   })
   const [dragging, setDragging] = useState(false)
   const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null)
-  const popupStorageKey = `${POPUP_CHAT_STORAGE_PREFIX}${agent.id}`
   const fullScreenStorageKey = `${FULLSCREEN_CHAT_STORAGE_PREFIX}${authenticatedUserId ?? 'anonymous'}:${agent.id}:active-session-id`
   const sessionIdScope: 'chat' | 'popup' = fullScreen ? 'chat' : 'popup'
 
@@ -294,7 +243,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
   const [chatSessions, setChatSessions] = useState<ChatSessionSummary[]>([])
   const [activeSessionId, setActiveSessionId] = useState('')
   const sessionMessagesRef = useRef<Record<string, Message[]>>({})
-  const fullScreenSessionLoadRef = useRef(0)
+  const sessionLoadRef = useRef(0)
 
   // ── Session state ────────────────────────────────────────────────────────
   const [messages, setMessages] = useState<Message[]>(() => {
@@ -315,40 +264,16 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
       setActiveSessionId(starter.sessionId)
     }
 
-    if (!fullScreen) {
-      const persisted = readPersistedPopupChats(popupStorageKey)
-      if (persisted) {
-        const restoredMessages = persisted.sessions.reduce<Record<string, Message[]>>((acc, session) => {
-          acc[session.sessionId] = session.messages.length > 0 ? session.messages : starterMessages
-          return acc
-        }, {})
-        const restoredSessions = persisted.sessions.map(session => ({
-          sessionId: session.sessionId,
-          title: session.title,
-          preview: session.preview,
-          updatedAt: session.updatedAt,
-        }))
-        const restoredActiveSessionId = restoredMessages[persisted.activeSessionId]
-          ? persisted.activeSessionId
-          : restoredSessions[0].sessionId
-        sessionMessagesRef.current = restoredMessages
-        setChatSessions(restoredSessions)
-        setActiveSessionId(restoredActiveSessionId)
-        setMessages(restoredMessages[restoredActiveSessionId] ?? starterMessages)
-        setSessionLoading(false)
-        setSessionListLoading(false)
-        return
-      }
+    let cancelled = false
+    setSessionLoading(true)
+    setSessionListLoading(true)
 
-      restoreStarterSession()
+    if (!authenticatedUserId) {
+      restoreStarterSession(persistedFullScreenSessionId)
       setSessionLoading(false)
       setSessionListLoading(false)
       return
     }
-
-    let cancelled = false
-    setSessionLoading(true)
-    setSessionListLoading(true)
 
     chatService.listSessions(agent.id, undefined, authenticatedUserId)
       .then(async (sessions) => {
@@ -361,17 +286,20 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
           return
         }
 
-        setChatSessions(trimFullScreenSessions(sessions, true))
-        const nextSessionId = sessions.find((session) => session.sessionId === persistedFullScreenSessionId)?.sessionId ?? sessions[0].sessionId
+        const visibleSessions = trimFullScreenSessions(sessions, fullScreen)
+        setChatSessions(visibleSessions)
+        const nextSessionId = fullScreen
+          ? sessions.find((session) => session.sessionId === persistedFullScreenSessionId)?.sessionId ?? sessions[0].sessionId
+          : sessions[0].sessionId
         setActiveSessionId(nextSessionId)
         setInput('')
         setLoading(false)
         setLoadingSessionId(null)
         setSessionListLoading(false)
 
-        const requestId = ++fullScreenSessionLoadRef.current
+        const requestId = ++sessionLoadRef.current
         const loadedMessages = await chatService.loadSession(agent.id, nextSessionId, authenticatedUserId)
-        if (cancelled || fullScreenSessionLoadRef.current !== requestId) return
+        if (cancelled || sessionLoadRef.current !== requestId) return
 
         const nextMessages = loadedMessages.length > 0 ? loadedMessages as Message[] : starterMessages
         sessionMessagesRef.current[nextSessionId] = nextMessages
@@ -388,16 +316,16 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
     return () => {
       cancelled = true
     }
-  }, [WELCOME_MESSAGE, agent.id, authenticatedUserId, fullScreen, fullScreenStorageKey, popupStorageKey, sessionIdScope])
+  }, [WELCOME_MESSAGE, agent.id, authenticatedUserId, fullScreen, fullScreenStorageKey, sessionIdScope])
 
   useEffect(() => {
     if (!activeSessionId) return
     const sessionEntry = sessionMessagesRef.current[activeSessionId]
-    if (!sessionEntry && fullScreen) return
+    if (!sessionEntry && authenticatedUserId) return
     const nextMessages = sessionEntry ?? [WELCOME_MESSAGE]
     setMessages(prev => (prev === nextMessages ? prev : nextMessages))
     setSessionLoading(false)
-  }, [activeSessionId, WELCOME_MESSAGE, fullScreen])
+  }, [activeSessionId, WELCOME_MESSAGE, authenticatedUserId])
 
   const [loading, setLoading] = useState(false)
   const [loadingSessionId, setLoadingSessionId] = useState<string | null>(null)
@@ -603,30 +531,16 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
   }, [messages, activeSessionId, fullScreen])
 
   useEffect(() => {
-    if (fullScreen || !activeSessionId || chatSessions.length === 0) return
-
-    const persistedSessions = chatSessions.map(session => ({
-      ...session,
-      messages: sessionMessagesRef.current[session.sessionId] ?? (session.sessionId === activeSessionId ? messages : [WELCOME_MESSAGE]),
-    }))
-
-    writePersistedPopupChats(popupStorageKey, {
-      activeSessionId,
-      sessions: persistedSessions,
-    })
-  }, [activeSessionId, chatSessions, fullScreen, messages, popupStorageKey, WELCOME_MESSAGE])
-
-  useEffect(() => {
     if (!fullScreen || !activeSessionId) return
     writePersistedFullScreenSessionId(fullScreenStorageKey, activeSessionId)
   }, [activeSessionId, fullScreen, fullScreenStorageKey])
 
   useEffect(() => {
-    if (!fullScreen || !activeSessionId) return
+    if (!activeSessionId || !authenticatedUserId) return
     if (!messages.some((message) => message.role === 'user')) return
 
     chatService.saveSession(agent.id, messages, activeSessionId, undefined, authenticatedUserId)
-  }, [activeSessionId, agent.id, authenticatedUserId, fullScreen, messages])
+  }, [activeSessionId, agent.id, authenticatedUserId, messages])
 
   const HEALTH_CHECK_QUERY = '__health_check__'
 
@@ -729,7 +643,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
     sessionMessagesRef.current[activeSessionId] = resetMessages
     setMessages(resetMessages)
     setInput('')
-    if (fullScreen) {
+    if (authenticatedUserId) {
       chatService.clearSession(agent.id, activeSessionId, authenticatedUserId)
     }
     setChatSessions(prev => {
@@ -765,38 +679,38 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
       return
     }
 
-    if (!fullScreen) {
+    if (!authenticatedUserId) {
       setMessages([WELCOME_MESSAGE])
       setSessionLoading(false)
       return
     }
 
     setSessionLoading(true)
-    const requestId = ++fullScreenSessionLoadRef.current
+    const requestId = ++sessionLoadRef.current
     chatService.loadSession(agent.id, sessionId, authenticatedUserId)
       .then((loadedMessages) => {
-        if (fullScreenSessionLoadRef.current !== requestId) return
+        if (sessionLoadRef.current !== requestId) return
         const restoredMessages = loadedMessages.length > 0 ? loadedMessages as Message[] : [WELCOME_MESSAGE]
         sessionMessagesRef.current[sessionId] = restoredMessages
         setMessages(restoredMessages)
       })
       .catch(() => {
-        if (fullScreenSessionLoadRef.current !== requestId) return
+        if (sessionLoadRef.current !== requestId) return
         const fallbackMessages = [WELCOME_MESSAGE]
         sessionMessagesRef.current[sessionId] = fallbackMessages
         setMessages(fallbackMessages)
       })
       .finally(() => {
-        if (fullScreenSessionLoadRef.current === requestId) {
+        if (sessionLoadRef.current === requestId) {
           setSessionLoading(false)
         }
       })
-  }, [WELCOME_MESSAGE, agent.id, authenticatedUserId, fullScreen])
+  }, [WELCOME_MESSAGE, agent.id, authenticatedUserId])
 
   const deleteChatSession = useCallback((sessionId: string) => {
     const remaining = chatSessions.filter((session) => session.sessionId !== sessionId)
 
-    if (fullScreen) {
+    if (authenticatedUserId) {
       chatService.clearSession(agent.id, sessionId, authenticatedUserId)
     }
 
