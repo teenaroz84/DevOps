@@ -892,6 +892,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onChatCl
   const activeAgentId = SOURCE_AGENT_MAP[source] ?? 'knowledge'
   const activeAgent = AGENTS[activeAgentId] ?? AGENTS.knowledge
   const showHeaderAgentButton = source === 'overview' || Boolean(onOpenAgent)
+  const headerAgentLabel = source === 'overview' ? 'Ask DataOps Knowledge Assist' : `Ask ${active.label} Agent`
 
   const handleHeaderAgentClick = () => {
     if (source === 'overview') {
@@ -923,19 +924,70 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onChatCl
             onClick={handleHeaderAgentClick}
             variant="contained"
             size="small"
-            startIcon={<Box component="img" src={activeAgent.icon} alt={`${active.label} agent icon`} sx={{ width: 18, height: 18, borderRadius: '50%', objectFit: 'contain', display: 'block' }} />}
+            startIcon={
+              <Box
+                sx={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: '50%',
+                  display: 'grid',
+                  placeItems: 'center',
+                  background: `radial-gradient(circle at 30% 30%, ${TRUIST.white} 0%, ${activeAgent.color} 140%)`,
+                  boxShadow: `0 0 0 1px rgba(255,255,255,0.18), 0 8px 18px ${activeAgent.color}55`,
+                }}
+              >
+                <Box component="img" src={activeAgent.icon} alt={`${active.label} agent icon`} sx={{ width: 18, height: 18, borderRadius: '50%', objectFit: 'contain', display: 'block' }} />
+              </Box>
+            }
+            endIcon={<ArrowForwardIcon sx={{ fontSize: 16 }} />}
             sx={{
-              backgroundColor: AGENTS.esp.color,
+              position: 'relative',
+              overflow: 'hidden',
+              borderRadius: '999px',
+              border: '1px solid rgba(255,255,255,0.14)',
+              background: `linear-gradient(135deg, ${TRUIST.purple} 0%, #43305d 52%, ${activeAgent.color} 150%)`,
               textTransform: 'none',
               fontSize: '11px',
               fontWeight: 700,
-              height: 28,
-              px: 1.5,
+              letterSpacing: '0.03em',
+              height: 40,
+              px: 1.6,
               color: TRUIST.white,
-              '&:hover': { backgroundColor: AGENTS.esp.color, filter: 'brightness(0.92)' },
+              boxShadow: `0 10px 24px rgba(12, 18, 28, 0.28), 0 0 0 1px rgba(255,255,255,0.05), 0 0 24px ${activeAgent.color}35`,
+              backdropFilter: 'blur(10px)',
+              '& .MuiButton-startIcon': {
+                mr: 1,
+              },
+              '& .MuiButton-endIcon': {
+                ml: 0.75,
+              },
+              '&::before': {
+                content: '""',
+                position: 'absolute',
+                inset: 1,
+                borderRadius: '999px',
+                background: 'linear-gradient(135deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.02) 45%, transparent 70%)',
+                pointerEvents: 'none',
+              },
+              '&::after': {
+                content: '""',
+                position: 'absolute',
+                top: -24,
+                right: -8,
+                width: 68,
+                height: 68,
+                borderRadius: '50%',
+                background: `radial-gradient(circle, ${activeAgent.color}55 0%, transparent 72%)`,
+                pointerEvents: 'none',
+              },
+              '&:hover': {
+                transform: 'translateY(-1px)',
+                boxShadow: `0 14px 28px rgba(12, 18, 28, 0.34), 0 0 0 1px rgba(255,255,255,0.05), 0 0 30px ${activeAgent.color}55`,
+                background: `linear-gradient(135deg, #372356 0%, ${TRUIST.purple} 48%, ${activeAgent.color} 150%)`,
+              },
             }}
           >
-            {source === 'overview' ? 'Ask DataOps Knowledge Assist' : `Ask ${active.label} Agent`}
+            {headerAgentLabel}
           </Button>
         )}
       </Box>
