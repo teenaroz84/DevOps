@@ -29,7 +29,7 @@ import { MOCK_ESP_JOB_COUNTS } from '../../services/espMockData'
 import { MOCK_SF_PLATFORM_SUMMARY } from '../../services/snowflakeMockData'
 import { useMockData } from '../../context/MockDataContext'
 import { SESSION_ID } from '../../services/session'
-import { AGENTS } from '../../config/agentConfig'
+import { AGENTS, SOURCE_AGENT_MAP } from '../../config/agentConfig'
 import { TRUIST } from '../../theme/truistPalette'
 
 // ─── Source definitions ────────────────────────────────────
@@ -887,16 +887,20 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onChatCl
   const [internalSource, setInternalSource] = useState<SourceKey>('overview')
   const source = controlledSource ?? internalSource
   const setSource = onSourceChange ?? setInternalSource
-  const [lastUpdatedMap, setLastUpdatedMap] = useState<Partial<Record<SourceKey, Date>>>({ overview: new Date() })
   const visibleSources = SOURCES
   const active = visibleSources.find(s => s.key === source) ?? visibleSources[0]!
+  const activeAgentId = SOURCE_AGENT_MAP[source] ?? 'knowledge'
+  const activeAgent = AGENTS[activeAgentId] ?? AGENTS.knowledge
+  const showHeaderAgentButton = source === 'overview' || Boolean(onOpenAgent)
 
-  useEffect(() => {
-    setLastUpdatedMap(prev => ({ ...prev, [source]: new Date() }))
-  }, [source])
- 
-  // The agent relevant to the current tab (falls back to 'knowledge')
-  // contextAgentId kept for potential future per-tab agent buttons on individual dashboard components
+  const handleHeaderAgentClick = () => {
+    if (source === 'overview') {
+      onChatClick()
+      return
+    }
+
+    onOpenAgent?.(activeAgentId)
+  }
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
@@ -914,21 +918,26 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onChatCl
             Updated {(lastUpdatedMap[source] ?? new Date()).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}
           </Typography> */}
         </Box>
-        <Button
-          onClick={onChatClick}
-          variant="contained"
-          size="small"
-          startIcon={<Box component="img" src={AGENTS.knowledge.icon} alt="Knowledge agent icon" sx={{ width: 18, height: 18, borderRadius: '50%', objectFit: 'contain', display: 'block' }} />}
-          sx={{
-            backgroundColor: AGENTS.knowledge.color,
-            textTransform: 'none',
-            fontSize: '12px',
-            fontWeight: 700,
-            '&:hover': { backgroundColor: AGENTS.knowledge.color, filter: 'brightness(0.9)' },
-          }}
-        >
-          Ask DataOps Knowledge Assist
-        </Button>
+        {showHeaderAgentButton && (
+          <Button
+            onClick={handleHeaderAgentClick}
+            variant="contained"
+            size="small"
+            startIcon={<Box component="img" src={activeAgent.icon} alt={`${active.label} agent icon`} sx={{ width: 18, height: 18, borderRadius: '50%', objectFit: 'contain', display: 'block' }} />}
+            sx={{
+              backgroundColor: AGENTS.esp.color,
+              textTransform: 'none',
+              fontSize: '11px',
+              fontWeight: 700,
+              height: 28,
+              px: 1.5,
+              color: TRUIST.white,
+              '&:hover': { backgroundColor: AGENTS.esp.color, filter: 'brightness(0.92)' },
+            }}
+          >
+            {source === 'overview' ? 'Ask DataOps Knowledge Assist' : `Ask ${active.label} Agent`}
+          </Button>
+        )}
       </Box>
 
       {/* ── Source selector tabs ── */}

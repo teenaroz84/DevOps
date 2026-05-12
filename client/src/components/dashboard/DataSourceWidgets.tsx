@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { Box, Typography, Chip, Paper, TextField, InputAdornment, Button, Autocomplete, CircularProgress, TablePagination, Slider, Tooltip } from '@mui/material'
+import { Box, Typography, Chip, Paper, TextField, InputAdornment, Autocomplete, CircularProgress, TablePagination, Slider, Tooltip } from '@mui/material'
 import BugReportIcon from '@mui/icons-material/BugReport'
 import SearchIcon from '@mui/icons-material/Search'
 import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber'
@@ -15,7 +15,6 @@ import { cloudwatchService, servicenowService, snowflakeService, postgresService
 import { DonutChart, ComposedBarLineChart } from '../widgets'
 import { useMockData } from '../../context/MockDataContext'
 import { APP_COLORS, CHART_PALETTE, TRUIST } from '../../theme/truistPalette'
-import { AGENTS } from '../../config/agentConfig'
 import {
   MOCK_SERVICENOW_TICKETS,
   MOCK_SERVICENOW_INCIDENTS,
@@ -674,7 +673,7 @@ export const MissedIncidentsWidget: React.FC<{ platform?: string | null; days?: 
 
 // ─── Incident List Widget (P3/P4 detailed records) ────────
 
-export const IncidentListWidget: React.FC<{ platform?: string | null; days?: number }> = ({ platform, days = 7 }) => {
+export const IncidentListWidget: React.FC<{ platform?: string | null; days?: number; tableMaxHeight?: number }> = ({ platform, days = 7, tableMaxHeight = 360 }) => {
   const [data, setData] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -867,7 +866,7 @@ export const IncidentListWidget: React.FC<{ platform?: string | null; days?: num
             <Typography sx={{ fontSize: '10px', color: '#aaa', ml: 'auto' }}>{filtered.length} records</Typography>
           </Box>
           <Box sx={{ flex: 1, overflowY: 'auto', px: 1.5, pb: 1 }}>
-            <DataTable columns={incidentColumns} rows={paginated} rowKey="sninc_inc_num" compact accentColor="#1565c0" />
+            <DataTable columns={incidentColumns} rows={paginated} rowKey="sninc_inc_num" compact accentColor="#1565c0" maxHeight={tableMaxHeight} />
           </Box>
           {filtered.length > rowsPerPage && (
             <TablePagination
@@ -1324,27 +1323,6 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
           <Typography sx={{ fontSize: '10px', color: '#aaa', ml: 'auto', flexShrink: 0, whiteSpace: 'nowrap' }}>
             PostgreSQL
           </Typography>
-          {onOpenAgent && (
-            <Button
-              size="small"
-              variant="contained"
-              startIcon={<Box component="img" src={AGENTS.servicenow.icon} alt="ServiceNow agent icon" sx={{ width: 14, height: 14, borderRadius: '50%', objectFit: 'contain', display: 'block' }} />}
-              onClick={() => onOpenAgent('servicenow')}
-              sx={{
-                backgroundColor: '#5c6bc0',
-                textTransform: 'none',
-                fontSize: '10px',
-                fontWeight: 700,
-                height: 28,
-                px: 1.2,
-                flexShrink: 0,
-                whiteSpace: 'nowrap',
-                '&:hover': { backgroundColor: '#3949ab', filter: 'brightness(0.9)' },
-              }}
-            >
-              Ask Agent
-            </Button>
-          )}
         </Box>
       </Paper>
 

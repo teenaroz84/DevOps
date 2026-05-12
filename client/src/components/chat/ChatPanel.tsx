@@ -231,7 +231,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
   const [dragging, setDragging] = useState(false)
   const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null)
   const fullScreenStorageKey = `${FULLSCREEN_CHAT_STORAGE_PREFIX}${authenticatedUserId ?? 'anonymous'}:${agent.id}:active-session-id`
-  const sessionIdScope: 'chat' | 'popup' = fullScreen ? 'chat' : 'popup'
+  const sessionIdScope: 'chat' | 'popup' = authenticatedUserId ? 'chat' : (fullScreen ? 'chat' : 'popup')
 
   const welcomeMessageText = agentConfig ? agentConfig.welcomeMessage : DEFAULT_WELCOME.content
   const WELCOME_MESSAGE: Message = React.useMemo(() => ({

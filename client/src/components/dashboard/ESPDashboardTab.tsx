@@ -16,7 +16,6 @@ import type { ColumnDef } from '../widgets'
 import { espService } from '../../services'
 import { useMockData } from '../../context/MockDataContext'
 import { MOCK_ESP_PLATFORM_SUMMARY, getMockAppData, getMockPlatformData, getMockPlatformApplications } from '../../services/espMockData'
-import { AGENTS } from '../../config/agentConfig'
 import { APP_COLORS, TRUIST } from '../../theme/truistPalette'
 import { ESPSlaMissedJobsTab } from './ESPSlaMissedJobsTab'
 
@@ -704,26 +703,6 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                   )
                 })}
               </Box>
-            )}
-            {onOpenAgent && (
-              <Button
-                size="small"
-                variant="contained"
-                startIcon={<Box component="img" src={AGENTS.esp.icon} alt="ESP agent icon" sx={{ width: 14, height: 14, borderRadius: '50%', objectFit: 'contain', display: 'block' }} />}
-                onClick={() => onOpenAgent('esp')}
-                sx={{
-                  backgroundColor: APP_COLORS.primary,
-                  textTransform: 'none',
-                  fontSize: '11px',
-                  fontWeight: 700,
-                  height: 26,
-                  px: 1.5,
-                  color: TRUIST.white,
-                  '&:hover': { backgroundColor: TRUIST.dusk },
-                }}
-              >
-                Ask ESP Agent
-              </Button>
             )}
           </Box>
         </Box>

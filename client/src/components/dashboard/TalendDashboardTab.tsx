@@ -10,7 +10,6 @@ import WorkIcon from '@mui/icons-material/Work'
 import { IncidentListWidget } from './DataSourceWidgets'
 import { espService, servicenowService, talendService } from '../../services'
 import { useMockData } from '../../context/MockDataContext'
-import { AGENTS } from '../../config/agentConfig'
 import { APP_COLORS, TRUIST } from '../../theme/truistPalette'
 import { getMockPlatformData } from '../../services/espMockData'
 import {
@@ -26,7 +25,7 @@ import {
 
 const TALEND_DAY_PRESETS = [30, 60, 90]
 const TALEND_SERVICENOW_PLATFORM = 'Talend'
-const TALEND_ESP_PLATFORM = 'Talend'
+const TALEND_ESP_PLATFORM = 'TALEND'
 const TALEND_ESP_JOB_LIMIT = 500
 
 const STATUS_COLOR: Record<string, { color: string; bg: string }> = {
@@ -456,7 +455,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
             sx={{ height: 20, fontSize: '10px', fontWeight: 700, color: cfg.color, backgroundColor: cfg.bg }} />
         )
       },
-    },
+    }/* ,
     {
       key: 'execution_status', header: 'Exec Status', width: 150,
       render: row => {
@@ -468,7 +467,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
             sx={{ height: 20, fontSize: '10px', fontWeight: 600, color, backgroundColor: bg, '& .MuiChip-label': { px: 1 } }} />
         )
       },
-    },
+    } */,
     {
       key: 'task_name', header: 'Task / Artifact', flex: 1.1,
       render: row => (
@@ -656,27 +655,6 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
               )
             })}
           </Box>
-
-          {onOpenAgent && (
-            <Button
-              size="small"
-              variant="contained"
-              startIcon={<Box component="img" src={AGENTS.talend.icon} alt="Talend agent icon" sx={{ width: 14, height: 14, borderRadius: '50%', objectFit: 'contain', display: 'block' }} />}
-              onClick={() => onOpenAgent('talend')}
-              sx={{
-                backgroundColor: APP_COLORS.primary,
-                textTransform: 'none',
-                fontSize: '11px',
-                fontWeight: 700,
-                height: 28,
-                px: 1.5,
-                color: TRUIST.white,
-                '&:hover': { backgroundColor: TRUIST.dusk },
-              }}
-            >
-              Ask Talend Agent
-            </Button>
-          )}
         </Box>
       </Paper>
 
@@ -742,6 +720,11 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
               </WidgetShell>
             </Paper>
           </Box>
+
+           {/* ── Row 5: Talend-specific ServiceNow incidents ── */}
+          <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #7b1fa2', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+            <IncidentListWidget platform={TALEND_SERVICENOW_PLATFORM} days={days} tableMaxHeight={220} />
+          </Paper>
 
           {/* ── Row 3: Recent task executions table ── */}
           <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #1565c0', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
@@ -838,10 +821,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
               </Box>
             </WidgetShell>
           </Paper>
-          {/* ── Row 5: Talend-specific ServiceNow incidents ── */}
-          <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #7b1fa2', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-            <IncidentListWidget platform={TALEND_SERVICENOW_PLATFORM} days={days} />
-          </Paper>
+         
 
           <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #1976d2', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
             <WidgetShell

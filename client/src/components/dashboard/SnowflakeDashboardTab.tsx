@@ -5,7 +5,7 @@
  *   2. Cost & Efficiency Overview
  */
 import React, { useState, useEffect } from 'react'
-import { Box, Typography, Paper, Chip, Button, CircularProgress, Slider, Tooltip } from '@mui/material'
+import { Box, Typography, Paper, Chip, CircularProgress, Slider, Tooltip } from '@mui/material'
 import AcUnitIcon from '@mui/icons-material/AcUnit'
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney'
 import QueryStatsIcon from '@mui/icons-material/QueryStats'
@@ -39,7 +39,6 @@ import {
 } from '../../services/snowflakeMockData'
 import { snowflakeService } from '../../services/snowflakeService'
 import { useMockData } from '../../context/MockDataContext'
-import { AGENTS } from '../../config/agentConfig'
 
 // ── Helpers ────────────────────────────────────────────────
 
@@ -888,26 +887,6 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
               : <Chip label="LIVE (NO DATA)" size="small" sx={{ fontSize: '9px', height: 16, backgroundColor: '#efedf4', color: TRUIST.charcoal, fontWeight: 700, border: `1px solid ${TRUIST.lightGray}` }} />
             }
           </Box>
-          {useMock && onOpenAgent && (
-            <Button
-              size="small"
-              variant="contained"
-              startIcon={<Box component="img" src={AGENTS.snowflake.icon} alt="Snowflake agent icon" sx={{ width: 14, height: 14, borderRadius: '50%', objectFit: 'contain', display: 'block' }} />}
-              onClick={() => onOpenAgent('snowflake')}
-              sx={{
-                backgroundColor: TRUIST.purple,
-                textTransform: 'none',
-                fontSize: '11px',
-                fontWeight: 700,
-                height: 26,
-                px: 1.5,
-                color: TRUIST.white,
-                '&:hover': { backgroundColor: TRUIST.dusk },
-              }}
-            >
-              Ask Snowflake Agent
-            </Button>
-          )}
         </Box>
 
         {/* Sub-tabs and controls */}
@@ -959,30 +938,6 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
                 />
                 <Typography sx={{ fontSize: '10px', color: '#bbb', whiteSpace: 'nowrap', flexShrink: 0 }}>30d</Typography>
               </Box>
-
-              {onOpenAgent && (
-                <Button
-                  size="small"
-                  variant="contained"
-                  startIcon={<Box component="img" src={AGENTS.snowflake.icon} alt="Snowflake agent icon" sx={{ width: 14, height: 14, borderRadius: '50%', objectFit: 'contain', display: 'block' }} />}
-                  onClick={() => onOpenAgent('snowflake')}
-                  sx={{
-                    backgroundColor: TRUIST.purple,
-                    textTransform: 'none',
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    height: 26,
-                    px: 1.5,
-                    color: TRUIST.white,
-                    flexShrink: 0,
-                    whiteSpace: 'nowrap',
-                    alignSelf: 'center',
-                    '&:hover': { backgroundColor: TRUIST.dusk },
-                  }}
-                >
-                  Ask Snowflake Agent
-                </Button>
-              )}
             </Box>
           )}
         </Box>

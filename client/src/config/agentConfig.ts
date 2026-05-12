@@ -143,8 +143,8 @@ export const AGENTS: Record<string, AgentConfig> = {
     subtitle: 'Cloud Data Platform · Cost & Query Intelligence',
     color: AGENT_BRAND.snowflake,
     icon: '/agent-icons/SnowflakeAgent.png',
-    endpoint: '/api/snow/chat',
-    streamEndpoint: '/api/snow/chat/stream',
+    endpoint: '/api/sf/chat',
+    streamEndpoint: '/api/sf/chat/stream',
     placeholder: 'Ask about Snowflake costs, queries, usage…',
     welcomeMessage: `Hi - Welcome! I am your Snowflake Analytics Agent.`,
     quickActions: [
@@ -180,5 +180,5 @@ export const FULLSCREEN_AGENT_MENUS: Array<{
   { menuId: 'talend-chat',     agentId: 'talend',     label: 'TDT Talend Agent' },
   { menuId: 'dmf-chat',        agentId: 'dmf',        label: 'TDT DMF Agent' },
   { menuId: 'esp-chat',        agentId: 'esp',        label: 'TDT ESP Agent' },
-  { menuId: 'snowflake-chat',  agentId: 'snowflake',  label: 'TDT Snowflake Agent', mockOnly: true },
+  { menuId: 'snowflake-chat',  agentId: 'snowflake',  label: 'TDT Snowflake Agent'},
 ]
