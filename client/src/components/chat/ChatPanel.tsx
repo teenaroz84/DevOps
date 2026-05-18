@@ -35,6 +35,7 @@ import KeyboardDoubleArrowLeftIcon from '@mui/icons-material/KeyboardDoubleArrow
 import KeyboardDoubleArrowRightIcon from '@mui/icons-material/KeyboardDoubleArrowRight'
 import { chatService } from '../../services'
 import { getAuthenticatedUserId } from '../../services/auth'
+import { SESSION_ID } from '../../services/session'
 import { AGENTS } from '../../config/agentConfig'
 import type { AgentConfig } from '../../config/agentConfig'
 // import { sessionStore } from '../../services/sessionStore'
@@ -202,6 +203,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
   const headerActionBorder = useDarkHeaderText ? `1px solid ${TRUIST.charcoal}55` : '1px solid rgba(255,255,255,0.4)'
   const headerActionHover = useDarkHeaderText ? 'rgba(52,52,59,0.08)' : 'rgba(255,255,255,0.15)'
   const authenticatedUserId = getAuthenticatedUserId() ?? undefined
+  const browserSessionId = SESSION_ID
   const userBubbleColor = APP_COLORS.primary
   const userBubbleTextColor = TRUIST.white
   const renderAgentIcon = (size: number) => {
@@ -283,7 +285,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
       return
     }
 
-    chatService.listSessions(agent.id, undefined, authenticatedUserId)
+    chatService.listSessions(agent.id, browserSessionId, authenticatedUserId)
       .then(async (sessions) => {
         if (cancelled) return
 
@@ -323,7 +325,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
     return () => {
       cancelled = true
     }
-  }, [WELCOME_MESSAGE, agent.id, authenticatedUserId, applySessionMessages, fullScreen, fullScreenStorageKey, sessionIdScope])
+  }, [WELCOME_MESSAGE, agent.id, authenticatedUserId, applySessionMessages, browserSessionId, fullScreen, fullScreenStorageKey, sessionIdScope])
 
   useEffect(() => {
     if (!activeSessionId) return
@@ -548,8 +550,8 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
     if (displayedSessionIdRef.current !== activeSessionId) return
     if (!messages.some((message) => message.role === 'user')) return
 
-    chatService.saveSession(agent.id, messages, activeSessionId, undefined, authenticatedUserId)
-  }, [activeSessionId, agent.id, authenticatedUserId, messages])
+    chatService.saveSession(agent.id, messages, activeSessionId, browserSessionId, authenticatedUserId)
+  }, [activeSessionId, agent.id, authenticatedUserId, browserSessionId, messages])
 
   const HEALTH_CHECK_QUERY = '__health_check__'
 
@@ -599,7 +601,13 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
           timestamp: Date.now(),
         }])
       } else {
-        const data = await chatService.sendMessage(textToSend, agent.endpoint, requestSessionId, authenticatedUserId)
+        const data = await chatService.sendMessage(
+          textToSend,
+          agent.endpoint,
+          requestSessionId,
+          authenticatedUserId,
+          browserSessionId,
+        )
         // sessionStore.setChat({ lastAgentId: agent.id })
         const agentResponse: Message = {
           role: 'agent',

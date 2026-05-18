@@ -112,9 +112,17 @@ export const chatService = {
    * Send a message to the given agent endpoint.
    * Defaults to the knowledge assistant when no endpoint is supplied.
    */
-  sendMessage: async (message: string, endpoint = '/api/v1/chat', sessionId = SESSION_ID, userId?: string) => {
+  sendMessage: async (
+    message: string,
+    endpoint = '/api/v1/chat',
+    sessionId = SESSION_ID,
+    userId?: string,
+    browserSessionId = SESSION_ID,
+  ) => {
     const raw = await chatRequest<ChatApiResponse>(endpoint, {
       session_id: sessionId,
+      browser_session_id: browserSessionId,
+      browserSessionId,
       ...(userId ? { user_id: userId } : {}),
       message,
       conversation_history: [],
@@ -186,8 +194,20 @@ export const chatService = {
     streamEndpoint = '/api/v1/chat/stream',
     sessionId = SESSION_ID,
     userId?: string,
+    browserSessionId = SESSION_ID,
   ): Promise<void> => {
-    return streamRequest(streamEndpoint, { session_id: sessionId, ...(userId ? { user_id: userId } : {}), message }, onChunk, signal)
+    return streamRequest(
+      streamEndpoint,
+      {
+        session_id: sessionId,
+        browser_session_id: browserSessionId,
+        browserSessionId,
+        ...(userId ? { user_id: userId } : {}),
+        message,
+      },
+      onChunk,
+      signal,
+    )
   },
 
   /** Check health of the chat agent service. */
