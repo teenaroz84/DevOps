@@ -106,11 +106,7 @@ interface ChatSessionSummary {
   updatedAt: number
 }
 const FULLSCREEN_CHAT_STORAGE_PREFIX = 'dataops:fullscreen-chat:'
-const MAX_FULLSCREEN_SESSION_SUMMARIES = 3
-
-function trimFullScreenSessions(sessions: ChatSessionSummary[], fullScreen: boolean): ChatSessionSummary[] {
-  return fullScreen ? sessions.slice(0, MAX_FULLSCREEN_SESSION_SUMMARIES) : sessions
-}
+const MAX_FULLSCREEN_SESSION_SUMMARIES = 8
 
 function createSessionId(scope: 'chat' | 'popup' = 'chat'): string {
   const prefix = scope === 'popup' ? 'popup-session' : 'session'
@@ -296,8 +292,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
           return
         }
 
-        const visibleSessions = trimFullScreenSessions(sessions, fullScreen)
-        setChatSessions(visibleSessions)
+        setChatSessions(sessions)
         const nextSessionId = fullScreen
           ? sessions.find((session) => session.sessionId === persistedFullScreenSessionId)?.sessionId ?? sessions[0].sessionId
           : sessions[0].sessionId
@@ -344,6 +339,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
   const [inputHistory, setInputHistory] = useState<string[]>([])
   const [historyIdx, setHistoryIdx] = useState(-1)
   const [isSessionSidebarCollapsed, setIsSessionSidebarCollapsed] = useState(false)
+  const [showAllSessions, setShowAllSessions] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const sessionsListRef = useRef<HTMLDivElement>(null)
   const [panelSize, setPanelSize] = useState(() => {
@@ -535,10 +531,10 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
       const summary = buildSessionSummary(activeSessionId, messages)
       setChatSessions(prev => {
         const others = prev.filter(item => item.sessionId !== activeSessionId)
-        return trimFullScreenSessions([summary, ...others], fullScreen)
+        return [summary, ...others]
       })
     }
-  }, [messages, activeSessionId, fullScreen])
+  }, [messages, activeSessionId])
 
   useEffect(() => {
     if (!fullScreen || !activeSessionId) return
@@ -558,6 +554,9 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
   const quickActions = agent.quickActions
   const isSessionLoading = loading && loadingSessionId === activeSessionId
   const hasConversationStarted = messages.some((msg) => msg.role === 'user') || messages.length > 1
+  const visibleChatSessions = fullScreen && !showAllSessions
+    ? chatSessions.slice(0, MAX_FULLSCREEN_SESSION_SUMMARIES)
+    : chatSessions
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -663,7 +662,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
       chatService.clearSession(agent.id, activeSessionId, authenticatedUserId)
     }
     setChatSessions(prev => {
-      return trimFullScreenSessions([buildSessionSummary(activeSessionId, resetMessages), ...prev.filter(item => item.sessionId !== activeSessionId)], fullScreen)
+      return [buildSessionSummary(activeSessionId, resetMessages), ...prev.filter(item => item.sessionId !== activeSessionId)]
     })
   }
 
@@ -673,14 +672,14 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
     const nextSummary = buildSessionSummary(nextSessionId, nextMessages)
     sessionMessagesRef.current[nextSessionId] = nextMessages
     setChatSessions(prev => {
-      return trimFullScreenSessions([nextSummary, ...prev], fullScreen)
+      return [nextSummary, ...prev]
     })
     setActiveSessionId(nextSessionId)
     applySessionMessages(nextSessionId, nextMessages)
     setInput('')
     setLoading(false)
     setLoadingSessionId(null)
-  }, [WELCOME_MESSAGE, applySessionMessages, fullScreen, sessionIdScope])
+  }, [WELCOME_MESSAGE, applySessionMessages, sessionIdScope])
 
   const switchToSession = useCallback((sessionId: string) => {
     const nextMessages = sessionMessagesRef.current[sessionId]
@@ -884,7 +883,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
                   <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#607d8b' }}>No chats yet</Typography>
                   <Typography sx={{ fontSize: '11px', color: '#90a4ae', lineHeight: 1.4 }}>Start a new conversation to create your first saved session for this agent.</Typography>
                 </Box>
-              ) : chatSessions.map(session => {
+              ) : visibleChatSessions.map(session => {
                 const active = session.sessionId === activeSessionId
                 return (
                   <Paper
@@ -932,7 +931,13 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
                 fullWidth
                 size="small"
                 variant="outlined"
-                onClick={scrollSessionsToEnd}
+                onClick={() => {
+                  if (fullScreen && chatSessions.length > MAX_FULLSCREEN_SESSION_SUMMARIES) {
+                    setShowAllSessions(prev => !prev)
+                    return
+                  }
+                  scrollSessionsToEnd()
+                }}
                 sx={{
                   textTransform: 'none',
                   fontWeight: 600,
@@ -942,7 +947,9 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
                   '&:hover': { borderColor: '#64b5f6', backgroundColor: '#edf6ff' },
                 }}
               >
-                See All Chats
+                {fullScreen && chatSessions.length > MAX_FULLSCREEN_SESSION_SUMMARIES
+                  ? (showAllSessions ? 'Show Recent Chats' : `See All Chats (${chatSessions.length})`)
+                  : 'See All Chats'}
               </Button>
             </Box>
           </Box>

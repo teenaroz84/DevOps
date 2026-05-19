@@ -10,6 +10,8 @@ const withDays = (basePath: string, days = 7, platform?: string) => {
 export const servicenowService = {
   getTickets:           () => apiClient.get('/api/servicenow/tickets'),
   getPlatforms:         (days = 7) => apiClient.get(withDays('/api/servicenow/platforms', days)),
+  getIncidentSummary:   (platform?: string) =>
+    apiClient.get(`/api/servicenow/incidents-summary${platform ? `?platform=${encodeURIComponent(platform)}` : ''}`),
   getIncidents:         (platform?: string) =>
     apiClient.get(`/api/servicenow/incidents${platform ? `?platform=${encodeURIComponent(platform)}` : ''}`),
   getMissedIncidents:   (platform?: string, days = 7) =>

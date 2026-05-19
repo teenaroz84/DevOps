@@ -27,45 +27,96 @@ router.get('/incidents', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
     const platform = req.query.platform as string | undefined;
-    const platformClause = platform ? `AND sn.sninc_applkp_pltf_nm IS NOT NULL AND sn.sninc_applkp_pltf_nm = $1` : 'AND sn.sninc_applkp_pltf_nm is NOT NULL ';
+    const platformClause = platform
+      ? `AND latest.sninc_applkp_pltf_nm = $1`
+      : '';
     const params = platform ? [platform] : [];
     const result = await pool.query(`
-      select sg.short_priority AS priority_field,
+      WITH latest_incidents AS (
+        SELECT DISTINCT ON (sn.sninc_inc_num)
+               sn.sninc_inc_num,
+               sn.sninc_applkp_pltf_nm,
+               sn.sninc_state,
+               CASE sn.sninc_priority
+                 WHEN '1 - Critical' THEN 'P1'
+                 WHEN '2 - High' THEN 'P2'
+                 WHEN '3 - Moderate' THEN 'P3'
+                 WHEN '4 - Low' THEN 'P4'
+                 WHEN '5 - Very Low' THEN 'P5'
+               END AS priority_field
+        FROM edoops.service_now_inc sn
+        ORDER BY sn.sninc_inc_num, sn.sninc_last_updt_dttm::timestamp DESC NULLS LAST
+      )
+      SELECT latest.priority_field,
              COUNT(*)::int     AS incident_count
-      from (
-        select snc.sninc_inc_num,
-               snc.sninc_priority,
-               snc.sninc_applkp_pltf_nm
-        from (
-          SELECT sninc_inc_num,
-                 sninc_priority,
-                 sninc_applkp_pltf_nm,
-                 sninc_state,
-                 sninc_last_updt_dttm,
-                 ROW_NUMBER() over(
-                   partition by sninc_inc_num
-                   order by sninc_last_updt_dttm desc
-                 ) as latest_rec
-          FROM   edoops.service_now_inc
-        ) sn
-        WHERE sn.latest_rec = 1 ${platformClause}
-          AND sn.sninc_applkp_pltf_nm IS NOT NULL
-          AND COALESCE(LOWER(TRIM(sn.sninc_state)), '') IN ('new','in progress','on hold')
-      ) snc
-      JOIN edoops.sla_glossary sg ON snc.sninc_priority = sg.snow_priority
-      GROUP BY sg.short_priority
-      ORDER BY CASE sg.short_priority
+      FROM latest_incidents latest
+      WHERE COALESCE(LOWER(TRIM(latest.sninc_state)), '') IN ('new', 'in progress', 'on hold')
+        AND latest.sninc_applkp_pltf_nm IS NOT NULL
+        ${platformClause}
+        AND latest.priority_field IS NOT NULL
+      GROUP BY latest.priority_field
+      ORDER BY CASE priority_field
         WHEN 'P1' THEN 1
         WHEN 'P2' THEN 2
         WHEN 'P3' THEN 3
         WHEN 'P4' THEN 4
         WHEN 'P5' THEN 5
         ELSE 99
-      END, sg.short_priority
+      END, priority_field
     `, params);
     res.json(result.rows);
   } catch (err: any) {
     console.error('ServiceNow incidents error:', err.message);
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
+// GET /api/servicenow/incidents-summary?platform=<value>
+// Latest incident row per incident number, grouped by priority with open vs closed totals
+router.get('/incidents-summary', async (req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const platform = req.query.platform as string | undefined;
+    const platformClause = platform
+      ? `AND latest.sninc_applkp_pltf_nm = $1`
+      : '';
+    const params = platform ? [platform] : [];
+    const result = await pool.query(`
+      WITH latest_incidents AS (
+        SELECT DISTINCT ON (sn.sninc_inc_num)
+               sn.sninc_inc_num,
+               sn.sninc_applkp_pltf_nm,
+               COALESCE(LOWER(TRIM(sn.sninc_state)), '') AS state_key,
+               CASE sn.sninc_priority
+                 WHEN '1 - Critical' THEN 'P1'
+                 WHEN '2 - High' THEN 'P2'
+                 WHEN '3 - Moderate' THEN 'P3'
+                 WHEN '4 - Low' THEN 'P4'
+                 WHEN '5 - Very Low' THEN 'P5'
+               END AS priority_field
+        FROM edoops.service_now_inc sn
+        ORDER BY sn.sninc_inc_num, sn.sninc_last_updt_dttm::timestamp DESC NULLS LAST
+      )
+      SELECT latest.priority_field,
+             COUNT(*) FILTER (WHERE latest.state_key IN ('new', 'in progress', 'on hold'))::int AS open_count,
+             COUNT(*) FILTER (WHERE latest.state_key IN ('closed', 'resolved', 'canceled', 'cancelled'))::int AS closed_count
+      FROM latest_incidents latest
+      WHERE latest.sninc_applkp_pltf_nm IS NOT NULL
+        ${platformClause}
+        AND latest.priority_field IS NOT NULL
+      GROUP BY latest.priority_field
+      ORDER BY CASE latest.priority_field
+        WHEN 'P1' THEN 1
+        WHEN 'P2' THEN 2
+        WHEN 'P3' THEN 3
+        WHEN 'P4' THEN 4
+        WHEN 'P5' THEN 5
+        ELSE 99
+      END, latest.priority_field
+    `, params);
+    res.json(result.rows);
+  } catch (err: any) {
+    console.error('ServiceNow incidents-summary error:', err.message);
     res.status(500).json({ error: 'Query failed', details: err.message });
   }
 });

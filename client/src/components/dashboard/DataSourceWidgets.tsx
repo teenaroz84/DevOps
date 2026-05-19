@@ -18,6 +18,7 @@ import { APP_COLORS, CHART_PALETTE, TRUIST } from '../../theme/truistPalette'
 import {
   MOCK_SERVICENOW_TICKETS,
   MOCK_SERVICENOW_INCIDENTS,
+  MOCK_SERVICENOW_INCIDENT_SUMMARY,
   MOCK_SERVICENOW_MISSED_INCIDENTS,
   MOCK_SERVICENOW_INCIDENT_LIST,
   MOCK_SERVICENOW_EMERGENCY_CHANGES,
@@ -583,6 +584,95 @@ export const IncidentsWidget: React.FC<{ platform?: string | null }> = ({ platfo
       </WidgetShell>
       {/* DrillDownModal disabled — incident data under review */}
     </>
+  )
+}
+
+export const IncidentKpiWidget: React.FC<{ platform?: string | null }> = ({ platform }) => {
+  const [summary, setSummary] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const { useMock } = useMockData()
+
+  useEffect(() => {
+    setLoading(true)
+    setSummary([])
+    setError(null)
+    if (useMock) {
+      setSummary(MOCK_SERVICENOW_INCIDENT_SUMMARY)
+      setLoading(false)
+      return
+    }
+    servicenowService.getIncidentSummary(platform ?? undefined)
+      .then(d => { setSummary(Array.isArray(d) ? d : []); setLoading(false) })
+      .catch(err => { setError(err.message || 'Failed to fetch incident summary'); setLoading(false) })
+  }, [useMock, platform])
+
+  const orderedPriorities = ['P1', 'P2', 'P3', 'P4', 'P5']
+  const summaryByPriority = new Map(summary.map((row) => [row.priority_field, row]))
+
+  const openItems = orderedPriorities.map((priority) => {
+    const row = summaryByPriority.get(priority)
+    return {
+      label: priority,
+      value: row?.open_count || 0,
+      color: INCIDENT_COLORS[priority] || '#757575',
+      bg: PRIORITY_CONFIG[priority]?.bg || '#f5f5f5',
+    }
+  })
+
+  const closedItems = orderedPriorities.map((priority) => {
+    const row = summaryByPriority.get(priority)
+    return {
+      label: priority,
+      value: row?.closed_count || 0,
+      color: INCIDENT_COLORS[priority] || '#757575',
+      bg: PRIORITY_CONFIG[priority]?.bg || '#f5f5f5',
+    }
+  })
+
+  const openTotal = openItems.reduce((sum, item) => sum + Number(item.value || 0), 0)
+  const closedTotal = closedItems.reduce((sum, item) => sum + Number(item.value || 0), 0)
+
+  return (
+    <WidgetShell
+      title="Incident KPIs"
+      titleIcon={<WarningAmberIcon sx={{ color: '#c62828', fontSize: 18 }} />}
+      source="edoops.service_now_inc . latest incident state . all time"
+      actions={<WidgetInfo text="Shows one record per incident using the latest updated state, then splits counts by priority into currently open incidents on the left and currently closed/resolved/cancelled incidents on the right. The days slider does not affect this widget." />}
+      loading={loading}
+      error={error ?? undefined}
+    >
+      {!error && (
+        <Box sx={{ px: 1.5, py: 1.25, display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
+          <Box sx={{ border: '1px solid #fde0dc', borderRadius: 2, backgroundColor: '#fff8f7', p: 1.25 }}>
+            <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', mb: 1 }}>
+              <Typography sx={{ fontSize: '13px', fontWeight: 700, color: '#b71c1c', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                Open Incidents
+              </Typography>
+              <Typography sx={{ fontSize: '22px', fontWeight: 800, color: '#c62828' }}>{openTotal}</Typography>
+            </Box>
+            <StatCardGrid
+              items={openItems}
+              columns={5}
+              compact
+            />
+          </Box>
+          <Box sx={{ border: '1px solid #dcedc8', borderRadius: 2, backgroundColor: '#f7fbf1', p: 1.25 }}>
+            <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', mb: 1 }}>
+              <Typography sx={{ fontSize: '13px', fontWeight: 700, color: '#2e7d32', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                Closed Incidents
+              </Typography>
+              <Typography sx={{ fontSize: '22px', fontWeight: 800, color: '#2e7d32' }}>{closedTotal}</Typography>
+            </Box>
+            <StatCardGrid
+              items={closedItems}
+              columns={5}
+              compact
+            />
+          </Box>
+        </Box>
+      )}
+    </WidgetShell>
   )
 }
 
@@ -1201,7 +1291,7 @@ export const IncidentTrendWidget: React.FC<{ platform?: string | null; days?: nu
 
 import SupportAgentIcon from '@mui/icons-material/SupportAgent'
 
-export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => void }> = ({ onOpenAgent }) => {
+export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => void }> = () => {
   const { useMock } = useMockData()
   const [platforms,        setPlatforms]        = useState<{ platform: string; hasCritical: boolean }[]>([])
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null)
@@ -1326,15 +1416,10 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
         </Box>
       </Paper>
 
-      {/* ── Row 1: Open incidents by priority + Top incidents by SLA ── */}
-      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, alignItems: 'stretch' }}>
-        <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #c62828', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
-          <IncidentsWidget platform={selectedPlatform} />
-        </Paper>
-        <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: `3px solid ${TRUIST.darkGray}`, boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
-          <MissedIncidentsWidget platform={selectedPlatform} days={days} />
-        </Paper>
-      </Box>
+      {/* ── Row 1: Incident KPI summary ── */}
+      <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #c62828', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
+        <IncidentKpiWidget platform={selectedPlatform} />
+      </Paper>
 
       {/* ── Row 2: Incident volume trend (full width) ── */}
       <Paper
