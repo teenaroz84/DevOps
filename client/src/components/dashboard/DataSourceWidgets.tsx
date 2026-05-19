@@ -12,13 +12,14 @@ import BuildCircleIcon from '@mui/icons-material/BuildCircle'
 import { DrillDownModal, DrillDownData } from './DrillDownModal'
 import { WidgetShell, StatCardGrid, MetricBarList, DataTable, ColumnDef } from '../widgets'
 import { cloudwatchService, servicenowService, snowflakeService, postgresService, espService } from '../../services'
+import type { ServiceNowDaysFilter } from '../../services/servicenowService'
 import { DonutChart, ComposedBarLineChart } from '../widgets'
 import { useMockData } from '../../context/MockDataContext'
 import { APP_COLORS, CHART_PALETTE, TRUIST } from '../../theme/truistPalette'
 import {
   MOCK_SERVICENOW_TICKETS,
   MOCK_SERVICENOW_INCIDENTS,
-  MOCK_SERVICENOW_INCIDENT_SUMMARY,
+  MOCK_SERVICENOW_CLOSED_INCIDENTS,
   MOCK_SERVICENOW_MISSED_INCIDENTS,
   MOCK_SERVICENOW_INCIDENT_LIST,
   MOCK_SERVICENOW_EMERGENCY_CHANGES,
@@ -588,43 +589,54 @@ export const IncidentsWidget: React.FC<{ platform?: string | null }> = ({ platfo
 }
 
 export const IncidentKpiWidget: React.FC<{ platform?: string | null }> = ({ platform }) => {
-  const [summary, setSummary] = useState<any[]>([])
+  const [openIncidents, setOpenIncidents] = useState<any[]>([])
+  const [closedIncidents, setClosedIncidents] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const { useMock } = useMockData()
 
   useEffect(() => {
     setLoading(true)
-    setSummary([])
+    setOpenIncidents([])
+    setClosedIncidents([])
     setError(null)
     if (useMock) {
-      setSummary(MOCK_SERVICENOW_INCIDENT_SUMMARY)
+      setOpenIncidents(MOCK_SERVICENOW_INCIDENTS)
+      setClosedIncidents(MOCK_SERVICENOW_CLOSED_INCIDENTS)
       setLoading(false)
       return
     }
-    servicenowService.getIncidentSummary(platform ?? undefined)
-      .then(d => { setSummary(Array.isArray(d) ? d : []); setLoading(false) })
-      .catch(err => { setError(err.message || 'Failed to fetch incident summary'); setLoading(false) })
+    Promise.all([
+      servicenowService.getIncidents(platform ?? undefined),
+      servicenowService.getClosedIncidents(platform ?? undefined),
+    ])
+      .then(([openData, closedData]) => {
+        setOpenIncidents(Array.isArray(openData) ? openData : [])
+        setClosedIncidents(Array.isArray(closedData) ? closedData : [])
+        setLoading(false)
+      })
+      .catch(err => { setError(err.message || 'Failed to fetch incident KPIs'); setLoading(false) })
   }, [useMock, platform])
 
   const orderedPriorities = ['P1', 'P2', 'P3', 'P4', 'P5']
-  const summaryByPriority = new Map(summary.map((row) => [row.priority_field, row]))
+  const openByPriority = new Map(openIncidents.map((row) => [row.priority_field, row]))
+  const closedByPriority = new Map(closedIncidents.map((row) => [row.priority_field, row]))
 
   const openItems = orderedPriorities.map((priority) => {
-    const row = summaryByPriority.get(priority)
+    const row = openByPriority.get(priority)
     return {
       label: priority,
-      value: row?.open_count || 0,
+      value: row?.incident_count || 0,
       color: INCIDENT_COLORS[priority] || '#757575',
       bg: PRIORITY_CONFIG[priority]?.bg || '#f5f5f5',
     }
   })
 
   const closedItems = orderedPriorities.map((priority) => {
-    const row = summaryByPriority.get(priority)
+    const row = closedByPriority.get(priority)
     return {
       label: priority,
-      value: row?.closed_count || 0,
+      value: row?.incident_count || 0,
       color: INCIDENT_COLORS[priority] || '#757575',
       bg: PRIORITY_CONFIG[priority]?.bg || '#f5f5f5',
     }
@@ -678,7 +690,7 @@ export const IncidentKpiWidget: React.FC<{ platform?: string | null }> = ({ plat
 
 // ─── Top Incident SLA Widget (bar chart) ──────────────────
 
-export const MissedIncidentsWidget: React.FC<{ platform?: string | null; days?: number }> = ({ platform, days = 7 }) => {
+export const MissedIncidentsWidget: React.FC<{ platform?: string | null; days?: ServiceNowDaysFilter }> = ({ platform, days = 7 }) => {
   const [data, setData] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -704,8 +716,8 @@ export const MissedIncidentsWidget: React.FC<{ platform?: string | null; days?: 
       <WidgetShell
         title="Top Incidents by SLA"
         titleIcon={<WarningAmberIcon sx={{ color: TRUIST.darkGray, fontSize: 18 }} />}
-        source={`edoops.service_now_inc · opened in last ${days}d`}
-        actions={<WidgetInfo text={`Shows all incidents opened in the last ${days} days, grouped by priority with SLA breach status. The SLA breach is calculated from the incident's opened date vs. the resolution SLA target for that priority. Use the days slider to change the opened date window.`} />}
+        source={`edoops.service_now_inc · ${days === 'all' ? 'opened across all time' : `opened in last ${days}d`}`}
+        actions={<WidgetInfo text={`Shows all incidents ${days === 'all' ? 'opened across all available time' : `opened in the last ${days} days`}, grouped by priority with SLA breach status. The SLA breach is calculated from the incident's opened date vs. the resolution SLA target for that priority. Use the preset controls to change the opened date window.`} />}
         loading={loading}
         error={error ?? undefined}
       >
@@ -763,7 +775,7 @@ export const MissedIncidentsWidget: React.FC<{ platform?: string | null; days?: 
 
 // ─── Incident List Widget (P3/P4 detailed records) ────────
 
-export const IncidentListWidget: React.FC<{ platform?: string | null; days?: number; tableMaxHeight?: number }> = ({ platform, days = 7, tableMaxHeight = 360 }) => {
+export const IncidentListWidget: React.FC<{ platform?: string | null; days?: ServiceNowDaysFilter; tableMaxHeight?: number }> = ({ platform, days = 7, tableMaxHeight = 360 }) => {
   const [data, setData] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -897,8 +909,8 @@ export const IncidentListWidget: React.FC<{ platform?: string | null; days?: num
     <WidgetShell
       title="All Incidents"
       titleIcon={<WarningAmberIcon sx={{ color: '#1565c0', fontSize: 18 }} />}
-      source={`PostgreSQL · edoops.service_now_inc · active during last ${days}d · most recent status per incident`}
-      actions={<WidgetInfo text={`All incidents active in the last ${days} days — open (any age) + closed or resolved within the window. One row per incident, most recent status. Adjust with the slider.`} />}
+      source={`PostgreSQL · edoops.service_now_inc · ${days === 'all' ? 'all incidents with most recent status' : `active during last ${days}d`} · most recent status per incident`}
+      actions={<WidgetInfo text={`${days === 'all' ? 'All incidents across all available time' : `All incidents active in the last ${days} days`} — open (any age) + closed or resolved within the selected window. One row per incident, most recent status. Adjust with the preset controls.`} />}
       loading={loading}
       error={error ?? undefined}
     >
@@ -978,9 +990,13 @@ export const IncidentListWidget: React.FC<{ platform?: string | null; days?: num
 // ─── By Capability Widget ──────────────────────────────────
 
 const CAPABILITY_COLORS = CHART_PALETTE
-const SERVICENOW_DAY_PRESETS = [30, 60, 90]
+const SERVICENOW_DAY_PRESETS: ServiceNowDaysFilter[] = [30, 60, 90, 'all']
 
-export const CapabilityWidget: React.FC<{ platform?: string | null; days?: number }> = ({ platform, days = 7 }) => {
+function getServiceNowDaysLabel(days: ServiceNowDaysFilter): string {
+  return days === 'all' ? 'All time' : `Last ${days}d`
+}
+
+export const CapabilityWidget: React.FC<{ platform?: string | null; days?: ServiceNowDaysFilter }> = ({ platform, days = 7 }) => {
   const [data, setData] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -1000,8 +1016,8 @@ export const CapabilityWidget: React.FC<{ platform?: string | null; days?: numbe
     <WidgetShell
       title="Incidents by Capability"
       titleIcon={<BugReportIcon sx={{ color: '#1565c0', fontSize: 18 }} />}
-      source={`PostgreSQL · edoops.service_now_inc · opened in last ${days}d`}
-      actions={<WidgetInfo text={`Shows the top 10 capabilities by incident count for incidents opened in the last ${days} days. All statuses are included. Use the days slider to change the opened date window.`} />}
+      source={`PostgreSQL · edoops.service_now_inc · ${days === 'all' ? 'opened across all time' : `opened in last ${days}d`}`}
+      actions={<WidgetInfo text={`Shows the top 10 capabilities by incident count for incidents ${days === 'all' ? 'opened across all available time' : `opened in the last ${days} days`}. All statuses are included. Use the preset controls to change the opened date window.`} />}
       loading={loading}
       error={error ?? undefined}
     >
@@ -1030,7 +1046,7 @@ export const CapabilityWidget: React.FC<{ platform?: string | null; days?: numbe
 
 // ─── By Assignment Group Widget ────────────────────────────
 
-export const AssignmentGroupWidget: React.FC<{ platform?: string | null; days?: number }> = ({ platform, days = 7 }) => {
+export const AssignmentGroupWidget: React.FC<{ platform?: string | null; days?: ServiceNowDaysFilter }> = ({ platform, days = 7 }) => {
   const [data, setData] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -1055,8 +1071,8 @@ export const AssignmentGroupWidget: React.FC<{ platform?: string | null; days?: 
     <WidgetShell
       title="Incidents by Assignment Group"
       titleIcon={<ConfirmationNumberIcon sx={{ color: TRUIST.dusk, fontSize: 18 }} />}
-      source={`PostgreSQL · edoops.service_now_inc · opened in last ${days}d`}
-      actions={<WidgetInfo text={`Shows the top 10 assignment groups by incident count for incidents opened in the last ${days} days. All statuses are included. Use the days slider to change the opened date window.`} />}
+      source={`PostgreSQL · edoops.service_now_inc · ${days === 'all' ? 'opened across all time' : `opened in last ${days}d`}`}
+      actions={<WidgetInfo text={`Shows the top 10 assignment groups by incident count for incidents ${days === 'all' ? 'opened across all available time' : `opened in the last ${days} days`}. All statuses are included. Use the preset controls to change the opened date window.`} />}
       loading={loading}
       error={error ?? undefined}
     >
@@ -1211,7 +1227,7 @@ export const PipelinesWidget: React.FC = () => {
 
 // ─── Incident Trend Widget ────────────────────────────────
 
-export const IncidentTrendWidget: React.FC<{ platform?: string | null; days?: number }> = ({ platform, days = 7 }) => {
+export const IncidentTrendWidget: React.FC<{ platform?: string | null; days?: ServiceNowDaysFilter }> = ({ platform, days = 7 }) => {
   const [data, setData] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -1255,8 +1271,8 @@ export const IncidentTrendWidget: React.FC<{ platform?: string | null; days?: nu
     <WidgetShell
       title="Incident Volume by Day"
       titleIcon={<TrendingUpIcon sx={{ color: '#c62828', fontSize: 18 }} />}
-      source={`PostgreSQL · edoops.service_now_inc · last ${days}d · most recent per incident per day`}
-      actions={<WidgetInfo text={`Daily breakdown of incidents over the last ${days} days — bars show open vs closed count per day, lines show total volume and P1/P2 critical incidents when present. Filtered by last-updated date (not opened date) to capture day-by-day state transitions. Use the days slider to widen or narrow the trend window.`} />}
+      source={`PostgreSQL · edoops.service_now_inc · ${days === 'all' ? 'all time' : `last ${days}d`} · most recent per incident per day`}
+      actions={<WidgetInfo text={`Daily breakdown of incidents over ${days === 'all' ? 'all available time' : `the last ${days} days`} — bars show open vs closed count per day, lines show total volume and P1/P2 critical incidents when present. Filtered by last-updated date (not opened date) to capture day-by-day state transitions. Use the preset controls to widen or narrow the trend window.`} />}
       loading={loading}
       error={error ?? undefined}
     >
@@ -1296,7 +1312,7 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
   const [platforms,        setPlatforms]        = useState<{ platform: string; hasCritical: boolean }[]>([])
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null)
   const [platformsLoading, setPlatformsLoading] = useState(false)
-  const [days, setDays] = useState(7)
+  const [days, setDays] = useState<ServiceNowDaysFilter>(7)
 
   useEffect(() => {
     setPlatformsLoading(true)
@@ -1367,12 +1383,12 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
             />
           <Box sx={{ width: 160, display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
             <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 48 }}>
-              <Typography sx={{ fontSize: '10px', color: '#666', lineHeight: 1.2 }}>Last {days}d</Typography>
-              <Typography sx={{ fontSize: '9px', color: '#90a4ae', lineHeight: 1.2, whiteSpace: 'nowrap' }}>by opened date</Typography>
+              <Typography sx={{ fontSize: '10px', color: '#666', lineHeight: 1.2 }}>{getServiceNowDaysLabel(days)}</Typography>
+              <Typography sx={{ fontSize: '9px', color: '#90a4ae', lineHeight: 1.2, whiteSpace: 'nowrap' }}>{days === 'all' ? 'all incidents' : 'by opened date'}</Typography>
             </Box>
             <Slider
               size="small"
-              value={Math.min(days, 15)}
+              value={typeof days === 'number' ? Math.min(days, 15) : 15}
               onChange={(_, v) => setDays(Array.isArray(v) ? v[0] : v)}
               valueLabelDisplay="auto"
               min={1}
@@ -1393,7 +1409,7 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
               return (
                 <Chip
                   key={presetDays}
-                  label={`${presetDays}d`}
+                  label={presetDays === 'all' ? 'All' : `${presetDays}d`}
                   size="small"
                   onClick={() => setDays(presetDays)}
                   sx={{

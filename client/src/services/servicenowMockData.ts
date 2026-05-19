@@ -42,6 +42,14 @@ export const MOCK_SERVICENOW_INCIDENTS = [
   { priority_field: 'P5', incident_count: 21 },
 ]
 
+export const MOCK_SERVICENOW_CLOSED_INCIDENTS = [
+  { priority_field: 'P1', incident_count: 1 },
+  { priority_field: 'P2', incident_count: 4 },
+  { priority_field: 'P3', incident_count: 6 },
+  { priority_field: 'P4', incident_count: 11 },
+  { priority_field: 'P5', incident_count: 18 },
+]
+
 export const MOCK_SERVICENOW_INCIDENT_SUMMARY = [
   { priority_field: 'P1', open_count: 3, closed_count: 1 },
   { priority_field: 'P2', open_count: 5, closed_count: 4 },

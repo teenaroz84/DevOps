@@ -10,8 +10,10 @@ const router = Router();
 const SN_DEFAULT_DAYS = 7;
 const SN_MAX_DAYS = 90;
 
-function parseDays(query: any): number {
-  const n = parseInt(String(query.days ?? SN_DEFAULT_DAYS), 10);
+function parseDays(query: any): number | null {
+  const raw = String(query.days ?? SN_DEFAULT_DAYS).trim().toLowerCase();
+  if (raw === 'all') return null;
+  const n = parseInt(raw, 10);
   if (isNaN(n)) return SN_DEFAULT_DAYS;
   return Math.min(Math.max(n, 1), SN_MAX_DAYS);
 }
@@ -67,6 +69,56 @@ router.get('/incidents', async (req: Request, res: Response) => {
     res.json(result.rows);
   } catch (err: any) {
     console.error('ServiceNow incidents error:', err.message);
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
+// GET /api/servicenow/closed-incidents?platform=<value>
+// Closed/resolved/cancelled incident count grouped by priority — no date filter, reflects current latest state
+router.get('/closed-incidents', async (req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const platform = req.query.platform as string | undefined;
+    const platformClause = platform
+      ? `AND latest.sninc_applkp_pltf_nm = $1`
+      : '';
+    const params = platform ? [platform] : [];
+    const result = await pool.query(`
+      WITH latest_incidents AS (
+        SELECT DISTINCT ON (sn.sninc_inc_num)
+               sn.sninc_inc_num,
+               sn.sninc_applkp_pltf_nm,
+               sn.sninc_state,
+               CASE sn.sninc_priority
+                 WHEN '1 - Critical' THEN 'P1'
+                 WHEN '2 - High' THEN 'P2'
+                 WHEN '3 - Moderate' THEN 'P3'
+                 WHEN '4 - Low' THEN 'P4'
+                 WHEN '5 - Very Low' THEN 'P5'
+               END AS priority_field
+        FROM edoops.service_now_inc sn
+        ORDER BY sn.sninc_inc_num, sn.sninc_last_updt_dttm::timestamp DESC NULLS LAST
+      )
+      SELECT latest.priority_field,
+             COUNT(*)::int AS incident_count
+      FROM latest_incidents latest
+      WHERE COALESCE(LOWER(TRIM(latest.sninc_state)), '') IN ('closed', 'resolved', 'canceled', 'cancelled')
+        AND latest.sninc_applkp_pltf_nm IS NOT NULL
+        ${platformClause}
+        AND latest.priority_field IS NOT NULL
+      GROUP BY latest.priority_field
+      ORDER BY CASE priority_field
+        WHEN 'P1' THEN 1
+        WHEN 'P2' THEN 2
+        WHEN 'P3' THEN 3
+        WHEN 'P4' THEN 4
+        WHEN 'P5' THEN 5
+        ELSE 99
+      END, priority_field
+    `, params);
+    res.json(result.rows);
+  } catch (err: any) {
+    console.error('ServiceNow closed-incidents error:', err.message);
     res.status(500).json({ error: 'Query failed', details: err.message });
   }
 });
@@ -127,6 +179,9 @@ router.get('/missed-incidents', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
     const days = parseDays(req.query);
+    const openedAtClause = days === null
+      ? ''
+      : `WHERE sn.sninc_opened_at::timestamp >= NOW() - INTERVAL '${days} days'`;
     const platform = req.query.platform as string | undefined;
     const platformClause = platform ? `AND sn.sninc_applkp_pltf_nm = $1 AND sn.sninc_applkp_pltf_nm is not null` : `AND sn.sninc_applkp_pltf_nm is not null`;
     const params = platform ? [platform] : [];
@@ -153,7 +208,7 @@ router.get('/missed-incidents', async (req: Request, res: Response) => {
         FROM edoops.service_now_inc sn
         JOIN edoops.sla_glossary sg
           ON sn.sninc_priority = sg.snow_priority
-        WHERE sn.sninc_opened_at::timestamp >= NOW() - INTERVAL '${days} days'
+        ${openedAtClause}
         ORDER BY sn.sninc_inc_num, sn.sninc_last_updt_dttm DESC
       ) sn
       JOIN edoops.sla_glossary sg
@@ -183,6 +238,11 @@ router.get('/incident-list', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
     const days = parseDays(req.query);
+    const recentClosedClause = days === null
+      ? ''
+      : `
+            OR sn.sninc_closed_at::timestamp >= NOW() - INTERVAL '${days} days'
+            OR (COALESCE(sn.sninc_resolved_at, sn.sninc_last_updt_dttm)::timestamp >= NOW() - INTERVAL '${days} days')`;
     const platform = req.query.platform as string | undefined;
     const platformClause = platform ? `AND latest.sninc_applkp_pltf_nm = $1` : '';
     const params = platform ? [platform] : [];
@@ -218,8 +278,7 @@ router.get('/incident-list', async (req: Request, res: Response) => {
           AND sn.sninc_applkp_pltf_nm IS NOT NULL
           AND (
             COALESCE(LOWER(TRIM(sn.sninc_state)), '') NOT IN ('closed', 'resolved', 'canceled')
-            OR sn.sninc_closed_at::timestamp >= NOW() - INTERVAL '${days} days'
-            OR (COALESCE(sn.sninc_resolved_at, sn.sninc_last_updt_dttm)::timestamp >= NOW() - INTERVAL '${days} days')
+            ${recentClosedClause}
           )
         ORDER BY sn.sninc_opened_at, sn.sninc_inc_num, sn.sninc_last_updt_dttm DESC
       ) latest
@@ -321,6 +380,9 @@ router.get('/by-capability', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
     const days = parseDays(req.query);
+    const openedAtClause = days === null
+      ? ''
+      : `and sn.sninc_opened_at::timestamp >= NOW() - INTERVAL '${days} days'`;
     const platform = req.query.platform as string | undefined;
     const platformClause = platform ? `AND sn.sninc_applkp_pltf_nm IS NOT NULL AND sn.sninc_applkp_pltf_nm = $1` : `AND sn.sninc_applkp_pltf_nm IS NOT NULL`;
     const params = platform ? [platform] : [];
@@ -344,7 +406,7 @@ router.get('/by-capability', async (req: Request, res: Response) => {
         ) sn
         WHERE sn.latest_rec = 1
           ${platformClause}
-          and sn.sninc_opened_at::timestamp >= NOW() - INTERVAL '${days} days'
+          ${openedAtClause}
           AND sn.sninc_capability IS NOT NULL
       )
       GROUP BY sninc_capability
@@ -364,6 +426,9 @@ router.get('/by-assignment-group', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
     const days = parseDays(req.query);
+    const openedAtClause = days === null
+      ? ''
+      : `AND sn.sninc_opened_at::timestamp >= NOW() - INTERVAL '${days} days'`;
     const platform = req.query.platform as string | undefined;
     const platformClause = platform ? `AND sn.sninc_applkp_pltf_nm IS NOT NULL AND sn.sninc_applkp_pltf_nm = $1` : `AND sn.sninc_applkp_pltf_nm IS NOT NULL`;
     const params = platform ? [platform] : [];
@@ -387,7 +452,7 @@ router.get('/by-assignment-group', async (req: Request, res: Response) => {
         ) sn
         WHERE sn.latest_rec = 1
           ${platformClause}
-          AND sn.sninc_opened_at::timestamp >= NOW() - INTERVAL '${days} days'
+          ${openedAtClause}
           AND sn.sninc_assignment_grp IS NOT NULL
       )
       GROUP BY sninc_assignment_grp
@@ -409,8 +474,13 @@ router.get('/incident-trend', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
     const days = parseDays(req.query);
+    const lastUpdatedClause = days === null
+      ? ''
+      : `WHERE  sn.sninc_last_updt_dttm::timestamp >= NOW() - INTERVAL '${days} days'`;
     const platform = req.query.platform as string | undefined;
-    const platformClause = platform ? `AND sn.sninc_applkp_pltf_nm = $1` : '';
+    const platformClause = platform
+      ? `${days === null ? 'WHERE' : 'AND'} sn.sninc_applkp_pltf_nm = $1`
+      : '';
     const params = platform ? [platform] : [];
     const result = await pool.query(`
       SELECT
@@ -428,7 +498,7 @@ router.get('/incident-trend', async (req: Request, res: Response) => {
         FROM   edoops.service_now_inc sn
         LEFT JOIN edoops.sla_glossary sg
           ON sn.sninc_priority = sg.snow_priority
-        WHERE  sn.sninc_last_updt_dttm::timestamp >= NOW() - INTERVAL '${days} days'
+        ${lastUpdatedClause}
           ${platformClause}
         ORDER BY sn.sninc_inc_num, DATE(sn.sninc_last_updt_dttm::timestamp), sn.sninc_last_updt_dttm DESC
       ) latest_per_day
