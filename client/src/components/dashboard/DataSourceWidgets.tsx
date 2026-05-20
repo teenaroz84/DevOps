@@ -1018,6 +1018,22 @@ function formatServiceNowDayLabel(value: string | number) {
   return value
 }
 
+function formatServiceNowShortDayLabel(value: string | number) {
+  const formatted = formatServiceNowDayLabel(value)
+  const shortMatch = formatted.match(/^([A-Z][a-z]{2})\s+(\d{1,2})(?:\s+\d{4})?$/)
+  if (shortMatch) {
+    const [, month, day] = shortMatch
+    return `${month} ${day}`
+  }
+
+  return formatted
+}
+
+function getServiceNowXAxisInterval(length: number) {
+  if (length <= 8) return 0
+  return Math.max(Math.ceil(length / 6) - 1, 0)
+}
+
 function formatServiceNowTimestamp(value?: string | null) {
   if (!value) return '—'
   const parsed = new Date(value)
@@ -1268,32 +1284,6 @@ export const IncidentTrendWidget: React.FC<{ platform?: string | null; days?: Se
   const [error, setError] = useState<string | null>(null)
   const { useMock } = useMockData()
 
-  const formatDayLabel = (value: string | number) => {
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-    if (typeof value !== 'string' || !value) return String(value ?? '')
-
-    const isoMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})/)
-    if (isoMatch) {
-      const [, year, month, day] = isoMatch
-      const monthLabel = monthNames[Number(month) - 1]
-      if (monthLabel) return `${monthLabel} ${Number(day)} ${year}`
-    }
-
-    const utcStringMatch = value.match(/(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+([A-Z][a-z]{2})\s+(\d{1,2})\s+(\d{4})/)
-    if (utcStringMatch) {
-      const [, monthLabel, day, year] = utcStringMatch
-      return `${monthLabel} ${Number(day)} ${year}`
-    }
-
-    const parsed = new Date(value)
-    if (!Number.isNaN(parsed.getTime())) {
-      const monthLabel = monthNames[parsed.getMonth()]
-      return `${monthLabel} ${parsed.getDate()} ${parsed.getFullYear()}`
-    }
-
-    return value
-  }
-
   useEffect(() => {
     setLoading(true); setData([]); setError(null)
     if (useMock) { setData(MOCK_SERVICENOW_INCIDENT_TREND); setLoading(false); return }
@@ -1327,10 +1317,10 @@ export const IncidentTrendWidget: React.FC<{ platform?: string | null; days?: Se
             height={220}
             showBarLabels
             rightYDomain={[0, 'auto']}
-            xAxisTickFormatter={formatDayLabel}
-            xAxisInterval={0}
-            xAxisAngle={-35}
-            xAxisHeight={70}
+            xAxisTickFormatter={formatServiceNowShortDayLabel}
+            xAxisInterval={getServiceNowXAxisInterval(data.length)}
+            xAxisAngle={0}
+            xAxisHeight={36}
           />
         </Box>
       )}
@@ -1374,10 +1364,10 @@ export const IncidentStateDailyWidget: React.FC<{ platform?: string | null; days
             lines={[]}
             height={220}
             showBarLabels={false}
-            xAxisTickFormatter={formatServiceNowDayLabel}
-            xAxisInterval={0}
-            xAxisAngle={-35}
-            xAxisHeight={70}
+            xAxisTickFormatter={formatServiceNowShortDayLabel}
+            xAxisInterval={getServiceNowXAxisInterval(data.length)}
+            xAxisAngle={0}
+            xAxisHeight={36}
           />
         </Box>
       )}
@@ -1634,17 +1624,7 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
         <IncidentKpiWidget platform={selectedPlatform} days={days} />
       </Paper>
 
-      {/* ── Row 2: Incident volume trend (full width) ── */}
-      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, alignItems: 'stretch' }}>
-        <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #1565c0', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column', minHeight: 320 }}>
-          <IncidentStateDailyWidget platform={selectedPlatform} days={days} />
-        </Paper>
-        <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #6a1b9a', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column', minHeight: 320 }}>
-          <PlatformWidget platform={selectedPlatform} days={days} />
-        </Paper>
-      </Box>
-
-      {/* ── Row 3: Incident volume trend + top updates ── */}
+      {/* ── Row 2: Incident volume trend + top updates ── */}
       <Box sx={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 2, alignItems: 'stretch', '@media (max-width: 1100px)': { gridTemplateColumns: '1fr' } }}>
       <Paper
         elevation={0}
@@ -1678,7 +1658,7 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
       </Paper>
       </Box>
 
-      {/* ── Row 4: Incident list (full width) ── */}
+      {/* ── Row 3: Incident list (full width) ── */}
       <Paper
         elevation={0}
         sx={{
@@ -1698,13 +1678,23 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
         <IncidentListWidget platform={selectedPlatform} days={days} />
       </Paper>
 
-      {/* ── Row 5: By Capability + By Assignment Group ── */}
+      {/* ── Row 4: By Capability + By Assignment Group ── */}
       <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, alignItems: 'stretch' }}>
         <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #1565c0', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
           <CapabilityWidget platform={selectedPlatform} days={days} />
         </Paper>
         <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: `3px solid ${TRUIST.dusk}`, boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
           <AssignmentGroupWidget platform={selectedPlatform} days={days} />
+        </Paper>
+      </Box>
+
+      {/* ── Row 5: Incident state daily + platform ── */}
+      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, alignItems: 'stretch' }}>
+        <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #1565c0', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column', minHeight: 320 }}>
+          <IncidentStateDailyWidget platform={selectedPlatform} days={days} />
+        </Paper>
+        <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #6a1b9a', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column', minHeight: 320 }}>
+          <PlatformWidget platform={selectedPlatform} days={days} />
         </Paper>
       </Box>
 
