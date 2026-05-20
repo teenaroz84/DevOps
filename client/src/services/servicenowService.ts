@@ -16,8 +16,8 @@ export const servicenowService = {
     apiClient.get(`/api/servicenow/incidents-summary${platform ? `?platform=${encodeURIComponent(platform)}` : ''}`),
   getIncidents:         (platform?: string) =>
     apiClient.get(`/api/servicenow/incidents${platform ? `?platform=${encodeURIComponent(platform)}` : ''}`),
-  getClosedIncidents:   (platform?: string) =>
-    apiClient.get(`/api/servicenow/closed-incidents${platform ? `?platform=${encodeURIComponent(platform)}` : ''}`),
+  getClosedIncidents:   (platform?: string, days: ServiceNowDaysFilter = 7) =>
+    apiClient.get(withDays('/api/servicenow/closed-incidents', days, platform)),
   getMissedIncidents:   (platform?: string, days: ServiceNowDaysFilter = 7) =>
     apiClient.get(withDays('/api/servicenow/missed-incidents', days, platform)),
   getIncidentList:      (platform?: string, days: ServiceNowDaysFilter = 7) =>

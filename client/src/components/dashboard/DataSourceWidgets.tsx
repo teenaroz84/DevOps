@@ -588,7 +588,7 @@ export const IncidentsWidget: React.FC<{ platform?: string | null }> = ({ platfo
   )
 }
 
-export const IncidentKpiWidget: React.FC<{ platform?: string | null }> = ({ platform }) => {
+export const IncidentKpiWidget: React.FC<{ platform?: string | null; days?: ServiceNowDaysFilter }> = ({ platform, days = 7 }) => {
   const [openIncidents, setOpenIncidents] = useState<any[]>([])
   const [closedIncidents, setClosedIncidents] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -608,7 +608,7 @@ export const IncidentKpiWidget: React.FC<{ platform?: string | null }> = ({ plat
     }
     Promise.all([
       servicenowService.getIncidents(platform ?? undefined),
-      servicenowService.getClosedIncidents(platform ?? undefined),
+      servicenowService.getClosedIncidents(platform ?? undefined, days),
     ])
       .then(([openData, closedData]) => {
         setOpenIncidents(Array.isArray(openData) ? openData : [])
@@ -616,7 +616,7 @@ export const IncidentKpiWidget: React.FC<{ platform?: string | null }> = ({ plat
         setLoading(false)
       })
       .catch(err => { setError(err.message || 'Failed to fetch incident KPIs'); setLoading(false) })
-  }, [useMock, platform])
+  }, [days, useMock, platform])
 
   const orderedPriorities = ['P1', 'P2', 'P3', 'P4', 'P5']
   const openByPriority = new Map(openIncidents.map((row) => [row.priority_field, row]))
@@ -649,8 +649,8 @@ export const IncidentKpiWidget: React.FC<{ platform?: string | null }> = ({ plat
     <WidgetShell
       title="Incident KPIs"
       titleIcon={<WarningAmberIcon sx={{ color: '#c62828', fontSize: 18 }} />}
-      source="edoops.service_now_inc . latest incident state . all time"
-      actions={<WidgetInfo text="Shows one record per incident using the latest updated state, then splits counts by priority into currently open incidents on the left and currently closed/resolved/cancelled incidents on the right. The days slider does not affect this widget." />}
+      source={`edoops.service_now_inc . open = latest current state . closed = ${days === 'all' ? 'all time' : `last ${days}d`}`}
+      actions={<WidgetInfo text={`Shows one record per incident using the latest updated state. Open incidents on the left always reflect the current open population. Closed incidents on the right are filtered to ${days === 'all' ? 'all available time' : `the last ${days} days`} based on closed/resolved/latest update time.`} />}
       loading={loading}
       error={error ?? undefined}
     >
@@ -1434,7 +1434,7 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
 
       {/* ── Row 1: Incident KPI summary ── */}
       <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #c62828', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
-        <IncidentKpiWidget platform={selectedPlatform} />
+        <IncidentKpiWidget platform={selectedPlatform} days={days} />
       </Paper>
 
       {/* ── Row 2: Incident volume trend (full width) ── */}

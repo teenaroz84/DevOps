@@ -78,6 +78,10 @@ router.get('/incidents', async (req: Request, res: Response) => {
 router.get('/closed-incidents', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
+    const days = parseDays(req.query);
+    const recentClosedClause = days === null
+      ? ''
+      : `AND COALESCE(latest.sninc_closed_at, latest.sninc_resolved_at, latest.sninc_last_updt_dttm)::timestamp >= NOW() - INTERVAL '${days} days'`;
     const platform = req.query.platform as string | undefined;
     const platformClause = platform
       ? `AND latest.sninc_applkp_pltf_nm = $1`
@@ -89,6 +93,9 @@ router.get('/closed-incidents', async (req: Request, res: Response) => {
                sn.sninc_inc_num,
                sn.sninc_applkp_pltf_nm,
                sn.sninc_state,
+           sn.sninc_closed_at,
+           sn.sninc_resolved_at,
+           sn.sninc_last_updt_dttm,
                CASE sn.sninc_priority
                  WHEN '1 - Critical' THEN 'P1'
                  WHEN '2 - High' THEN 'P2'
@@ -103,6 +110,7 @@ router.get('/closed-incidents', async (req: Request, res: Response) => {
              COUNT(*)::int AS incident_count
       FROM latest_incidents latest
       WHERE COALESCE(LOWER(TRIM(latest.sninc_state)), '') IN ('closed', 'resolved', 'canceled', 'cancelled')
+        ${recentClosedClause}
         AND latest.sninc_applkp_pltf_nm IS NOT NULL
         ${platformClause}
         AND latest.priority_field IS NOT NULL

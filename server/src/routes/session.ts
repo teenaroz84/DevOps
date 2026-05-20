@@ -516,7 +516,7 @@ router.get('/agent/:agentId', async (req: Request, res: Response) => {
       cursor = result.LastEvaluatedKey as Record<string, unknown>;
     }
 
-    const sessions = Array.from(sessionsById.values()).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 3);
+    const sessions = Array.from(sessionsById.values()).sort((a, b) => b.updatedAt - a.updatedAt);
     res.json({ sessions });
   } catch (err: any) {
     console.warn('[sessions] LIST failed, returning empty session list:', err.message);
