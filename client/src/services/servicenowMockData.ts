@@ -169,6 +169,50 @@ export const MOCK_SERVICENOW_BY_ASSIGNMENT_GROUP = [
   { assignment_group: 'Platform Ops',     incident_count: 4  },
 ]
 
+export const MOCK_SERVICENOW_BY_PLATFORM = [
+  { platform: 'Windows', incident_count: 4125 },
+  { platform: 'SAP', incident_count: 4234 },
+  { platform: 'Oracle EBS', incident_count: 3125 },
+  { platform: 'Salesforce', incident_count: 2342 },
+  { platform: 'Linux', incident_count: 1987 },
+  { platform: 'Microsoft 365', incident_count: 1854 },
+  { platform: 'Citrix', incident_count: 1244 },
+  { platform: 'AWS', incident_count: 987 },
+  { platform: 'Others', incident_count: 765 },
+]
+
+export const MOCK_SERVICENOW_INCIDENT_STATE_DAILY = (() => {
+  const today = new Date()
+  return Array.from({ length: 14 }, (_, i) => {
+    const d = new Date(today)
+    d.setDate(d.getDate() - (13 - i))
+    const day = d.toISOString().split('T')[0]
+    const newCount = Math.floor(Math.random() * 120) + 260
+    const openCount = Math.floor(Math.random() * 180) + 320
+    const closedCount = Math.floor(Math.random() * 160) + 240
+    return {
+      day,
+      new: newCount,
+      open: openCount,
+      closed: closedCount,
+      total: newCount + openCount + closedCount,
+    }
+  })
+})()
+
+export const MOCK_SERVICENOW_TOP_INCIDENT_UPDATES = [
+  { sninc_inc_num: 'INC0001234', updates_count: 56, current_state: 'Open', last_updated_at: '2026-05-19T22:45:00.000Z' },
+  { sninc_inc_num: 'INC0005678', updates_count: 48, current_state: 'Open', last_updated_at: '2026-05-19T21:32:00.000Z' },
+  { sninc_inc_num: 'INC0003445', updates_count: 44, current_state: 'Closed', last_updated_at: '2026-05-19T20:18:00.000Z' },
+  { sninc_inc_num: 'INC0002345', updates_count: 42, current_state: 'Open', last_updated_at: '2026-05-19T19:06:00.000Z' },
+  { sninc_inc_num: 'INC0006789', updates_count: 37, current_state: 'Closed', last_updated_at: '2026-05-19T18:51:00.000Z' },
+  { sninc_inc_num: 'INC0000901', updates_count: 34, current_state: 'Open', last_updated_at: '2026-05-19T17:22:00.000Z' },
+  { sninc_inc_num: 'INC0000012', updates_count: 30, current_state: 'Open', last_updated_at: '2026-05-19T16:44:00.000Z' },
+  { sninc_inc_num: 'INC0000123', updates_count: 30, current_state: 'Closed', last_updated_at: '2026-05-19T15:14:00.000Z' },
+  { sninc_inc_num: 'INC0001122', updates_count: 29, current_state: 'Open', last_updated_at: '2026-05-19T14:38:00.000Z' },
+  { sninc_inc_num: 'INC0002211', updates_count: 28, current_state: 'Open', last_updated_at: '2026-05-19T13:02:00.000Z' },
+]
+
 export const MOCK_SERVICENOW_PLATFORMS = [
   { platform: 'BI Analytics',      hasCritical: true  },
   { platform: 'BI Reporting',      hasCritical: true  },

@@ -526,6 +526,120 @@ router.get('/incident-trend', async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/servicenow/incident-state-daily?platform=<value>&days=<n>
+// Daily state breakdown using the latest row per incident per day
+router.get('/incident-state-daily', async (req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const days = parseDays(req.query);
+    const lastUpdatedClause = days === null
+      ? ''
+      : `WHERE sn.sninc_last_updt_dttm::timestamp >= NOW() - INTERVAL '${days} days'`;
+    const platform = req.query.platform as string | undefined;
+    const platformClause = platform
+      ? `${days === null ? 'WHERE' : 'AND'} sn.sninc_applkp_pltf_nm = $1`
+      : '';
+    const params = platform ? [platform] : [];
+    const result = await pool.query(`
+      SELECT
+        TO_CHAR(day, 'YYYY-MM-DD') AS day,
+        SUM(CASE WHEN state_bucket = 'new' THEN 1 ELSE 0 END)::int AS new_count,
+        SUM(CASE WHEN state_bucket = 'open' THEN 1 ELSE 0 END)::int AS open_count,
+        SUM(CASE WHEN state_bucket = 'closed' THEN 1 ELSE 0 END)::int AS closed_count,
+        COUNT(*)::int AS total_count
+      FROM (
+        SELECT DISTINCT ON (sn.sninc_inc_num, DATE(sn.sninc_last_updt_dttm::timestamp))
+               DATE(sn.sninc_last_updt_dttm::timestamp) AS day,
+               CASE
+                 WHEN COALESCE(LOWER(TRIM(sn.sninc_state)), '') IN ('new', 'open') THEN 'new'
+                 WHEN COALESCE(LOWER(TRIM(sn.sninc_state)), '') IN ('in progress', 'on hold', 'onhold') THEN 'open'
+                 ELSE 'closed'
+               END AS state_bucket
+        FROM edoops.service_now_inc sn
+        ${lastUpdatedClause}
+          ${platformClause}
+        ORDER BY sn.sninc_inc_num, DATE(sn.sninc_last_updt_dttm::timestamp), sn.sninc_last_updt_dttm DESC
+      ) latest_per_day
+      GROUP BY day
+      ORDER BY day
+    `, params);
+    res.json(result.rows.map((r: any) => ({
+      day: r.day ?? null,
+      new: r.new_count,
+      open: r.open_count,
+      closed: r.closed_count,
+      total: r.total_count,
+    })));
+  } catch (err: any) {
+    console.error('ServiceNow incident-state-daily error:', err.message);
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
+// GET /api/servicenow/by-platform?platform=<value>&days=<n>
+// Top 10 platforms by incident count using latest row per incident
+router.get('/by-platform', async (req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const days = parseDays(req.query);
+    const openedAtClause = days === null
+      ? ''
+      : `AND latest.sninc_opened_at::timestamp >= NOW() - INTERVAL '${days} days'`;
+    const platform = req.query.platform as string | undefined;
+    const platformClause = platform ? `AND latest.sninc_applkp_pltf_nm = $1` : '';
+    const params = platform ? [platform] : [];
+    const result = await pool.query(`
+      SELECT latest.sninc_applkp_pltf_nm AS platform,
+             COUNT(*)::int AS incident_count
+      FROM (
+        SELECT DISTINCT ON (sn.sninc_inc_num)
+               sn.sninc_inc_num,
+               sn.sninc_applkp_pltf_nm,
+               sn.sninc_opened_at
+        FROM edoops.service_now_inc sn
+        ORDER BY sn.sninc_inc_num, sn.sninc_last_updt_dttm::timestamp DESC NULLS LAST
+      ) latest
+      WHERE latest.sninc_applkp_pltf_nm IS NOT NULL
+        ${platformClause}
+        ${openedAtClause}
+      GROUP BY latest.sninc_applkp_pltf_nm
+      ORDER BY incident_count DESC, latest.sninc_applkp_pltf_nm
+      LIMIT 10
+    `, params);
+    res.json(result.rows);
+  } catch (err: any) {
+    console.error('ServiceNow by-platform error:', err.message);
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
+// GET /api/servicenow/top-incident-updates?platform=<value>
+// Top 10 incident numbers by update volume over the last 90 days
+router.get('/top-incident-updates', async (req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const platform = req.query.platform as string | undefined;
+    const platformClause = platform ? `AND sn.sninc_applkp_pltf_nm = $1` : '';
+    const params = platform ? [platform] : [];
+    const result = await pool.query(`
+      SELECT sn.sninc_inc_num,
+             COUNT(*)::int AS updates_count,
+             (ARRAY_AGG(sn.sninc_state ORDER BY sn.sninc_last_updt_dttm::timestamp DESC NULLS LAST))[1] AS current_state,
+             MAX(sn.sninc_last_updt_dttm)::text AS last_updated_at
+      FROM edoops.service_now_inc sn
+      WHERE sn.sninc_last_updt_dttm::timestamp >= NOW() - INTERVAL '90 days'
+        ${platformClause}
+      GROUP BY sn.sninc_inc_num
+      ORDER BY updates_count DESC, MAX(sn.sninc_last_updt_dttm::timestamp) DESC NULLS LAST
+      LIMIT 10
+    `, params);
+    res.json(result.rows);
+  } catch (err: any) {
+    console.error('ServiceNow top-incident-updates error:', err.message);
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
 router.get('/platforms', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();

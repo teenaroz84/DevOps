@@ -36,6 +36,12 @@ export const servicenowService = {
     apiClient.get(withDays('/api/servicenow/by-capability', days, platform)),
   getByAssignmentGroup: (platform?: string, days: ServiceNowDaysFilter = 7) =>
     apiClient.get(withDays('/api/servicenow/by-assignment-group', days, platform)),
+  getByPlatform:        (platform?: string, days: ServiceNowDaysFilter = 7) =>
+    apiClient.get(withDays('/api/servicenow/by-platform', days, platform)),
+  getIncidentStateDaily:(platform?: string, days: ServiceNowDaysFilter = 7) =>
+    apiClient.get(withDays('/api/servicenow/incident-state-daily', days, platform)),
+  getTopIncidentUpdates:(platform?: string) =>
+    apiClient.get(`/api/servicenow/top-incident-updates${platform ? `?platform=${encodeURIComponent(platform)}` : ''}`),
   getIncidentTrend: (platform?: string, days: ServiceNowDaysFilter = 7) =>
     apiClient.get(withDays('/api/servicenow/incident-trend', days, platform)),
 }

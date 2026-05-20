@@ -26,7 +26,10 @@ import {
   MOCK_SERVICENOW_PLATFORMS,
   MOCK_SERVICENOW_BY_CAPABILITY,
   MOCK_SERVICENOW_BY_ASSIGNMENT_GROUP,
+  MOCK_SERVICENOW_BY_PLATFORM,
+  MOCK_SERVICENOW_INCIDENT_STATE_DAILY,
   MOCK_SERVICENOW_INCIDENT_TREND,
+  MOCK_SERVICENOW_TOP_INCIDENT_UPDATES,
 } from '../../services/servicenowMockData'
 
 /** Small clickable info icon for widget headers — shows a tooltip explaining the widget's data scope */
@@ -996,6 +999,38 @@ function getServiceNowDaysLabel(days: ServiceNowDaysFilter): string {
   return days === 'all' ? 'All time' : `Last ${days}d`
 }
 
+function formatServiceNowDayLabel(value: string | number) {
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  if (typeof value !== 'string' || !value) return String(value ?? '')
+
+  const isoMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (isoMatch) {
+    const [, year, month, day] = isoMatch
+    const monthLabel = monthNames[Number(month) - 1]
+    if (monthLabel) return `${monthLabel} ${Number(day)} ${year}`
+  }
+
+  const parsed = new Date(value)
+  if (!Number.isNaN(parsed.getTime())) {
+    return `${monthNames[parsed.getMonth()]} ${parsed.getDate()} ${parsed.getFullYear()}`
+  }
+
+  return value
+}
+
+function formatServiceNowTimestamp(value?: string | null) {
+  if (!value) return '—'
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return value
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(parsed)
+}
+
 export const CapabilityWidget: React.FC<{ platform?: string | null; days?: ServiceNowDaysFilter }> = ({ platform, days = 7 }) => {
   const [data, setData] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -1303,6 +1338,168 @@ export const IncidentTrendWidget: React.FC<{ platform?: string | null; days?: Se
   )
 }
 
+export const IncidentStateDailyWidget: React.FC<{ platform?: string | null; days?: ServiceNowDaysFilter }> = ({ platform, days = 7 }) => {
+  const [data, setData] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const { useMock } = useMockData()
+
+  useEffect(() => {
+    setLoading(true); setData([]); setError(null)
+    if (useMock) { setData(MOCK_SERVICENOW_INCIDENT_STATE_DAILY); setLoading(false); return }
+    servicenowService.getIncidentStateDaily(platform ?? undefined, days)
+      .then(d => { setData(Array.isArray(d) ? d : []); setLoading(false) })
+      .catch(err => { setError(err.message || 'Failed to fetch'); setLoading(false) })
+  }, [useMock, platform, days])
+
+  return (
+    <WidgetShell
+      title="Incidents by State Over Time (Daily)"
+      titleIcon={<TrendingUpIcon sx={{ color: '#1565c0', fontSize: 18 }} />}
+      source={`PostgreSQL · edoops.service_now_inc · ${days === 'all' ? 'all time' : `last ${days}d`} · latest per incident per day`}
+      actions={<WidgetInfo text={`Daily incident state mix over ${days === 'all' ? 'all available time' : `the last ${days} days`} using the latest incident row for each incident on each day. Bars show New, Open/In Progress/On Hold, and Closed/Resolved/Canceled counts.`} />}
+      loading={loading}
+      error={error ?? undefined}
+    >
+      {!error && (
+        <Box sx={{ flex: 1, px: 1, py: 1, minHeight: 0 }}>
+          <ComposedBarLineChart
+            data={data}
+            xKey="day"
+            bars={[
+              { key: 'new', label: 'New', color: '#1565c0' },
+              { key: 'open', label: 'Open', color: '#fb8c00' },
+              { key: 'closed', label: 'Closed', color: '#43a047' },
+            ]}
+            lines={[]}
+            height={220}
+            showBarLabels={false}
+            xAxisTickFormatter={formatServiceNowDayLabel}
+            xAxisInterval={0}
+            xAxisAngle={-35}
+            xAxisHeight={70}
+          />
+        </Box>
+      )}
+    </WidgetShell>
+  )
+}
+
+export const PlatformWidget: React.FC<{ platform?: string | null; days?: ServiceNowDaysFilter }> = ({ platform, days = 7 }) => {
+  const [data, setData] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const { useMock } = useMockData()
+
+  useEffect(() => {
+    setLoading(true); setData([]); setError(null)
+    if (useMock) { setData(MOCK_SERVICENOW_BY_PLATFORM); setLoading(false); return }
+    servicenowService.getByPlatform(platform ?? undefined, days)
+      .then(d => { setData(Array.isArray(d) ? d : []); setLoading(false) })
+      .catch(err => { setError(err.message || 'Failed to fetch'); setLoading(false) })
+  }, [useMock, platform, days])
+
+  const max = Math.max(...data.map(r => r.incident_count || 0), 1)
+
+  return (
+    <WidgetShell
+      title="Incidents by Platform"
+      titleIcon={<BugReportIcon sx={{ color: '#6a1b9a', fontSize: 18 }} />}
+      source={`PostgreSQL · edoops.service_now_inc · ${days === 'all' ? 'opened across all time' : `opened in last ${days}d`} · latest per incident`}
+      actions={<WidgetInfo text={`Top 10 platforms by incident count for incidents ${days === 'all' ? 'opened across all available time' : `opened in the last ${days} days`}. Uses the latest row per incident and counts all statuses.`} />}
+      loading={loading}
+      error={error ?? undefined}
+    >
+      {!error && (
+        <Box sx={{ px: 2, py: 1, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+          {data.map((row, index) => {
+            const pct = Math.round(((row.incident_count || 0) / max) * 100)
+            const color = CAPABILITY_COLORS[index % CAPABILITY_COLORS.length]
+            return (
+              <Box key={row.platform}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.3 }}>
+                  <Typography sx={{ fontSize: '11px', fontWeight: 500, color: '#333' }}>{row.platform}</Typography>
+                  <Typography sx={{ fontSize: '11px', color: '#888', fontWeight: 600 }}>{row.incident_count}</Typography>
+                </Box>
+                <Box sx={{ height: 7, backgroundColor: '#f0f0f0', borderRadius: 4, overflow: 'hidden' }}>
+                  <Box sx={{ height: '100%', width: `${pct}%`, backgroundColor: color, borderRadius: 4, transition: 'width 0.4s ease' }} />
+                </Box>
+              </Box>
+            )
+          })}
+        </Box>
+      )}
+    </WidgetShell>
+  )
+}
+
+export const TopIncidentUpdatesWidget: React.FC<{ platform?: string | null }> = ({ platform }) => {
+  const [data, setData] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const { useMock } = useMockData()
+
+  useEffect(() => {
+    setLoading(true); setData([]); setError(null)
+    if (useMock) { setData(MOCK_SERVICENOW_TOP_INCIDENT_UPDATES); setLoading(false); return }
+    servicenowService.getTopIncidentUpdates(platform ?? undefined)
+      .then(d => { setData(Array.isArray(d) ? d : []); setLoading(false) })
+      .catch(err => { setError(err.message || 'Failed to fetch'); setLoading(false) })
+  }, [useMock, platform])
+
+  const columns: ColumnDef[] = [
+    {
+      key: 'sninc_inc_num', header: 'Incident #', width: 110,
+      render: row => <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#1565c0', fontFamily: 'monospace' }}>{row.sninc_inc_num}</Typography>,
+    },
+    {
+      key: 'updates_count', header: 'Updates', width: 80,
+      render: row => <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#333' }}>{row.updates_count}</Typography>,
+    },
+    {
+      key: 'current_state', header: 'Current State', width: 110,
+      render: row => {
+        const normalized = String(row.current_state || '').trim().toLowerCase()
+        const isClosed = ['closed', 'resolved', 'canceled', 'cancelled'].includes(normalized)
+        return (
+          <Chip
+            label={row.current_state || '—'}
+            size="small"
+            sx={{
+              height: 20,
+              fontSize: '10px',
+              fontWeight: 700,
+              color: isClosed ? '#2e7d32' : '#c62828',
+              backgroundColor: isClosed ? '#e8f5e9' : '#ffebee',
+            }}
+          />
+        )
+      },
+    },
+    {
+      key: 'last_updated_at', header: 'Last Updated', flex: 1,
+      render: row => <Typography sx={{ fontSize: '11px', color: '#555' }}>{formatServiceNowTimestamp(row.last_updated_at)}</Typography>,
+    },
+  ]
+
+  return (
+    <WidgetShell
+      title="Top 10 Incident Numbers by Updates (Last 90 Days)"
+      titleIcon={<ConfirmationNumberIcon sx={{ color: '#1565c0', fontSize: 18 }} />}
+      source="PostgreSQL · edoops.service_now_inc · last 90d by update volume"
+      actions={<WidgetInfo text="Top 10 incident numbers ranked by total update count over the last 90 days. Shows the most recently known state and last update timestamp for each incident." />}
+      loading={loading}
+      error={error ?? undefined}
+    >
+      {!error && (
+        <Box sx={{ flex: 1, overflowY: 'auto', px: 1.5, py: 1 }}>
+          <DataTable columns={columns} rows={data} rowKey="sninc_inc_num" compact accentColor="#1565c0" />
+        </Box>
+      )}
+    </WidgetShell>
+  )
+}
+
 // ─── ServiceNow Dashboard (full-page layout) ───────────────
 
 import SupportAgentIcon from '@mui/icons-material/SupportAgent'
@@ -1438,6 +1635,17 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
       </Paper>
 
       {/* ── Row 2: Incident volume trend (full width) ── */}
+      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, alignItems: 'stretch' }}>
+        <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #1565c0', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column', minHeight: 320 }}>
+          <IncidentStateDailyWidget platform={selectedPlatform} days={days} />
+        </Paper>
+        <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #6a1b9a', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column', minHeight: 320 }}>
+          <PlatformWidget platform={selectedPlatform} days={days} />
+        </Paper>
+      </Box>
+
+      {/* ── Row 3: Incident volume trend + top updates ── */}
+      <Box sx={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 2, alignItems: 'stretch', '@media (max-width: 1100px)': { gridTemplateColumns: '1fr' } }}>
       <Paper
         elevation={0}
         sx={{
@@ -1453,8 +1661,24 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
       >
         <IncidentTrendWidget platform={selectedPlatform} days={days} />
       </Paper>
+      <Paper
+        elevation={0}
+        sx={{
+          borderRadius: 2,
+          overflow: 'hidden',
+          border: '1px solid #e8ecf1',
+          borderTop: '3px solid #1565c0',
+          boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+          display: 'flex',
+          flexDirection: 'column',
+          height: 310,
+        }}
+      >
+        <TopIncidentUpdatesWidget platform={selectedPlatform} />
+      </Paper>
+      </Box>
 
-      {/* ── Row 3: Incident list (full width) ── */}
+      {/* ── Row 4: Incident list (full width) ── */}
       <Paper
         elevation={0}
         sx={{
@@ -1474,7 +1698,7 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
         <IncidentListWidget platform={selectedPlatform} days={days} />
       </Paper>
 
-      {/* ── Row 4: By Capability + By Assignment Group ── */}
+      {/* ── Row 5: By Capability + By Assignment Group ── */}
       <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, alignItems: 'stretch' }}>
         <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #1565c0', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
           <CapabilityWidget platform={selectedPlatform} days={days} />
