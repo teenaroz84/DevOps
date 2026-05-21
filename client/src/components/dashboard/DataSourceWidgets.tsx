@@ -29,7 +29,6 @@ import {
   MOCK_SERVICENOW_BY_PLATFORM,
   MOCK_SERVICENOW_INCIDENT_STATE_DAILY,
   MOCK_SERVICENOW_INCIDENT_TREND,
-  MOCK_SERVICENOW_TOP_INCIDENT_UPDATES,
 } from '../../services/servicenowMockData'
 
 /** Small clickable info icon for widget headers — shows a tooltip explaining the widget's data scope */
@@ -994,6 +993,10 @@ export const IncidentListWidget: React.FC<{ platform?: string | null; days?: Ser
 
 const CAPABILITY_COLORS = CHART_PALETTE
 const SERVICENOW_DAY_PRESETS: ServiceNowDaysFilter[] = [30, 60, 90, 'all']
+const SERVICENOW_TABS = [
+  { key: 'incidents', label: 'Incidents', icon: <WarningAmberIcon sx={{ fontSize: 14 }} /> },
+  { key: 'changes', label: 'Changes', icon: <BuildCircleIcon sx={{ fontSize: 14 }} /> },
+] as const
 
 function getServiceNowDaysLabel(days: ServiceNowDaysFilter): string {
   return days === 'all' ? 'All time' : `Last ${days}d`
@@ -1032,19 +1035,6 @@ function formatServiceNowShortDayLabel(value: string | number) {
 function getServiceNowXAxisInterval(length: number) {
   if (length <= 8) return 0
   return Math.max(Math.ceil(length / 6) - 1, 0)
-}
-
-function formatServiceNowTimestamp(value?: string | null) {
-  if (!value) return '—'
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return value
-  return new Intl.DateTimeFormat('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(parsed)
 }
 
 export const CapabilityWidget: React.FC<{ platform?: string | null; days?: ServiceNowDaysFilter }> = ({ platform, days = 7 }) => {
@@ -1423,73 +1413,6 @@ export const PlatformWidget: React.FC<{ platform?: string | null; days?: Service
   )
 }
 
-export const TopIncidentUpdatesWidget: React.FC<{ platform?: string | null }> = ({ platform }) => {
-  const [data, setData] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const { useMock } = useMockData()
-
-  useEffect(() => {
-    setLoading(true); setData([]); setError(null)
-    if (useMock) { setData(MOCK_SERVICENOW_TOP_INCIDENT_UPDATES); setLoading(false); return }
-    servicenowService.getTopIncidentUpdates(platform ?? undefined)
-      .then(d => { setData(Array.isArray(d) ? d : []); setLoading(false) })
-      .catch(err => { setError(err.message || 'Failed to fetch'); setLoading(false) })
-  }, [useMock, platform])
-
-  const columns: ColumnDef[] = [
-    {
-      key: 'sninc_inc_num', header: 'Incident #', width: 110,
-      render: row => <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#1565c0', fontFamily: 'monospace' }}>{row.sninc_inc_num}</Typography>,
-    },
-    {
-      key: 'updates_count', header: 'Updates', width: 80,
-      render: row => <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#333' }}>{row.updates_count}</Typography>,
-    },
-    {
-      key: 'current_state', header: 'Current State', width: 110,
-      render: row => {
-        const normalized = String(row.current_state || '').trim().toLowerCase()
-        const isClosed = ['closed', 'resolved', 'canceled', 'cancelled'].includes(normalized)
-        return (
-          <Chip
-            label={row.current_state || '—'}
-            size="small"
-            sx={{
-              height: 20,
-              fontSize: '10px',
-              fontWeight: 700,
-              color: isClosed ? '#2e7d32' : '#c62828',
-              backgroundColor: isClosed ? '#e8f5e9' : '#ffebee',
-            }}
-          />
-        )
-      },
-    },
-    {
-      key: 'last_updated_at', header: 'Last Updated', flex: 1,
-      render: row => <Typography sx={{ fontSize: '11px', color: '#555' }}>{formatServiceNowTimestamp(row.last_updated_at)}</Typography>,
-    },
-  ]
-
-  return (
-    <WidgetShell
-      title="Top 10 Incident Numbers by Updates (Last 90 Days)"
-      titleIcon={<ConfirmationNumberIcon sx={{ color: '#1565c0', fontSize: 18 }} />}
-      source="PostgreSQL · edoops.service_now_inc · last 90d by update volume"
-      actions={<WidgetInfo text="Top 10 incident numbers ranked by total update count over the last 90 days. Shows the most recently known state and last update timestamp for each incident." />}
-      loading={loading}
-      error={error ?? undefined}
-    >
-      {!error && (
-        <Box sx={{ flex: 1, overflowY: 'auto', px: 1.5, py: 1 }}>
-          <DataTable columns={columns} rows={data} rowKey="sninc_inc_num" compact accentColor="#1565c0" />
-        </Box>
-      )}
-    </WidgetShell>
-  )
-}
-
 // ─── ServiceNow Dashboard (full-page layout) ───────────────
 
 import SupportAgentIcon from '@mui/icons-material/SupportAgent'
@@ -1500,6 +1423,7 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null)
   const [platformsLoading, setPlatformsLoading] = useState(false)
   const [days, setDays] = useState<ServiceNowDaysFilter>(7)
+  const [activeTab, setActiveTab] = useState<'incidents' | 'changes'>('incidents')
 
   useEffect(() => {
     setPlatformsLoading(true)
@@ -1518,14 +1442,37 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
 
       {/* ── Header bar ── */}
       <Paper elevation={0} sx={{ borderRadius: 2, border: '1px solid #e8ecf1', bgcolor: '#f8f9fb', overflow: 'hidden', position: 'sticky', top: 0, zIndex: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.07)' }}>
-        <Box sx={{ px: 2, py: 1.25, display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'nowrap', overflowX: 'auto' }}>
-          <SupportAgentIcon sx={{ fontSize: 16, color: '#c62828' }} />
-          <Typography sx={{ fontWeight: 700, fontSize: '11px', color: '#555', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
-            ServiceNow 
+        <Box sx={{ display: 'flex', alignItems: 'center', backgroundColor: '#1a2535', px: 2, flexShrink: 0, overflowX: 'auto' }}>
+          <SupportAgentIcon sx={{ fontSize: 16, color: '#90caf9', mr: 1.25, flexShrink: 0 }} />
+          <Typography sx={{ fontWeight: 700, fontSize: '11px', color: '#e2e8f0', textTransform: 'uppercase', letterSpacing: '0.6px', mr: 1.25, flexShrink: 0 }}>
+            ServiceNow
           </Typography>
+          {SERVICENOW_TABS.map((tab) => {
+            const isActive = activeTab === tab.key
+            return (
+              <Box
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                sx={{
+                  display: 'flex', alignItems: 'center', gap: 0.75, px: 2.5, py: 1.2,
+                  cursor: 'pointer',
+                  borderBottom: isActive ? '3px solid #1976d2' : '3px solid transparent',
+                  color: isActive ? '#fff' : '#78909c',
+                  transition: 'all 0.15s',
+                  flexShrink: 0,
+                  '&:hover': { color: '#fff', backgroundColor: 'rgba(255,255,255,0.05)' },
+                }}
+              >
+                {React.cloneElement(tab.icon, { sx: { fontSize: 14, color: isActive ? '#64b5f6' : 'inherit' } })}
+                <Typography sx={{ fontSize: '12px', fontWeight: isActive ? 700 : 400 }}>{tab.label}</Typography>
+              </Box>
+            )
+          })}
           {useMock && (
-            <Chip label="MOCK DATA" size="small" sx={{ fontSize: '9px', height: 18, bgcolor: '#EFEDF4', color: TRUIST.purple, fontWeight: 700, border: `1px solid ${TRUIST.lightGray}` }} />
+            <Chip label="MOCK DATA" size="small" sx={{ ml: 1, fontSize: '9px', height: 18, bgcolor: 'rgba(255,255,255,0.12)', color: '#dbeafe', fontWeight: 700, border: '1px solid rgba(255,255,255,0.16)', flexShrink: 0 }} />
           )}
+        </Box>
+        <Box sx={{ px: 2, py: 1.25, display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'nowrap', overflowX: 'auto' }}>
           <Autocomplete
               options={platforms}
               getOptionLabel={(opt) => opt.platform}
@@ -1571,7 +1518,7 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
           <Box sx={{ width: 160, display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
             <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 48 }}>
               <Typography sx={{ fontSize: '10px', color: '#666', lineHeight: 1.2 }}>{getServiceNowDaysLabel(days)}</Typography>
-              <Typography sx={{ fontSize: '9px', color: '#90a4ae', lineHeight: 1.2, whiteSpace: 'nowrap' }}>{days === 'all' ? 'all incidents' : 'by opened date'}</Typography>
+              <Typography sx={{ fontSize: '9px', color: '#90a4ae', lineHeight: 1.2, whiteSpace: 'nowrap' }}>{activeTab === 'incidents' ? (days === 'all' ? 'all incidents' : 'by opened date') : (days === 'all' ? 'all changes' : 'by opened date')}</Typography>
             </Box>
             <Slider
               size="small"
@@ -1581,7 +1528,6 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
               min={1}
               max={15}
               step={1}
-              //marks={[{ value: 1, label: '1' }, { value: 7, label: '7' }, { value: 15, label: '15' }]}
               sx={{
                 color: '#1976d2',
                 '& .MuiSlider-markLabel': { fontSize: '9px' },
@@ -1613,90 +1559,116 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
               )
             })}
           </Box>
+          <Chip
+            label={activeTab === 'incidents' ? 'Incident View' : 'Change View'}
+            size="small"
+            sx={{
+              height: 22,
+              fontSize: '10px',
+              fontWeight: 700,
+              color: activeTab === 'incidents' ? '#c62828' : '#6a1b9a',
+              bgcolor: activeTab === 'incidents' ? '#fce4ec' : '#f3e5f5',
+              border: activeTab === 'incidents' ? '1px solid #ef9a9a' : '1px solid #d1c4e9',
+            }}
+          />
           <Typography sx={{ fontSize: '10px', color: '#aaa', ml: 'auto', flexShrink: 0, whiteSpace: 'nowrap' }}>
-            PostgreSQL
+            {activeTab === 'incidents' ? 'PostgreSQL · edoops.service_now_inc' : 'PostgreSQL · edoops.service_now_chg'}
           </Typography>
         </Box>
       </Paper>
+      {activeTab === 'incidents' ? (
+        <>
+          {/* ── Row 1: Incident KPI summary ── */}
+          <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #c62828', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
+            <IncidentKpiWidget platform={selectedPlatform} days={days} />
+          </Paper>
 
-      {/* ── Row 1: Incident KPI summary ── */}
-      <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #c62828', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
-        <IncidentKpiWidget platform={selectedPlatform} days={days} />
-      </Paper>
+          {/* ── Row 2: Incident volume trend (full width) ── */}
+          <Paper
+            elevation={0}
+            sx={{
+              borderRadius: 2,
+              overflow: 'hidden',
+              border: '1px solid #e8ecf1',
+              borderTop: '3px solid #c62828',
+              boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+              display: 'flex',
+              flexDirection: 'column',
+              height: 310,
+            }}
+          >
+            <IncidentTrendWidget platform={selectedPlatform} days={days} />
+          </Paper>
 
-      {/* ── Row 2: Incident volume trend + top updates ── */}
-      <Box sx={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 2, alignItems: 'stretch', '@media (max-width: 1100px)': { gridTemplateColumns: '1fr' } }}>
-      <Paper
-        elevation={0}
-        sx={{
-          borderRadius: 2,
-          overflow: 'hidden',
-          border: '1px solid #e8ecf1',
-          borderTop: '3px solid #c62828',
-          boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
-          display: 'flex',
-          flexDirection: 'column',
-          height: 310,
-        }}
-      >
-        <IncidentTrendWidget platform={selectedPlatform} days={days} />
-      </Paper>
-      <Paper
-        elevation={0}
-        sx={{
-          borderRadius: 2,
-          overflow: 'hidden',
-          border: '1px solid #e8ecf1',
-          borderTop: '3px solid #1565c0',
-          boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
-          display: 'flex',
-          flexDirection: 'column',
-          height: 310,
-        }}
-      >
-        <TopIncidentUpdatesWidget platform={selectedPlatform} />
-      </Paper>
-      </Box>
+          {/* ── Row 3: Incident list (full width) ── */}
+          <Paper
+            elevation={0}
+            sx={{
+              borderRadius: 2,
+              overflow: 'hidden',
+              border: '1px solid #e8ecf1',
+              borderTop: '3px solid #1565c0',
+              boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+              display: 'flex',
+              flexDirection: 'column',
+              height: 420,
+              '@media (max-width: 900px)': {
+                height: 360,
+              },
+            }}
+          >
+            <IncidentListWidget platform={selectedPlatform} days={days} />
+          </Paper>
 
-      {/* ── Row 3: Incident list (full width) ── */}
-      <Paper
-        elevation={0}
-        sx={{
-          borderRadius: 2,
-          overflow: 'hidden',
-          border: '1px solid #e8ecf1',
-          borderTop: '3px solid #1565c0',
-          boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
-          display: 'flex',
-          flexDirection: 'column',
-          height: 420,
-          '@media (max-width: 900px)': {
-            height: 360,
-          },
-        }}
-      >
-        <IncidentListWidget platform={selectedPlatform} days={days} />
-      </Paper>
+          {/* ── Row 4: By Capability + By Assignment Group ── */}
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, alignItems: 'stretch' }}>
+            <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #1565c0', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
+              <CapabilityWidget platform={selectedPlatform} days={days} />
+            </Paper>
+            <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: `3px solid ${TRUIST.dusk}`, boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
+              <AssignmentGroupWidget platform={selectedPlatform} days={days} />
+            </Paper>
+          </Box>
 
-      {/* ── Row 4: By Capability + By Assignment Group ── */}
-      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, alignItems: 'stretch' }}>
-        <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #1565c0', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
-          <CapabilityWidget platform={selectedPlatform} days={days} />
-        </Paper>
-        <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: `3px solid ${TRUIST.dusk}`, boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
-          <AssignmentGroupWidget platform={selectedPlatform} days={days} />
-        </Paper>
-      </Box>
+          {/* ── Row 5: Incident state daily + platform ── */}
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, alignItems: 'stretch' }}>
+            <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #1565c0', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column', minHeight: 320 }}>
+              <IncidentStateDailyWidget platform={selectedPlatform} days={days} />
+            </Paper>
+            <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #6a1b9a', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column', minHeight: 320 }}>
+              <PlatformWidget platform={selectedPlatform} days={days} />
+            </Paper>
+          </Box>
+        </>
+      ) : (
+        <>
+          <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #6a1b9a', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
+            <Box sx={{ px: 2, py: 2.25, display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+              <Typography sx={{ fontSize: '15px', fontWeight: 700, color: '#333' }}>Changes dashboard placeholders</Typography>
+              <Typography sx={{ fontSize: '12px', color: '#607d8b', maxWidth: 760 }}>
+                This tab is reserved for change analytics sourced from edoops.service_now_chg. Placeholder panels are in place so we can add the exact widgets and queries later without changing the dashboard structure again.
+              </Typography>
+            </Box>
+          </Paper>
 
-      {/* ── Row 5: Incident state daily + platform ── */}
-      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, alignItems: 'stretch' }}>
-        <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #1565c0', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column', minHeight: 320 }}>
-          <IncidentStateDailyWidget platform={selectedPlatform} days={days} />
-        </Paper>
-        <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #6a1b9a', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column', minHeight: 320 }}>
-          <PlatformWidget platform={selectedPlatform} days={days} />
-        </Paper>
-      </Box>
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 2, alignItems: 'stretch', '@media (max-width: 1100px)': { gridTemplateColumns: '1fr' } }}>
+            {[
+              { title: 'Change KPIs', body: 'Placeholder for change counts, success rate, emergency changes, and approval metrics.' },
+              { title: 'Change Trend', body: 'Placeholder for daily or weekly change volume, failed changes, and risk trend visualizations.' },
+              { title: 'Change Details', body: 'Placeholder for top change records, owners, assignment groups, and drilldown tables.' },
+            ].map((card) => (
+              <Paper key={card.title} elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px dashed #c5d0db', bgcolor: '#fbfcfe', minHeight: 220, display: 'flex', flexDirection: 'column' }}>
+                <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid #eef2f6' }}>
+                  <Typography sx={{ fontSize: '12px', fontWeight: 700, color: '#455a64', textTransform: 'uppercase', letterSpacing: '0.4px' }}>{card.title}</Typography>
+                </Box>
+                <Box sx={{ px: 2, py: 2, display: 'flex', flex: 1, alignItems: 'center' }}>
+                  <Typography sx={{ fontSize: '12px', color: '#78909c', lineHeight: 1.7 }}>{card.body}</Typography>
+                </Box>
+              </Paper>
+            ))}
+          </Box>
+        </>
+      )}
 
     </Box>
   )
