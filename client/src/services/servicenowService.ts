@@ -30,8 +30,14 @@ export const servicenowService = {
     const qs = params.toString()
     return apiClient.get(`/api/servicenow/incident-detail${qs ? `?${qs}` : ''}`)
   },
-  getEmergencyChanges:  (platform?: string) =>
-    apiClient.get(`/api/servicenow/emergency-changes${platform ? `?platform=${encodeURIComponent(platform)}` : ''}`),
+  getEmergencyChanges:  (platform?: string, days: ServiceNowDaysFilter = 7) =>
+    apiClient.get(withDays('/api/servicenow/emergency-changes', days, platform)),
+  getOpenedChanges:     (platform?: string, days: ServiceNowDaysFilter = 7) =>
+    apiClient.get(withDays('/api/servicenow/changes-opened', days, platform)),
+  getClosedChanges:     (platform?: string, days: ServiceNowDaysFilter = 7) =>
+    apiClient.get(withDays('/api/servicenow/changes-closed', days, platform)),
+  getChangesByPlatform: (platform?: string, days: ServiceNowDaysFilter = 7) =>
+    apiClient.get(withDays('/api/servicenow/changes-by-platform', days, platform)),
   getByCapability:      (platform?: string, days: ServiceNowDaysFilter = 7) =>
     apiClient.get(withDays('/api/servicenow/by-capability', days, platform)),
   getByAssignmentGroup: (platform?: string, days: ServiceNowDaysFilter = 7) =>

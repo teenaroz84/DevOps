@@ -23,6 +23,9 @@ import {
   MOCK_SERVICENOW_MISSED_INCIDENTS,
   MOCK_SERVICENOW_INCIDENT_LIST,
   MOCK_SERVICENOW_EMERGENCY_CHANGES,
+  MOCK_SERVICENOW_OPENED_CHANGES,
+  MOCK_SERVICENOW_CLOSED_CHANGES,
+  MOCK_SERVICENOW_CHANGES_BY_PLATFORM,
   MOCK_SERVICENOW_PLATFORMS,
   MOCK_SERVICENOW_BY_CAPABILITY,
   MOCK_SERVICENOW_BY_ASSIGNMENT_GROUP,
@@ -1112,7 +1115,7 @@ export const AssignmentGroupWidget: React.FC<{ platform?: string | null; days?: 
     <WidgetShell
       title="Incidents by Assignment Group"
       titleIcon={<ConfirmationNumberIcon sx={{ color: TRUIST.dusk, fontSize: 18 }} />}
-      source={`PostgreSQL · edoops.service_now_inc · ${days === 'all' ? 'opened across all time' : `opened in last ${days}d`}`}
+      source={` ${days === 'all' ? 'opened across all time' : `opened in last ${days}d`}`}
       actions={<WidgetInfo text={`Shows the top 10 assignment groups by incident count for incidents ${days === 'all' ? 'opened across all available time' : `opened in the last ${days} days`}. All statuses are included. Use the preset controls to change the opened date window.`} />}
       loading={loading}
       error={error ?? undefined}
@@ -1130,9 +1133,94 @@ export const AssignmentGroupWidget: React.FC<{ platform?: string | null; days?: 
   )
 }
 
+export const ChangeKpiWidget: React.FC<{ platform?: string | null; days?: ServiceNowDaysFilter }> = ({ platform, days = 7 }) => {
+  const [openedChanges, setOpenedChanges] = useState<any[]>([])
+  const [closedChanges, setClosedChanges] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const { useMock } = useMockData()
+
+  useEffect(() => {
+    setLoading(true)
+    setOpenedChanges([])
+    setClosedChanges([])
+    setError(null)
+    if (useMock) {
+      setOpenedChanges(MOCK_SERVICENOW_OPENED_CHANGES)
+      setClosedChanges(MOCK_SERVICENOW_CLOSED_CHANGES)
+      setLoading(false)
+      return
+    }
+    Promise.all([
+      servicenowService.getOpenedChanges(platform ?? undefined, days),
+      servicenowService.getClosedChanges(platform ?? undefined, days),
+    ])
+      .then(([openedData, closedData]) => {
+        setOpenedChanges(Array.isArray(openedData) ? openedData : [])
+        setClosedChanges(Array.isArray(closedData) ? closedData : [])
+        setLoading(false)
+      })
+      .catch(err => { setError(err.message || 'Failed to fetch change KPIs'); setLoading(false) })
+  }, [days, useMock, platform])
+
+  const orderedPriorities = ['P1', 'P2', 'P3', 'P4', 'P5']
+  const openedByPriority = new Map(openedChanges.map((row) => [row.priority_field, row]))
+  const closedByPriority = new Map(closedChanges.map((row) => [row.priority_field, row]))
+
+  const openedItems = orderedPriorities.map((priority) => ({
+    label: priority,
+    value: openedByPriority.get(priority)?.incident_count || 0,
+    color: INCIDENT_COLORS[priority] || '#757575',
+    bg: PRIORITY_CONFIG[priority]?.bg || '#f5f5f5',
+  }))
+  const closedItems = orderedPriorities.map((priority) => ({
+    label: priority,
+    value: closedByPriority.get(priority)?.incident_count || 0,
+    color: INCIDENT_COLORS[priority] || '#757575',
+    bg: PRIORITY_CONFIG[priority]?.bg || '#f5f5f5',
+  }))
+
+  const openedTotal = openedItems.reduce((sum, item) => sum + Number(item.value || 0), 0)
+  const closedTotal = closedItems.reduce((sum, item) => sum + Number(item.value || 0), 0)
+
+  return (
+    <WidgetShell
+      title="Change KPIs"
+      titleIcon={<BuildCircleIcon sx={{ color: '#7b1fa2', fontSize: 18 }} />}
+      source={`edoops.service_now_chg . opened = ${days === 'all' ? 'all time' : `last ${days}d`} . closed = ${days === 'all' ? 'all time' : `last ${days}d`}`}
+      actions={<WidgetInfo text={`Counts changes by priority from edoops.service_now_chg joined with sla_glossary. Opened changes use snchg_opened_at_dttm, falling back to snchg_plnd_start_dttm and snchg_last_updt_dttm. Closed changes use snchg_closed_at_dttm, falling back to snchg_plnd_end_dttm and snchg_last_updt_dttm. Platform and selected day window apply to both sides.`} />}
+      loading={loading}
+      error={error ?? undefined}
+    >
+      {!error && (
+        <Box sx={{ px: 1.5, py: 1.25, display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
+          <Box sx={{ border: '1px solid #ede7f6', borderRadius: 2, backgroundColor: '#faf7ff', p: 1.25 }}>
+            <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', mb: 1 }}>
+              <Typography sx={{ fontSize: '13px', fontWeight: 700, color: '#6a1b9a', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                Opened Changes
+              </Typography>
+              <Typography sx={{ fontSize: '22px', fontWeight: 800, color: '#7b1fa2' }}>{openedTotal}</Typography>
+            </Box>
+            <StatCardGrid items={openedItems} columns={5} compact />
+          </Box>
+          <Box sx={{ border: '1px solid #dcedc8', borderRadius: 2, backgroundColor: '#f7fbf1', p: 1.25 }}>
+            <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', mb: 1 }}>
+              <Typography sx={{ fontSize: '13px', fontWeight: 700, color: '#2e7d32', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                Closed Changes
+              </Typography>
+              <Typography sx={{ fontSize: '22px', fontWeight: 800, color: '#2e7d32' }}>{closedTotal}</Typography>
+            </Box>
+            <StatCardGrid items={closedItems} columns={5} compact />
+          </Box>
+        </Box>
+      )}
+    </WidgetShell>
+  )
+}
+
 // ─── Emergency Changes Widget ──────────────────────────────
 
-export const EmergencyChangesWidget: React.FC<{ platform?: string | null }> = ({ platform }) => {
+export const EmergencyChangesWidget: React.FC<{ platform?: string | null; days?: ServiceNowDaysFilter }> = ({ platform, days = 7 }) => {
   const [changes, setChanges] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -1147,10 +1235,10 @@ export const EmergencyChangesWidget: React.FC<{ platform?: string | null }> = ({
       setLoading(false)
       return
     }
-    servicenowService.getEmergencyChanges(platform ?? undefined)
+    servicenowService.getEmergencyChanges(platform ?? undefined, days)
       .then(d => { setChanges(Array.isArray(d) ? d : []); setLoading(false) })
       .catch(err => { setError(err.message || 'Failed to fetch emergency changes'); setLoading(false) })
-  }, [useMock, platform])
+  }, [useMock, platform, days])
 
   const total = changes.reduce((s, r) => s + (r.incident_count || 0), 0)
   const donutData = changes.map(r => ({
@@ -1163,7 +1251,8 @@ export const EmergencyChangesWidget: React.FC<{ platform?: string | null }> = ({
     <WidgetShell
       title="Open Emergency Changes by Priority"
       titleIcon={<BuildCircleIcon sx={{ color: '#7b1fa2', fontSize: 18 }} />}
-      source="PostgreSQL · edoops.service_now_chg"
+      source={`PostgreSQL · edoops.service_now_chg · ${days === 'all' ? 'all time' : `last ${days}d`}`}
+      actions={<WidgetInfo text={`Emergency change counts by priority from edoops.service_now_chg for ${days === 'all' ? 'all available time' : `the last ${days} days`}. Filters use opened/planned-start timestamps and also respect the selected platform.`} />}
       loading={loading}
       error={error ?? undefined}
     >
@@ -1195,6 +1284,60 @@ export const EmergencyChangesWidget: React.FC<{ platform?: string | null }> = ({
             </Box>
           )}
         </>
+      )}
+    </WidgetShell>
+  )
+}
+
+export const ChangesByPlatformWidget: React.FC<{ platform?: string | null; days?: ServiceNowDaysFilter }> = ({ platform, days = 7 }) => {
+  const [data, setData] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const { useMock } = useMockData()
+
+  useEffect(() => {
+    setLoading(true)
+    setData([])
+    setError(null)
+    if (useMock) {
+      setData(MOCK_SERVICENOW_CHANGES_BY_PLATFORM)
+      setLoading(false)
+      return
+    }
+    servicenowService.getChangesByPlatform(platform ?? undefined, days)
+      .then(d => { setData(Array.isArray(d) ? d : []); setLoading(false) })
+      .catch(err => { setError(err.message || 'Failed to fetch changes by platform'); setLoading(false) })
+  }, [useMock, platform, days])
+
+  const max = Math.max(...data.map(r => r.incident_count || 0), 1)
+
+  return (
+    <WidgetShell
+      title="Changes by Platform"
+      titleIcon={<BuildCircleIcon sx={{ color: '#7b1fa2', fontSize: 18 }} />}
+      source={`PostgreSQL · edoops.service_now_chg · ${days === 'all' ? 'all time' : `last ${days}d`} · grouped by snchg_pltf_nm`}
+      actions={<WidgetInfo text={`Top platforms by change count from edoops.service_now_chg grouped by snchg_pltf_nm. The selected day window uses snchg_opened_at_dttm with fallback to snchg_plnd_start_dttm and snchg_last_updt_dttm. The platform filter also applies here.`} />}
+      loading={loading}
+      error={error ?? undefined}
+    >
+      {!error && (
+        <Box sx={{ px: 2, py: 1, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+          {data.map((row, index) => {
+            const pct = Math.round(((row.incident_count || 0) / max) * 100)
+            const color = CAPABILITY_COLORS[index % CAPABILITY_COLORS.length]
+            return (
+              <Box key={row.platform}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.3 }}>
+                  <Typography sx={{ fontSize: '11px', fontWeight: 500, color: '#333' }}>{row.platform}</Typography>
+                  <Typography sx={{ fontSize: '11px', color: '#888', fontWeight: 600 }}>{row.incident_count}</Typography>
+                </Box>
+                <Box sx={{ height: 7, backgroundColor: '#f0f0f0', borderRadius: 4, overflow: 'hidden' }}>
+                  <Box sx={{ height: '100%', width: `${pct}%`, backgroundColor: color, borderRadius: 4, transition: 'width 0.4s ease' }} />
+                </Box>
+              </Box>
+            )
+          })}
+        </Box>
       )}
     </WidgetShell>
   )
@@ -1336,7 +1479,7 @@ export const IncidentStateDailyWidget: React.FC<{ platform?: string | null; days
     <WidgetShell
       title="Incidents by State Over Time (Daily)"
       titleIcon={<TrendingUpIcon sx={{ color: '#1565c0', fontSize: 18 }} />}
-      source={`PostgreSQL · edoops.service_now_inc · ${days === 'all' ? 'all time' : `last ${days}d`} · latest per incident per day`}
+      source={`${days === 'all' ? 'all time' : `last ${days}d`} ·`}
       actions={<WidgetInfo text={`Daily incident state mix over ${days === 'all' ? 'all available time' : `the last ${days} days`} using the latest incident row for each incident on each day. Bars show New, Open/In Progress/On Hold, and Closed/Resolved/Canceled counts.`} />}
       loading={loading}
       error={error ?? undefined}
@@ -1385,7 +1528,7 @@ export const PlatformWidget: React.FC<{ platform?: string | null; days?: Service
     <WidgetShell
       title="Incidents by Platform"
       titleIcon={<BugReportIcon sx={{ color: '#6a1b9a', fontSize: 18 }} />}
-      source={`PostgreSQL · edoops.service_now_inc · ${days === 'all' ? 'opened across all time' : `opened in last ${days}d`} · latest per incident`}
+      source={`${days === 'all' ? 'opened across all time' : `opened in last ${days}d`} · `}
       actions={<WidgetInfo text={`Top 10 platforms by incident count for incidents ${days === 'all' ? 'opened across all available time' : `opened in the last ${days} days`}. Uses the latest row per incident and counts all statuses.`} />}
       loading={loading}
       error={error ?? undefined}
@@ -1643,29 +1786,24 @@ export const ServiceNowDashboard: React.FC<{ onOpenAgent?: (agentId: string) => 
       ) : (
         <>
           <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #6a1b9a', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
-            <Box sx={{ px: 2, py: 2.25, display: 'flex', flexDirection: 'column', gap: 1.25 }}>
-              <Typography sx={{ fontSize: '15px', fontWeight: 700, color: '#333' }}>Changes dashboard placeholders</Typography>
-              <Typography sx={{ fontSize: '12px', color: '#607d8b', maxWidth: 760 }}>
-                This tab is reserved for change analytics sourced from edoops.service_now_chg. Placeholder panels are in place so we can add the exact widgets and queries later without changing the dashboard structure again.
-              </Typography>
-            </Box>
+            <ChangeKpiWidget platform={selectedPlatform} days={days} />
           </Paper>
 
-          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 2, alignItems: 'stretch', '@media (max-width: 1100px)': { gridTemplateColumns: '1fr' } }}>
-            {[
-              { title: 'Change KPIs', body: 'Placeholder for change counts, success rate, emergency changes, and approval metrics.' },
-              { title: 'Change Trend', body: 'Placeholder for daily or weekly change volume, failed changes, and risk trend visualizations.' },
-              { title: 'Change Details', body: 'Placeholder for top change records, owners, assignment groups, and drilldown tables.' },
-            ].map((card) => (
-              <Paper key={card.title} elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px dashed #c5d0db', bgcolor: '#fbfcfe', minHeight: 220, display: 'flex', flexDirection: 'column' }}>
-                <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid #eef2f6' }}>
-                  <Typography sx={{ fontSize: '12px', fontWeight: 700, color: '#455a64', textTransform: 'uppercase', letterSpacing: '0.4px' }}>{card.title}</Typography>
-                </Box>
-                <Box sx={{ px: 2, py: 2, display: 'flex', flex: 1, alignItems: 'center' }}>
-                  <Typography sx={{ fontSize: '12px', color: '#78909c', lineHeight: 1.7 }}>{card.body}</Typography>
-                </Box>
-              </Paper>
-            ))}
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, alignItems: 'stretch', '@media (max-width: 1100px)': { gridTemplateColumns: '1fr' } }}>
+            <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #7b1fa2', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column' }}>
+              <ChangesByPlatformWidget platform={selectedPlatform} days={days} />
+              {/* <EmergencyChangesWidget platform={selectedPlatform} days={days} /> */}
+            </Paper>
+            <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px dashed #c5d0db', bgcolor: '#fbfcfe', minHeight: 260, display: 'flex', flexDirection: 'column' }}>
+              <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid #eef2f6' }}>
+                <Typography sx={{ fontSize: '12px', fontWeight: 700, color: '#455a64', textTransform: 'uppercase', letterSpacing: '0.4px' }}>More Change Analytics</Typography>
+              </Box>
+              <Box sx={{ px: 2, py: 2, display: 'flex', flex: 1, alignItems: 'center' }}>
+                <Typography sx={{ fontSize: '12px', color: '#78909c', lineHeight: 1.7 }}>
+                  Placeholder for change trends, assignee groups, approvals, CAB metrics, or detailed change tables. The tab now has live change count widgets and can be extended without another layout change.
+                </Typography>
+              </Box>
+            </Paper>
           </Box>
         </>
       )}

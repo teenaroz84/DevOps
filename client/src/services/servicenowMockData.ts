@@ -151,6 +151,34 @@ export const MOCK_SERVICENOW_EMERGENCY_CHANGES = [
   { priority_field: 'P3', incident_count: 2 },
 ]
 
+export const MOCK_SERVICENOW_OPENED_CHANGES = [
+  { priority_field: 'P1', incident_count: 2 },
+  { priority_field: 'P2', incident_count: 6 },
+  { priority_field: 'P3', incident_count: 9 },
+  { priority_field: 'P4', incident_count: 13 },
+  { priority_field: 'P5', incident_count: 17 },
+]
+
+export const MOCK_SERVICENOW_CLOSED_CHANGES = [
+  { priority_field: 'P1', incident_count: 1 },
+  { priority_field: 'P2', incident_count: 5 },
+  { priority_field: 'P3', incident_count: 7 },
+  { priority_field: 'P4', incident_count: 10 },
+  { priority_field: 'P5', incident_count: 14 },
+]
+
+export const MOCK_SERVICENOW_CHANGES_BY_PLATFORM = [
+  { platform: 'Windows', incident_count: 224 },
+  { platform: 'SAP', incident_count: 193 },
+  { platform: 'Oracle EBS', incident_count: 168 },
+  { platform: 'Salesforce', incident_count: 142 },
+  { platform: 'Linux', incident_count: 127 },
+  { platform: 'Microsoft 365', incident_count: 109 },
+  { platform: 'Citrix', incident_count: 94 },
+  { platform: 'AWS', incident_count: 76 },
+  { platform: 'Others', incident_count: 51 },
+]
+
 export const MOCK_SERVICENOW_BY_CAPABILITY = [
   { capability: 'BI Reporting',      incident_count: 12 },
   { capability: 'Data Integration',  incident_count: 9  },

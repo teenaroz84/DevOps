@@ -306,8 +306,12 @@ router.get('/incident-list', async (req: Request, res: Response) => {
 router.get('/emergency-changes', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
+    const days = parseDays(req.query);
     const platform = req.query.platform as string | undefined;
     const platformClause = platform ? `AND sn.snchg_pltf_nm = $1` : '';
+    const openedClause = days === null
+      ? ''
+      : `AND COALESCE(sn.snchg_opened_at_dttm, sn.snchg_plnd_start_dttm, sn.snchg_last_updt_dttm)::timestamp >= NOW() - INTERVAL '${days} days'`;
     const params = platform ? [platform] : [];
     const result = await pool.query(`
       SELECT sg.short_priority AS priority_field,
@@ -316,6 +320,7 @@ router.get('/emergency-changes', async (req: Request, res: Response) => {
       JOIN   edoops.sla_glossary    sg
         ON   sn.snchg_priority = sg.snow_priority
       WHERE  sg.short_priority IN ('P1','P2','P3')
+        ${openedClause}
         ${platformClause}
       GROUP BY sg.short_priority
       ORDER BY sg.short_priority
@@ -323,6 +328,115 @@ router.get('/emergency-changes', async (req: Request, res: Response) => {
     res.json(result.rows);
   } catch (err: any) {
     console.error('ServiceNow emergency-changes error:', err.message);
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
+// GET /api/servicenow/changes-opened?platform=<value>&days=<n>
+// Opened change count grouped by priority using opened/planned start timestamps
+router.get('/changes-opened', async (req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const days = parseDays(req.query);
+    const platform = req.query.platform as string | undefined;
+    const platformClause = platform ? `AND sn.snchg_pltf_nm = $1` : '';
+    const openedClause = days === null
+      ? ''
+      : `AND COALESCE(sn.snchg_opened_at_dttm, sn.snchg_plnd_start_dttm, sn.snchg_last_updt_dttm)::timestamp >= NOW() - INTERVAL '${days} days'`;
+    const params = platform ? [platform] : [];
+    const result = await pool.query(`
+      SELECT sg.short_priority AS priority_field,
+             COUNT(*)::int AS incident_count
+      FROM edoops.service_now_chg sn
+      JOIN edoops.sla_glossary sg
+        ON sn.snchg_priority = sg.snow_priority
+      WHERE sg.short_priority IN ('P1', 'P2', 'P3', 'P4', 'P5')
+        AND sn.snchg_pltf_nm IS NOT NULL
+        ${openedClause}
+        ${platformClause}
+      GROUP BY sg.short_priority
+      ORDER BY CASE sg.short_priority
+        WHEN 'P1' THEN 1
+        WHEN 'P2' THEN 2
+        WHEN 'P3' THEN 3
+        WHEN 'P4' THEN 4
+        WHEN 'P5' THEN 5
+        ELSE 99
+      END, sg.short_priority
+    `, params);
+    res.json(result.rows);
+  } catch (err: any) {
+    console.error('ServiceNow changes-opened error:', err.message);
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
+// GET /api/servicenow/changes-closed?platform=<value>&days=<n>
+// Closed change count grouped by priority using closed/planned end/latest update timestamps
+router.get('/changes-closed', async (req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const days = parseDays(req.query);
+    const platform = req.query.platform as string | undefined;
+    const platformClause = platform ? `AND sn.snchg_pltf_nm = $1` : '';
+    const closedClause = days === null
+      ? ''
+      : `AND COALESCE(sn.snchg_closed_at_dttm, sn.snchg_plnd_end_dttm, sn.snchg_last_updt_dttm)::timestamp >= NOW() - INTERVAL '${days} days'`;
+    const params = platform ? [platform] : [];
+    const result = await pool.query(`
+      SELECT sg.short_priority AS priority_field,
+             COUNT(*)::int AS incident_count
+      FROM edoops.service_now_chg sn
+      JOIN edoops.sla_glossary sg
+        ON sn.snchg_priority = sg.snow_priority
+      WHERE sg.short_priority IN ('P1', 'P2', 'P3', 'P4', 'P5')
+        AND sn.snchg_pltf_nm IS NOT NULL
+        AND COALESCE(sn.snchg_closed_at_dttm, sn.snchg_plnd_end_dttm) IS NOT NULL
+        ${closedClause}
+        ${platformClause}
+      GROUP BY sg.short_priority
+      ORDER BY CASE sg.short_priority
+        WHEN 'P1' THEN 1
+        WHEN 'P2' THEN 2
+        WHEN 'P3' THEN 3
+        WHEN 'P4' THEN 4
+        WHEN 'P5' THEN 5
+        ELSE 99
+      END, sg.short_priority
+    `, params);
+    res.json(result.rows);
+  } catch (err: any) {
+    console.error('ServiceNow changes-closed error:', err.message);
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
+// GET /api/servicenow/changes-by-platform?platform=<value>&days=<n>
+// Change counts grouped by platform using opened/planned start/latest update timestamps
+router.get('/changes-by-platform', async (req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const days = parseDays(req.query);
+    const platform = req.query.platform as string | undefined;
+    const platformClause = platform ? `AND sn.snchg_pltf_nm = $1` : '';
+    const openedClause = days === null
+      ? ''
+      : `AND COALESCE(sn.snchg_opened_at_dttm, sn.snchg_plnd_start_dttm, sn.snchg_last_updt_dttm)::timestamp >= NOW() - INTERVAL '${days} days'`;
+    const params = platform ? [platform] : [];
+    const result = await pool.query(`
+      SELECT sn.snchg_pltf_nm AS platform,
+             COUNT(*)::int AS incident_count
+      FROM edoops.service_now_chg sn
+      WHERE sn.snchg_pltf_nm IS NOT NULL
+        ${openedClause}
+        ${platformClause}
+      GROUP BY sn.snchg_pltf_nm
+      ORDER BY incident_count DESC, sn.snchg_pltf_nm
+      LIMIT 10
+    `, params);
+    res.json(result.rows);
+  } catch (err: any) {
+    console.error('ServiceNow changes-by-platform error:', err.message);
     res.status(500).json({ error: 'Query failed', details: err.message });
   }
 });
