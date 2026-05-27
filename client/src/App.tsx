@@ -4,6 +4,7 @@ import { Box } from '@mui/material'
 import { Navigation } from './components/layout/Navigation'
 import { Dashboard } from './components/dashboard/Dashboard'
 import { ChatPanel } from './components/chat/ChatPanel'
+import { HealthCheckAgent } from './components/health-check/HealthCheckAgent'
 import { LoginScreen } from './components/auth/LoginScreen'
 import { UserPreferences, WidgetPreferences } from './components/settings/UserPreferences'
 import { ExecutiveDashboard, type SourceKey } from './components/dashboard/ExecutiveDashboard'
@@ -140,6 +141,7 @@ function App() {
   const fullscreenAgentMenu = FULLSCREEN_AGENT_MENUS.find((item) => item.menuId === activeMenu)
   const fullscreenAgentSourceMap: Partial<Record<FullscreenAgentMenuId, SourceKey>> = {
     chat: 'overview',
+    'health-check': 'overview',
     'esp-chat': 'pipeline',
     'dmf-chat': 'dmf',
     'servicenow-chat': 'servicenow',
@@ -161,6 +163,8 @@ function App() {
       <CssBaseline />
       {!authSession || isLoginRoute ? (
         <LoginScreen onLogin={handleLogin} />
+      ) : activeMenu === 'health-check' ? (
+        <HealthCheckAgent onClose={handleCloseFullscreenAgent} />
       ) : fullscreenAgentMenu ? (
         // Full-screen agent layout (nav shortcut)
         <ChatPanel

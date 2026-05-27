@@ -14,6 +14,10 @@
 
 import { AGENT_BRAND } from '../theme/truistPalette'
 
+const HEALTH_CHECK_ICON = `data:image/svg+xml;utf8,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#14323B"/><path d="M18 34h9l5-11 7 20 4-9h7" fill="none" stroke="#B0E0E2" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="49" cy="18" r="7" fill="#FFFFFF"/><path d="M49 14v8M45 18h8" stroke="#14323B" stroke-width="3" stroke-linecap="round"/></svg>',
+)}`
+
 export interface AgentConfig {
   id: string
   /** Display name shown in the chat panel header */
@@ -38,6 +42,7 @@ export interface AgentConfig {
 
 export type FullscreenAgentMenuId =
   | 'chat'
+  | 'health-check'
   | 'esp-chat'
   | 'dmf-chat'
   | 'servicenow-chat'
@@ -62,6 +67,24 @@ export const AGENTS: Record<string, AgentConfig> = {
       { label: '🔧 DMF Enrichment Standards', query: 'What are the DMF enrichment standards?' },
       { label: '⏱  ESP Scheduling Standards', query: 'What are the DMF ESP scheduling standards?' },
       { label: '📘 Talend Dev Guide',          query: 'Provide the Talend development guide and best practices.' },
+    ],
+  },
+
+  'health-check': {
+    id: 'health-check',
+    name: 'Health Check Agent',
+    subtitle: '',
+    color: AGENT_BRAND.healthCheck,
+    icon: HEALTH_CHECK_ICON,
+    endpoint: '/api/health-check/workflow',
+    streamEndpoint: '/api/health-check/workflow',
+    placeholder: 'Describe the incident or platform symptom to begin the health check runbook...',
+    welcomeMessage: 'Health Check Agent is ready. Start with an incident summary, then approve the workflow and capture L1 feedback for audit.',
+    quickActions: [
+      { label: 'Infra triage', query: 'Start an infra-focused health check for elevated latency after patching.' },
+      { label: 'Pipeline disruption', query: 'Run a workflow for a delayed pipeline with log and infra validation.' },
+      { label: 'Approval gate', query: 'Launch a workflow that pauses for user approval before execution.' },
+      { label: 'L1 audit', query: 'Capture L1 feedback and log follow-up actions into DynamoDB.' },
     ],
   },
 
@@ -175,6 +198,7 @@ export const FULLSCREEN_AGENT_MENUS: Array<{
   label: string
   mockOnly?: boolean
 }> = [
+  { menuId: 'health-check',    agentId: 'health-check', label: 'Health Check Agent' },
   { menuId: 'chat',            agentId: 'knowledge',  label: 'TDT Knowledge Assist' },
   { menuId: 'servicenow-chat', agentId: 'servicenow', label: 'TDT ServiceNow Agent' },
   { menuId: 'talend-chat',     agentId: 'talend',     label: 'TDT Talend Agent' },

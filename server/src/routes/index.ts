@@ -5,6 +5,7 @@ import postgresDbRoutes from './postgresDb';
 import talendDbRoutes from './talendDb';
 import sessionRoutes from './session';
 import snowflakeDbRoutes from './snowflakeDb';
+import healthCheckRoutes from './healthCheck';
 
 export {
 	espRoutes,
@@ -14,4 +15,5 @@ export {
 	talendDbRoutes,
 	sessionRoutes,
 	snowflakeDbRoutes,
+	healthCheckRoutes,
 };

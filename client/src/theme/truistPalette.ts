@@ -67,6 +67,7 @@ export const AGENT_BRAND = {
   servicenow: TRUIST.charcoal,
   talend: TRUIST.dawn,
   snowflake: TRUIST.sky,
+  healthCheck: '#14323B',
 } as const
 
 export const CHART_PALETTE = [
