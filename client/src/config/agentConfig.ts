@@ -81,10 +81,7 @@ export const AGENTS: Record<string, AgentConfig> = {
     placeholder: 'Ask for a platform health check or enter the proposed command number to run...',
     welcomeMessage: 'Health Check Agent is ready. Ask for a platform health check, then reply with the proposed command number to run it.',
     quickActions: [
-      { label: 'Snowflake status', query: 'Check snowflake status' },
-      { label: 'Snowflake health', query: 'Check snowflake health' },
-      { label: 'Platform status', query: 'Check platform health' },
-      { label: 'Run command 1', query: '1' },
+     
     ],
   },
 

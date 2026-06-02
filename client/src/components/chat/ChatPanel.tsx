@@ -93,6 +93,7 @@ interface Message {
   type?: 'status' | 'error' | 'success' | 'info' | 'table'
   data?: any
   timestamp?: number
+  suggestedActionPrompt?: string
   suggestedActions?: Array<{
     label: string
     action: string
@@ -216,6 +217,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
   const headerActionHover = useDarkHeaderText ? 'rgba(52,52,59,0.08)' : 'rgba(255,255,255,0.15)'
   const authenticatedUserId = getAuthenticatedUserId() ?? undefined
   const browserSessionId = SESSION_ID
+  const fixedSessionId = agent.id === 'health-check' ? browserSessionId : null
   const userBubbleColor = APP_COLORS.primary
   const userBubbleTextColor = TRUIST.white
   const renderAgentIcon = (size: number) => {
@@ -290,6 +292,34 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
     setSessionLoading(true)
     setSessionListLoading(true)
 
+    if (fixedSessionId) {
+      restoreStarterSession(fixedSessionId)
+
+      if (!authenticatedUserId) {
+        setSessionLoading(false)
+        setSessionListLoading(false)
+        return
+      }
+
+      const requestId = ++sessionLoadRef.current
+      chatService.loadSession(agent.id, fixedSessionId, authenticatedUserId)
+        .then((loadedMessages) => {
+          if (cancelled || sessionLoadRef.current !== requestId) return
+          const nextMessages = loadedMessages.length > 0 ? loadedMessages as Message[] : starterMessages
+          applySessionMessages(fixedSessionId, nextMessages)
+        })
+        .catch(() => {
+          if (cancelled || sessionLoadRef.current !== requestId) return
+          applySessionMessages(fixedSessionId, starterMessages)
+        })
+        .finally(() => {
+          if (cancelled || sessionLoadRef.current !== requestId) return
+          setSessionLoading(false)
+          setSessionListLoading(false)
+        })
+      return
+    }
+
     if (!authenticatedUserId) {
       restoreStarterSession(persistedFullScreenSessionId)
       setSessionLoading(false)
@@ -336,7 +366,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
     return () => {
       cancelled = true
     }
-  }, [WELCOME_MESSAGE, agent.id, authenticatedUserId, applySessionMessages, browserSessionId, fullScreen, fullScreenStorageKey, sessionIdScope])
+  }, [WELCOME_MESSAGE, agent.id, authenticatedUserId, applySessionMessages, browserSessionId, fixedSessionId, fullScreen, fullScreenStorageKey, sessionIdScope])
 
   useEffect(() => {
     if (!activeSessionId) return
@@ -634,6 +664,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
           type: data.type as Message['type'],
           data: data.data,
           timestamp: Date.now(),
+          suggestedActionPrompt: (data as any).suggestedActionPrompt,
           suggestedActions: (data as any).suggestedActions,
         }
         setMessages(prev => [...prev, agentResponse])
@@ -1112,59 +1143,66 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
                       )}
                     </Paper>
                     {msg.suggestedActions && msg.suggestedActions.length > 0 && (
-                      <Box sx={{ display: 'flex', gap: 0.8, flexWrap: 'wrap', mt: 1.2, width: '100%' }}>
-                        {msg.suggestedActions.map((action, aIdx) => (
-                          <Button
-                            key={aIdx}
-                            size="small"
-                            variant="contained"
-                            onClick={() => {
-                              if (action.action === 'restart_service') {
-                                sendMessage('Restart the DataOps service')
-                              } else if (action.action === 'terminate_service') {
-                                const termMsg: Message = {
-                                  role: 'agent',
-                                  content: 'Service terminated. You can restart it when you are ready.',
-                                  type: 'success',
-                                  suggestedActions: [
-                                    { label: '▶️ Restart Service', action: 'restart_service' }
-                                  ]
+                      <Box sx={{ mt: 1.2, width: '100%' }}>
+                        {msg.suggestedActionPrompt && (
+                          <Typography sx={{ fontSize: '11px', color: '#607d8b', mb: 0.8, lineHeight: 1.4 }}>
+                            {msg.suggestedActionPrompt}
+                          </Typography>
+                        )}
+                        <Box sx={{ display: 'flex', gap: 0.8, flexWrap: 'wrap', width: '100%' }}>
+                          {msg.suggestedActions.map((action, aIdx) => (
+                            <Button
+                              key={aIdx}
+                              size="small"
+                              variant="contained"
+                              onClick={() => {
+                                if (action.action === 'restart_service') {
+                                  sendMessage('Restart the DataOps service')
+                                } else if (action.action === 'terminate_service') {
+                                  const termMsg: Message = {
+                                    role: 'agent',
+                                    content: 'Service terminated. You can restart it when you are ready.',
+                                    type: 'success',
+                                    suggestedActions: [
+                                      { label: '▶️ Restart Service', action: 'restart_service' }
+                                    ]
+                                  }
+                                  setMessages(prev => [...prev, termMsg])
+                                } else {
+                                  sendMessage(action.action)
                                 }
-                                setMessages(prev => [...prev, termMsg])
-                              } else {
-                                sendMessage(action.action)
-                              }
-                            }}
-                            disabled={isSessionLoading}
-                            sx={{
-                              fontSize: '12px',
-                              fontWeight: 500,
-                              textTransform: 'none',
-                              padding: '6px 12px',
-                              backgroundColor:
-                                action.action === 'restart_service' ? TRUIST.dusk :
-                                action.action === 'terminate_service' ? TRUIST.charcoal :
-                                msg.type === 'error' ? TRUIST.charcoal :
-                                msg.type === 'success' ? TRUIST.dusk : APP_COLORS.primary,
-                              color: '#fff',
-                              border: 'none',
-                              borderRadius: '4px',
-                              cursor: 'pointer',
-                              '&:hover': {
+                              }}
+                              disabled={isSessionLoading}
+                              sx={{
+                                fontSize: '12px',
+                                fontWeight: 500,
+                                textTransform: 'none',
+                                padding: '6px 12px',
                                 backgroundColor:
-                                  action.action === 'restart_service' ? TRUIST.darkGray :
-                                  action.action === 'terminate_service' ? TRUIST.purple :
-                                  msg.type === 'error' ? TRUIST.purple :
-                                  msg.type === 'success' ? TRUIST.darkGray : TRUIST.dusk,
-                                boxShadow: '0 2px 8px rgba(0,0,0,0.2)'
-                              },
-                              '&:disabled': { opacity: 0.6, cursor: 'not-allowed' },
-                              transition: 'all 0.2s ease',
-                            }}
-                          >
-                            {action.label}
-                          </Button>
-                        ))}
+                                  action.action === 'restart_service' ? TRUIST.dusk :
+                                  action.action === 'terminate_service' ? TRUIST.charcoal :
+                                  msg.type === 'error' ? TRUIST.charcoal :
+                                  msg.type === 'success' ? TRUIST.dusk : APP_COLORS.primary,
+                                color: '#fff',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                '&:hover': {
+                                  backgroundColor:
+                                    action.action === 'restart_service' ? TRUIST.darkGray :
+                                    action.action === 'terminate_service' ? TRUIST.purple :
+                                    msg.type === 'error' ? TRUIST.purple :
+                                    msg.type === 'success' ? TRUIST.darkGray : TRUIST.dusk,
+                                  boxShadow: '0 2px 8px rgba(0,0,0,0.2)'
+                                },
+                                '&:disabled': { opacity: 0.6, cursor: 'not-allowed' },
+                                transition: 'all 0.2s ease',
+                              }}
+                            >
+                              {action.label}
+                            </Button>
+                          ))}
+                        </Box>
                       </Box>
                     )}
                   </Box>

@@ -38,6 +38,7 @@ interface ChatApiResponse {
   type?: string
   data?: any
   suggestedActions?: Array<{ label: string; action: string; icon?: string }>
+  proposed_commands?: Record<string, string>
 }
 
 export interface ConversationHistoryEntry {
@@ -45,7 +46,16 @@ export interface ConversationHistoryEntry {
   content: string
 }
 
-function normaliseResponse(raw: ChatApiResponse): { text: string; type?: string; data?: any; suggestedActions?: any } {
+function normaliseResponse(raw: ChatApiResponse): { text: string; type?: string; data?: any; suggestedActions?: any; suggestedActionPrompt?: string } {
+  const proposedCommandActions = raw.proposed_commands
+    ? Object.keys(raw.proposed_commands)
+        .sort((left, right) => Number(left) - Number(right))
+        .map((key) => ({
+          label: String(Number(key) + 1),
+          action: String(Number(key) + 1),
+        }))
+    : undefined
+
   const text =
     raw.answer ??
     raw.text ??
@@ -59,7 +69,10 @@ function normaliseResponse(raw: ChatApiResponse): { text: string; type?: string;
     text,
     type: raw.type,
     data: raw.data,
-    suggestedActions: raw.suggestedActions,
+    suggestedActions: raw.suggestedActions ?? proposedCommandActions,
+    suggestedActionPrompt: proposedCommandActions
+      ? 'Select one of the options below, or type all or none.'
+      : undefined,
   }
 }
 
