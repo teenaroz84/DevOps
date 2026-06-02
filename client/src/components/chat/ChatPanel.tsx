@@ -38,6 +38,7 @@ import { getAuthenticatedUserId } from '../../services/auth'
 import { SESSION_ID } from '../../services/session'
 import { AGENTS } from '../../config/agentConfig'
 import type { AgentConfig } from '../../config/agentConfig'
+import type { ConversationHistoryEntry } from '../../services/chatService'
 // import { sessionStore } from '../../services/sessionStore'
 import { FormattedMessage } from './FormattedMessage'
 
@@ -105,6 +106,21 @@ interface ChatSessionSummary {
   preview: string
   updatedAt: number
 }
+
+function buildConversationHistory(messages: Message[]): ConversationHistoryEntry[] {
+  return messages
+    .filter((message) => {
+      if (message.role === 'user') return message.content.trim().length > 0
+      if (message.role !== 'agent') return false
+      if (message.type === 'info' || message.type === 'error') return false
+      return message.content.trim().length > 0
+    })
+    .map((message) => ({
+      role: message.role === 'user' ? 'user' : 'assistant',
+      content: message.content,
+    }))
+}
+
 const FULLSCREEN_CHAT_STORAGE_PREFIX = 'dataops:fullscreen-chat:'
 const MAX_FULLSCREEN_SESSION_SUMMARIES = 8
 
@@ -571,6 +587,9 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
     const requestSessionId = activeSessionId
     const textToSend = messageText || input
     if (!textToSend.trim()) return
+    const conversationHistory = agent.id === 'health-check'
+      ? buildConversationHistory(messages)
+      : undefined
 
     const isHealthCheck = textToSend === HEALTH_CHECK_QUERY
     if (!isHealthCheck && textToSend.trim()) {
@@ -606,6 +625,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
           requestSessionId,
           authenticatedUserId,
           browserSessionId,
+          conversationHistory,
         )
         // sessionStore.setChat({ lastAgentId: agent.id })
         const agentResponse: Message = {
@@ -767,6 +787,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
   if (!isOpen && !fullScreen) return null
 
   if (fullScreen) {
+    const hideSessionSidebar = agent.id === 'health-check'
     const showCollapsedSessionRail = !isCompactFullScreen && isSessionSidebarCollapsed
 
     // Full-screen chat layout — results panel hidden
@@ -780,7 +801,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
         }}
       >
         {/* Session Sidebar */}
-        {showCollapsedSessionRail ? (
+        {!hideSessionSidebar && showCollapsedSessionRail ? (
           <Box
             sx={{
               width: 56,
@@ -813,7 +834,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
             </Tooltip>
             <HistoryIcon sx={{ fontSize: 18, color: '#90a4ae', mt: 0.5 }} />
           </Box>
-        ) : (
+        ) : !hideSessionSidebar ? (
           <Box
             sx={{
               width: isCompactFullScreen ? '100%' : 320,
@@ -953,7 +974,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
               </Button>
             </Box>
           </Box>
-        )}
+        ) : null}
 
         {/* Chat — main conversation pane */}
         <Box

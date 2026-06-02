@@ -40,6 +40,11 @@ interface ChatApiResponse {
   suggestedActions?: Array<{ label: string; action: string; icon?: string }>
 }
 
+export interface ConversationHistoryEntry {
+  role: 'user' | 'assistant'
+  content: string
+}
+
 function normaliseResponse(raw: ChatApiResponse): { text: string; type?: string; data?: any; suggestedActions?: any } {
   const text =
     raw.answer ??
@@ -118,6 +123,7 @@ export const chatService = {
     sessionId = SESSION_ID,
     userId?: string,
     browserSessionId = SESSION_ID,
+    conversationHistory?: ConversationHistoryEntry[],
   ) => {
     const raw = await chatRequest<ChatApiResponse>(endpoint, {
       session_id: sessionId,
@@ -125,7 +131,7 @@ export const chatService = {
       browserSessionId,
       ...(userId ? { user_id: userId } : {}),
       message,
-      conversation_history: [],
+      ...(conversationHistory ? { conversation_history: conversationHistory } : {}),
     })
     return normaliseResponse(raw)
   },

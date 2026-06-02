@@ -20,6 +20,10 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api\/v1/, ''), // strips /api/v1 → server sees /chat
         },
+        '/api/health_check/chat': {
+          target: chatTarget,
+          changeOrigin: true,
+        },
         '/api': {
           target: 'http://localhost:3001',
           changeOrigin: true,
