@@ -122,6 +122,17 @@ function buildConversationHistory(messages: Message[]): ConversationHistoryEntry
     }))
 }
 
+function findLatestSuggestedActionContext(messages: Message[]): string | undefined {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]
+    if (message.role !== 'agent') continue
+    if (!message.suggestedActions || message.suggestedActions.length === 0) continue
+    return message.content.trim() || message.suggestedActionPrompt?.trim() || undefined
+  }
+
+  return undefined
+}
+
 const FULLSCREEN_CHAT_STORAGE_PREFIX = 'dataops:fullscreen-chat:'
 const MAX_FULLSCREEN_SESSION_SUMMARIES = 8
 
@@ -622,6 +633,9 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
       : undefined
 
     const isHealthCheck = textToSend === HEALTH_CHECK_QUERY
+    const actionContext = agent.id === 'health-check'
+      ? findLatestSuggestedActionContext(messages)
+      : undefined
     if (!isHealthCheck && textToSend.trim()) {
       setInputHistory(prev => [textToSend, ...prev.slice(0, 19)])
     }
@@ -631,6 +645,18 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
     setInput('')
     setLoading(true)
     setLoadingSessionId(requestSessionId)
+
+    if (agent.id === 'health-check') {
+      chatService.auditHealthCheckAction({
+        sessionId: requestSessionId,
+        browserSessionId,
+        userId: authenticatedUserId,
+        actionClicked: textToSend,
+        actionFor: actionContext,
+        actionSource: messageText ? 'button' : 'manual',
+        clickedAt: new Date().toISOString(),
+      })
+    }
 
     try {
       if (isHealthCheck) {

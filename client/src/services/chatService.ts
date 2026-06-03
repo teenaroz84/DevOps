@@ -46,6 +46,16 @@ export interface ConversationHistoryEntry {
   content: string
 }
 
+interface HealthCheckActionAuditPayload {
+  sessionId: string
+  browserSessionId?: string
+  userId?: string
+  actionClicked: string
+  actionFor?: string
+  actionSource: 'button' | 'manual'
+  clickedAt: string
+}
+
 function normaliseResponse(raw: ChatApiResponse): { text: string; type?: string; data?: any; suggestedActions?: any; suggestedActionPrompt?: string } {
   const proposedCommandActions = raw.proposed_commands
     ? Object.keys(raw.proposed_commands)
@@ -200,6 +210,17 @@ export const chatService = {
   clearSession: (agentId: string, sessionId = SESSION_ID, userId?: string): void => {
     const url = `${config.apiBaseUrl}/api/sessions/${encodeURIComponent(sessionId)}/${encodeURIComponent(agentId)}${buildQueryString({ userId })}`
     fetch(url, { method: 'DELETE' }).catch(() => { /* silent */ })
+  },
+
+  auditHealthCheckAction: (payload: HealthCheckActionAuditPayload): void => {
+    const url = `${config.apiBaseUrl}/api/health-check/action-audit`
+    fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).catch((error) => {
+      console.warn('[chatService] Health check audit failed:', error)
+    })
   },
 
   /**

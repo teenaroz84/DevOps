@@ -5,6 +5,7 @@ import { DynamoDBDocumentClient, GetCommand, PutCommand } from '@aws-sdk/lib-dyn
 const router = Router();
 
 const TABLE = process.env.HEALTH_CHECK_AUDIT_TABLE || process.env.SESSIONS_TABLE || 'aws3748-dt57-edoops-session-store';
+const ACTION_AUDIT_TABLE = process.env.HEALTH_CHECK_ACTION_AUDIT_TABLE || 'health-check-action-audit';
 const REGION = process.env.AWS_REGION || 'us-east-1';
 const AUDIT_AGENT_ID = process.env.HEALTH_CHECK_AUDIT_AGENT_ID || 'health-check-audit';
 const TTL_SECONDS = 30 * 24 * 60 * 60;
@@ -12,6 +13,7 @@ const ENV_USER = process.env.username || process.env.USERNAME || process.env.USE
 
 let ddb: DynamoDBDocumentClient | null = null;
 const mockAuditStore = new Map<string, StoredAuditRecord>();
+const mockActionAuditStore = new Map<string, HealthCheckActionAuditRecord>();
 
 type WorkflowStage =
   | 'idle'
@@ -101,6 +103,20 @@ type MockScenario = {
   remediationHints: string[];
 };
 
+type HealthCheckActionAuditRecord = {
+  audit_id: string;
+  session_id: string;
+  browser_session_id?: string;
+  user_id?: string;
+  agent_id: string;
+  action_clicked: string;
+  action_for?: string;
+  action_source: 'button' | 'manual';
+  clicked_at: string;
+  updated_at: string;
+  ttl: number;
+};
+
 function isCredentialProviderError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   const candidate = [
@@ -129,6 +145,30 @@ function buildStoredAuditRecord(
       persistedAt,
     },
     updated_at: persistedAt,
+    ttl: Math.floor(Date.now() / 1000) + TTL_SECONDS,
+  };
+}
+
+function buildHealthCheckActionAuditRecord(
+  sessionId: string,
+  browserSessionId: string | undefined,
+  userId: string | undefined,
+  actionClicked: string,
+  actionFor: string | undefined,
+  actionSource: 'button' | 'manual',
+  clickedAt: string,
+): HealthCheckActionAuditRecord {
+  return {
+    audit_id: createId('health-check-action'),
+    session_id: sessionId,
+    ...(browserSessionId ? { browser_session_id: browserSessionId } : {}),
+    ...(userId ? { user_id: userId } : {}),
+    agent_id: 'health-check',
+    action_clicked: actionClicked,
+    ...(actionFor ? { action_for: actionFor } : {}),
+    action_source: actionSource,
+    clicked_at: clickedAt,
+    updated_at: clickedAt,
     ttl: Math.floor(Date.now() / 1000) + TTL_SECONDS,
   };
 }
@@ -585,6 +625,47 @@ async function persistAuditRecord(
   }
 }
 
+async function persistHealthCheckActionAuditRecord(
+  sessionId: string,
+  browserSessionId: string | undefined,
+  userId: string | undefined,
+  actionClicked: string,
+  actionFor: string | undefined,
+  actionSource: 'button' | 'manual',
+  clickedAt: string,
+): Promise<{ persisted: boolean; persistedAt: string; record: HealthCheckActionAuditRecord; error?: string }> {
+  const persistedAt = clickedAt;
+  const item = buildHealthCheckActionAuditRecord(
+    sessionId,
+    browserSessionId,
+    userId,
+    actionClicked,
+    actionFor,
+    actionSource,
+    clickedAt,
+  );
+  mockActionAuditStore.set(item.audit_id, item);
+
+  try {
+    await getClient().send(new PutCommand({
+      TableName: ACTION_AUDIT_TABLE,
+      Item: item,
+    }));
+    return { persisted: true, persistedAt, record: item };
+  } catch (error) {
+    if (isCredentialProviderError(error)) {
+      return { persisted: false, persistedAt, record: item };
+    }
+
+    return {
+      persisted: false,
+      persistedAt,
+      record: item,
+      error: error instanceof Error ? error.message : 'Failed to persist health check action audit record',
+    };
+  }
+}
+
 router.get('/workflow/:sessionId', async (req: Request, res: Response) => {
   const { sessionId } = req.params;
 
@@ -673,6 +754,48 @@ router.post('/workflow', async (req: Request, res: Response) => {
     res.status(500).json({
       ok: false,
       error: error instanceof Error ? error.message : 'Failed to advance health check workflow',
+    });
+  }
+});
+
+router.post('/action-audit', async (req: Request, res: Response) => {
+  const sessionId = typeof req.body?.sessionId === 'string' ? req.body.sessionId.trim() : '';
+  const browserSessionId = typeof req.body?.browserSessionId === 'string' ? req.body.browserSessionId.trim() : undefined;
+  const userId = getEffectiveUserId(req.body?.userId);
+  const actionClicked = typeof req.body?.actionClicked === 'string' ? req.body.actionClicked.trim() : '';
+  const actionFor = typeof req.body?.actionFor === 'string' ? req.body.actionFor.trim() : undefined;
+  const actionSource = req.body?.actionSource === 'button' ? 'button' : 'manual';
+  const clickedAt = typeof req.body?.clickedAt === 'string' && req.body.clickedAt.trim().length > 0
+    ? req.body.clickedAt
+    : new Date().toISOString();
+
+  if (!sessionId || !actionClicked) {
+    res.status(400).json({ ok: false, error: 'sessionId and actionClicked are required' });
+    return;
+  }
+
+  try {
+    const persistResult = await persistHealthCheckActionAuditRecord(
+      sessionId,
+      browserSessionId,
+      userId,
+      actionClicked,
+      actionFor,
+      actionSource,
+      clickedAt,
+    );
+
+    res.json({
+      ok: true,
+      persisted: persistResult.persisted,
+      table: ACTION_AUDIT_TABLE,
+      record: persistResult.record,
+      ...(persistResult.error ? { error: persistResult.error } : {}),
+    });
+  } catch (error) {
+    res.status(500).json({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Failed to write health check action audit record',
     });
   }
 });
