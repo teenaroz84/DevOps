@@ -38,7 +38,7 @@ interface ChatApiResponse {
   type?: string
   data?: any
   suggestedActions?: Array<{ label: string; action: string; icon?: string }>
-  proposed_commands?: Record<string, string>
+  proposed_commands?: Record<string, string> | Array<{ command?: string; title?: string; value?: string | number }>
 }
 
 export interface ConversationHistoryEntry {
@@ -57,14 +57,28 @@ interface HealthCheckActionAuditPayload {
 }
 
 function normaliseResponse(raw: ChatApiResponse): { text: string; type?: string; data?: any; suggestedActions?: any; suggestedActionPrompt?: string } {
-  const proposedCommandActions = raw.proposed_commands
-    ? Object.keys(raw.proposed_commands)
-        .sort((left, right) => Number(left) - Number(right))
-        .map((key) => ({
-          label: String(Number(key) + 1),
-          action: String(Number(key) + 1),
-        }))
-    : undefined
+  const proposedCommandActions = Array.isArray(raw.proposed_commands)
+    ? raw.proposed_commands
+        .filter((option) => option && option.value !== undefined && option.value !== null)
+        .map((option) => {
+          const value = String(option.value)
+          const label = typeof option.value === 'number'
+            ? String(option.value)
+            : (option.title?.trim() || value)
+
+          return {
+            label,
+            action: value,
+          }
+        })
+    : raw.proposed_commands
+      ? Object.keys(raw.proposed_commands)
+          .sort((left, right) => Number(left) - Number(right))
+          .map((key) => ({
+            label: String(Number(key) + 1),
+            action: key,
+          }))
+      : undefined
 
   const text =
     raw.answer ??
