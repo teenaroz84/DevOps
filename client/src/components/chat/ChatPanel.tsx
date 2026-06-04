@@ -171,6 +171,12 @@ function buildHealthCheckConfirmationMessage(display: string): Message {
   }
 }
 
+function isHealthCheckCancelSelection(value: string, display: string): boolean {
+  const normalizedValue = value.trim().toLowerCase()
+  const normalizedDisplay = display.trim().toLowerCase()
+  return normalizedValue === 'none' || normalizedDisplay === 'none' || normalizedDisplay.includes('cancel')
+}
+
 function isStaleHealthCheckSelectionMessage(
   message: Message,
   messages: Message[],
@@ -776,14 +782,18 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
     if (!pendingHealthCheckSelection) return
 
     const nextMessages = messages.filter((message) => message.selectionMode !== 'confirmation')
-    setConsumedHealthCheckSelectionTimestamp(pendingHealthCheckSelection.sourceTimestamp)
+    setConsumedHealthCheckSelectionTimestamp(
+      isHealthCheckCancelSelection(pendingHealthCheckSelection.value, pendingHealthCheckSelection.display)
+        ? pendingHealthCheckSelection.sourceTimestamp
+        : null,
+    )
     setPendingHealthCheckSelection(null)
     setMessages(nextMessages)
     await sendMessage(pendingHealthCheckSelection.value, nextMessages)
   }, [messages, pendingHealthCheckSelection])
 
   const cancelHealthCheckSelection = useCallback(() => {
-    setConsumedHealthCheckSelectionTimestamp(pendingHealthCheckSelection?.sourceTimestamp ?? null)
+    setConsumedHealthCheckSelectionTimestamp(null)
     setPendingHealthCheckSelection(null)
     setMessages((prev) => [
       ...prev.filter((message) => message.selectionMode !== 'confirmation'),
