@@ -5,6 +5,10 @@
  */
 import { Router, Request, Response } from 'express';
 import { getPgPool } from '../db/postgres';
+import {
+  buildIncidentLifecycleDashboardQuery,
+  buildTotalIncidentsDashboardQuery,
+} from './queries/servicenowIncidentDashboardQueries';
 
 const router = Router();
 const SN_DEFAULT_DAYS = 7;
@@ -590,6 +594,43 @@ router.get('/by-assignment-group', async (req: Request, res: Response) => {
 
 // GET /api/servicenow/platforms?days=7
 // All non-null platform names with a flag if they have any active P1/P2 incidents
+// GET /api/servicenow/incidents-dashboard-summary?platform=<value>&days=<n>
+// Summary cards for the revamped incidents overview first section
+router.get('/incidents-dashboard-summary', async (req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const platform = (req.query.platform as string | undefined)?.trim() || undefined;
+    const days = parseDays(req.query);
+    const params = platform ? [platform] : [];
+
+    const [totalsResult, lifecycleResult] = await Promise.all([
+      pool.query(buildTotalIncidentsDashboardQuery(days, Boolean(platform)), params),
+      pool.query(buildIncidentLifecycleDashboardQuery(days, Boolean(platform)), params),
+    ]);
+
+    const totals = (totalsResult.rows[0] ?? {}) as Record<string, unknown>;
+    const lifecycle = (lifecycleResult.rows[0] ?? {}) as Record<string, unknown>;
+    res.json({
+      days: days ?? 'all',
+      platform: platform ?? null,
+      total_incidents: Number(totals.total_incidents ?? 0),
+      current_90d: Number(totals.current_90d ?? 0),
+      prev_90d: Number(totals.prev_90d ?? 0),
+      new_current: Number(lifecycle.new_current ?? 0),
+      open_current: Number(lifecycle.open_current ?? 0),
+      closed_current: Number(lifecycle.closed_current ?? 0),
+      reopened_current: Number(lifecycle.reopened_current ?? 0),
+      new_prev: Number(lifecycle.new_prev ?? 0),
+      open_prev: Number(lifecycle.open_prev ?? 0),
+      closed_prev: Number(lifecycle.closed_prev ?? 0),
+      reopened_prev: Number(lifecycle.reopened_prev ?? 0),
+    });
+  } catch (err: any) {
+    console.error('ServiceNow incidents-dashboard-summary error:', err.message);
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
 // GET /api/servicenow/incident-trend?platform=<value>&days=<n>
 // Daily count of incidents by open/closed status (most recent row per incident per day)
 router.get('/incident-trend', async (req: Request, res: Response) => {

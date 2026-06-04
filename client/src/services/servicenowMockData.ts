@@ -58,6 +58,22 @@ export const MOCK_SERVICENOW_INCIDENT_SUMMARY = [
   { priority_field: 'P5', open_count: 21, closed_count: 18 },
 ]
 
+export const MOCK_SERVICENOW_INCIDENT_DASHBOARD_SUMMARY = {
+  days: 90,
+  platform: null,
+  total_incidents: 24568,
+  current_90d: 24568,
+  prev_90d: 21857,
+  new_current: 7842,
+  open_current: 9156,
+  closed_current: 7570,
+  reopened_current: 1123,
+  new_prev: 6832,
+  open_prev: 8057,
+  closed_prev: 7001,
+  reopened_prev: 973,
+}
+
 // Query 2: P3/P4 open ("missed") incident counts — bar chart
 export const MOCK_SERVICENOW_MISSED_INCIDENTS = [
   { priority_field: 'P1', incident_count: 3, breached_count: 2, response_sla: '1 Hr',  resolution_sla: '4 Hrs', details_url: 'https://example.local/sla/p1' },
