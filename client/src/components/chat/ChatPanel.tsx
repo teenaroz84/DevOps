@@ -171,8 +171,14 @@ function buildHealthCheckConfirmationMessage(display: string): Message {
   }
 }
 
-function isStaleHealthCheckSelectionMessage(message: Message, messages: Message[], hasPendingSelection: boolean): boolean {
+function isStaleHealthCheckSelectionMessage(
+  message: Message,
+  messages: Message[],
+  hasPendingSelection: boolean,
+  consumedSelectionTimestamp: number | null,
+): boolean {
   if (message.selectionMode !== 'health-check-options') return false
+  if (consumedSelectionTimestamp != null && message.timestamp === consumedSelectionTimestamp) return true
   if (hasPendingSelection) return true
 
   const latestSelectionMessage = findLatestHealthCheckSelectionMessage(messages)
@@ -438,7 +444,8 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null)
   const [inputHistory, setInputHistory] = useState<string[]>([])
   const [historyIdx, setHistoryIdx] = useState(-1)
-  const [pendingHealthCheckSelection, setPendingHealthCheckSelection] = useState<{ value: string; display: string } | null>(null)
+  const [pendingHealthCheckSelection, setPendingHealthCheckSelection] = useState<{ value: string; display: string; sourceTimestamp: number | null } | null>(null)
+  const [consumedHealthCheckSelectionTimestamp, setConsumedHealthCheckSelectionTimestamp] = useState<number | null>(null)
   const [isSessionSidebarCollapsed, setIsSessionSidebarCollapsed] = useState(false)
   const [showAllSessions, setShowAllSessions] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -755,8 +762,8 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
 
   
 
-  const requestHealthCheckConfirmation = useCallback((value: string, display: string) => {
-    setPendingHealthCheckSelection({ value, display })
+  const requestHealthCheckConfirmation = useCallback((value: string, display: string, sourceTimestamp: number | null) => {
+    setPendingHealthCheckSelection({ value, display, sourceTimestamp })
     setInput('')
     setHistoryIdx(-1)
     setMessages((prev) => [
@@ -769,12 +776,14 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
     if (!pendingHealthCheckSelection) return
 
     const nextMessages = messages.filter((message) => message.selectionMode !== 'confirmation')
+    setConsumedHealthCheckSelectionTimestamp(pendingHealthCheckSelection.sourceTimestamp)
     setPendingHealthCheckSelection(null)
     setMessages(nextMessages)
     await sendMessage(pendingHealthCheckSelection.value, nextMessages)
   }, [messages, pendingHealthCheckSelection])
 
   const cancelHealthCheckSelection = useCallback(() => {
+    setConsumedHealthCheckSelectionTimestamp(pendingHealthCheckSelection?.sourceTimestamp ?? null)
     setPendingHealthCheckSelection(null)
     setMessages((prev) => [
       ...prev.filter((message) => message.selectionMode !== 'confirmation'),
@@ -818,7 +827,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
     }
 
     if (agent.id === 'health-check' && message.selectionMode === 'health-check-options') {
-      requestHealthCheckConfirmation(action.action, action.label)
+      requestHealthCheckConfirmation(action.action, action.label, message.timestamp ?? null)
       return
     }
 
@@ -836,7 +845,11 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
         : null
 
       if (resolvedHealthCheckSelection) {
-        requestHealthCheckConfirmation(resolvedHealthCheckSelection.value, resolvedHealthCheckSelection.display)
+        requestHealthCheckConfirmation(
+          resolvedHealthCheckSelection.value,
+          resolvedHealthCheckSelection.display,
+          latestHealthCheckSelectionMessage?.timestamp ?? null,
+        )
         return
       }
 
@@ -1299,7 +1312,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
                             {msg.suggestedActionPrompt}
                           </Typography>
                         )}
-                        {isStaleHealthCheckSelectionMessage(msg, messages, !!pendingHealthCheckSelection) && (
+                        {isStaleHealthCheckSelectionMessage(msg, messages, !!pendingHealthCheckSelection, consumedHealthCheckSelectionTimestamp) && (
                           <Typography sx={{ fontSize: '11px', color: '#90a4ae', mb: 0.8, lineHeight: 1.4 }}>
                             This option set is no longer active.
                           </Typography>
@@ -1313,7 +1326,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
                               onClick={() => {
                                 handleSuggestedActionClick(msg, action)
                               }}
-                              disabled={isSessionLoading || isStaleHealthCheckSelectionMessage(msg, messages, !!pendingHealthCheckSelection)}
+                              disabled={isSessionLoading || isStaleHealthCheckSelectionMessage(msg, messages, !!pendingHealthCheckSelection, consumedHealthCheckSelectionTimestamp)}
                               sx={{
                                 fontSize: '12px',
                                 fontWeight: 500,
@@ -1721,7 +1734,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
                       onClick={() => {
                         handleSuggestedActionClick(msg, action)
                       }}
-                      disabled={isSessionLoading || isStaleHealthCheckSelectionMessage(msg, messages, !!pendingHealthCheckSelection)}
+                      disabled={isSessionLoading || isStaleHealthCheckSelectionMessage(msg, messages, !!pendingHealthCheckSelection, consumedHealthCheckSelectionTimestamp)}
                       sx={{
                         fontSize: '11px',
                         fontWeight: 500,
