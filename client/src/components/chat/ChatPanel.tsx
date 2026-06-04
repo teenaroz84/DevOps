@@ -171,6 +171,14 @@ function buildHealthCheckConfirmationMessage(display: string): Message {
   }
 }
 
+function isStaleHealthCheckSelectionMessage(message: Message, messages: Message[], hasPendingSelection: boolean): boolean {
+  if (message.selectionMode !== 'health-check-options') return false
+  if (hasPendingSelection) return true
+
+  const latestSelectionMessage = findLatestHealthCheckSelectionMessage(messages)
+  return latestSelectionMessage !== message
+}
+
 function createSessionId(scope: 'chat' | 'popup' = 'chat'): string {
   const prefix = scope === 'popup' ? 'popup-session' : 'session'
   try {
@@ -1291,6 +1299,11 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
                             {msg.suggestedActionPrompt}
                           </Typography>
                         )}
+                        {isStaleHealthCheckSelectionMessage(msg, messages, !!pendingHealthCheckSelection) && (
+                          <Typography sx={{ fontSize: '11px', color: '#90a4ae', mb: 0.8, lineHeight: 1.4 }}>
+                            This option set is no longer active.
+                          </Typography>
+                        )}
                         <Box sx={{ display: 'flex', gap: 0.8, flexWrap: 'wrap', width: '100%' }}>
                           {msg.suggestedActions.map((action, aIdx) => (
                             <Button
@@ -1300,7 +1313,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
                               onClick={() => {
                                 handleSuggestedActionClick(msg, action)
                               }}
-                              disabled={isSessionLoading}
+                              disabled={isSessionLoading || isStaleHealthCheckSelectionMessage(msg, messages, !!pendingHealthCheckSelection)}
                               sx={{
                                 fontSize: '12px',
                                 fontWeight: 500,
@@ -1708,7 +1721,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
                       onClick={() => {
                         handleSuggestedActionClick(msg, action)
                       }}
-                      disabled={isSessionLoading}
+                      disabled={isSessionLoading || isStaleHealthCheckSelectionMessage(msg, messages, !!pendingHealthCheckSelection)}
                       sx={{
                         fontSize: '11px',
                         fontWeight: 500,
