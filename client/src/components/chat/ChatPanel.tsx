@@ -94,6 +94,7 @@ interface Message {
   data?: any
   timestamp?: number
   suggestedActionPrompt?: string
+  selectionMode?: 'health-check-options' | 'confirmation'
   suggestedActions?: Array<{
     label: string
     action: string
@@ -124,6 +125,51 @@ function buildConversationHistory(messages: Message[]): ConversationHistoryEntry
 
 const FULLSCREEN_CHAT_STORAGE_PREFIX = 'dataops:fullscreen-chat:'
 const MAX_FULLSCREEN_SESSION_SUMMARIES = 8
+const HEALTH_CHECK_CONFIRM_YES = '__health_check_confirm_yes__'
+const HEALTH_CHECK_CONFIRM_NO = '__health_check_confirm_no__'
+
+function findLatestHealthCheckSelectionMessage(messages: Message[]): Message | null {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]
+    if (message.role !== 'agent') continue
+    if (message.selectionMode !== 'health-check-options') continue
+    if (!message.suggestedActions || message.suggestedActions.length === 0) continue
+    return message
+  }
+
+  return null
+}
+
+function resolveHealthCheckSelection(message: Message, rawValue: string): { value: string; display: string } | null {
+  const normalizedValue = rawValue.trim().toLowerCase()
+  if (!normalizedValue || !message.suggestedActions) return null
+
+  const match = message.suggestedActions.find((action) => {
+    const actionValue = action.action.trim().toLowerCase()
+    const actionLabel = action.label.trim().toLowerCase()
+    return normalizedValue === actionValue || normalizedValue === actionLabel
+  })
+
+  if (!match) return null
+
+  return {
+    value: match.action,
+    display: match.label,
+  }
+}
+
+function buildHealthCheckConfirmationMessage(display: string): Message {
+  return {
+    role: 'agent',
+    content: `You have selected ${display}. Are you sure you want to continue?`,
+    timestamp: Date.now(),
+    selectionMode: 'confirmation',
+    suggestedActions: [
+      { label: 'Yes', action: HEALTH_CHECK_CONFIRM_YES },
+      { label: 'No', action: HEALTH_CHECK_CONFIRM_NO },
+    ],
+  }
+}
 
 function createSessionId(scope: 'chat' | 'popup' = 'chat'): string {
   const prefix = scope === 'popup' ? 'popup-session' : 'session'
@@ -384,6 +430,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null)
   const [inputHistory, setInputHistory] = useState<string[]>([])
   const [historyIdx, setHistoryIdx] = useState(-1)
+  const [pendingHealthCheckSelection, setPendingHealthCheckSelection] = useState<{ value: string; display: string } | null>(null)
   const [isSessionSidebarCollapsed, setIsSessionSidebarCollapsed] = useState(false)
   const [showAllSessions, setShowAllSessions] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -612,13 +659,13 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
     if (hasConversationStarted) setShowQuickActions(false)
   }, [hasConversationStarted])
 
-  const sendMessage = async (messageText?: string) => {
+  const sendMessage = async (messageText?: string, baseMessages = messages) => {
     if (!activeSessionId) return
     const requestSessionId = activeSessionId
     const textToSend = messageText || input
     if (!textToSend.trim()) return
     const conversationHistory = agent.id === 'health-check'
-      ? buildConversationHistory(messages)
+      ? buildConversationHistory(baseMessages)
       : undefined
 
     const isHealthCheck = textToSend === HEALTH_CHECK_QUERY
@@ -677,6 +724,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
           data: data.data,
           timestamp: Date.now(),
           suggestedActionPrompt: (data as any).suggestedActionPrompt,
+          selectionMode: (data as any).selectionMode,
           suggestedActions: (data as any).suggestedActions,
         }
         setMessages(prev => [...prev, agentResponse])
@@ -699,10 +747,92 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
 
   
 
+  const requestHealthCheckConfirmation = useCallback((value: string, display: string) => {
+    setPendingHealthCheckSelection({ value, display })
+    setInput('')
+    setHistoryIdx(-1)
+    setMessages((prev) => [
+      ...prev.filter((message) => message.selectionMode !== 'confirmation'),
+      buildHealthCheckConfirmationMessage(display),
+    ])
+  }, [])
+
+  const confirmHealthCheckSelection = useCallback(async () => {
+    if (!pendingHealthCheckSelection) return
+
+    const nextMessages = messages.filter((message) => message.selectionMode !== 'confirmation')
+    setPendingHealthCheckSelection(null)
+    setMessages(nextMessages)
+    await sendMessage(pendingHealthCheckSelection.value, nextMessages)
+  }, [messages, pendingHealthCheckSelection])
+
+  const cancelHealthCheckSelection = useCallback(() => {
+    setPendingHealthCheckSelection(null)
+    setMessages((prev) => [
+      ...prev.filter((message) => message.selectionMode !== 'confirmation'),
+      {
+        role: 'agent',
+        content: 'Selection canceled. Choose another option or type a different value.',
+        type: 'info',
+        timestamp: Date.now(),
+      },
+    ])
+  }, [])
+
+  const handleSuggestedActionClick = useCallback((message: Message, action: NonNullable<Message['suggestedActions']>[number]) => {
+    if (action.action === 'restart_service') {
+      void sendMessage('Restart the DataOps service')
+      return
+    }
+
+    if (action.action === 'terminate_service') {
+      const termMsg: Message = {
+        role: 'agent',
+        content: 'Service terminated. You can restart it when you are ready.',
+        type: 'success',
+        timestamp: Date.now(),
+        suggestedActions: [
+          { label: '▶️ Restart Service', action: 'restart_service' }
+        ]
+      }
+      setMessages(prev => [...prev, termMsg])
+      return
+    }
+
+    if (action.action === HEALTH_CHECK_CONFIRM_YES) {
+      void confirmHealthCheckSelection()
+      return
+    }
+
+    if (action.action === HEALTH_CHECK_CONFIRM_NO) {
+      cancelHealthCheckSelection()
+      return
+    }
+
+    if (agent.id === 'health-check' && message.selectionMode === 'health-check-options') {
+      requestHealthCheckConfirmation(action.action, action.label)
+      return
+    }
+
+    void sendMessage(action.action)
+  }, [agent.id, cancelHealthCheckSelection, confirmHealthCheckSelection, requestHealthCheckConfirmation])
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      sendMessage()
+      const latestHealthCheckSelectionMessage = agent.id === 'health-check'
+        ? findLatestHealthCheckSelectionMessage(messages)
+        : null
+      const resolvedHealthCheckSelection = latestHealthCheckSelectionMessage
+        ? resolveHealthCheckSelection(latestHealthCheckSelectionMessage, input)
+        : null
+
+      if (resolvedHealthCheckSelection) {
+        requestHealthCheckConfirmation(resolvedHealthCheckSelection.value, resolvedHealthCheckSelection.display)
+        return
+      }
+
+      void sendMessage()
     } else if (e.key === 'ArrowUp' && !input) {
       e.preventDefault()
       const nextIdx = Math.min(historyIdx + 1, inputHistory.length - 1)
@@ -1168,21 +1298,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
                               size="small"
                               variant="contained"
                               onClick={() => {
-                                if (action.action === 'restart_service') {
-                                  sendMessage('Restart the DataOps service')
-                                } else if (action.action === 'terminate_service') {
-                                  const termMsg: Message = {
-                                    role: 'agent',
-                                    content: 'Service terminated. You can restart it when you are ready.',
-                                    type: 'success',
-                                    suggestedActions: [
-                                      { label: '▶️ Restart Service', action: 'restart_service' }
-                                    ]
-                                  }
-                                  setMessages(prev => [...prev, termMsg])
-                                } else {
-                                  sendMessage(action.action)
-                                }
+                                handleSuggestedActionClick(msg, action)
                               }}
                               disabled={isSessionLoading}
                               sx={{
@@ -1590,22 +1706,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
                       size="small"
                       variant="contained"
                       onClick={() => {
-                        if (action.action === 'restart_service') {
-                          sendMessage('Restart the DataOps service')
-                        } else if (action.action === 'terminate_service') {
-                          const termMsg: Message = {
-                            role: 'agent',
-                            content: 'Service terminated. You can restart it when you are ready.',
-                            type: 'success',
-                            timestamp: Date.now(),
-                            suggestedActions: [
-                              { label: '▶️ Restart Service', action: 'restart_service' }
-                            ]
-                          }
-                          setMessages(prev => [...prev, termMsg])
-                        } else {
-                          sendMessage(action.action)
-                        }
+                        handleSuggestedActionClick(msg, action)
                       }}
                       disabled={isSessionLoading}
                       sx={{

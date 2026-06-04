@@ -56,15 +56,16 @@ interface HealthCheckActionAuditPayload {
   clickedAt: string
 }
 
-function normaliseResponse(raw: ChatApiResponse): { text: string; type?: string; data?: any; suggestedActions?: any; suggestedActionPrompt?: string } {
+function normaliseResponse(raw: ChatApiResponse): { text: string; type?: string; data?: any; suggestedActions?: any; suggestedActionPrompt?: string; selectionMode?: 'health-check-options' } {
   const proposedCommandActions = Array.isArray(raw.proposed_commands)
     ? raw.proposed_commands
         .filter((option) => option && option.value !== undefined && option.value !== null)
         .map((option) => {
           const value = String(option.value)
-          const label = typeof option.value === 'number'
-            ? String(option.value)
-            : (option.title?.trim() || value)
+          const normalizedValue = value.trim().toLowerCase()
+          const label = normalizedValue === 'all' || normalizedValue === 'none'
+            ? (option.title?.trim() || value)
+            : value
 
           return {
             label,
@@ -97,6 +98,7 @@ function normaliseResponse(raw: ChatApiResponse): { text: string; type?: string;
     suggestedActionPrompt: proposedCommandActions
       ? 'Select one of the options below, or type all or none.'
       : undefined,
+    selectionMode: proposedCommandActions ? 'health-check-options' : undefined,
   }
 }
 
