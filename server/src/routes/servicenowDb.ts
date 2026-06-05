@@ -6,6 +6,8 @@
 import { Router, Request, Response } from 'express';
 import { getPgPool } from '../db/postgres';
 import {
+  buildIncidentStateOverTimeDailyStackedBarQuery,
+  buildIncidentTrendDailyLineQuery,
   buildIncidentLifecycleDashboardQuery,
   buildTotalIncidentsDashboardQuery,
 } from './queries/servicenowIncidentDashboardQueries';
@@ -636,44 +638,10 @@ router.get('/incidents-dashboard-summary', async (req: Request, res: Response) =
 router.get('/incident-trend', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
-    const days = parseDays(req.query);
-    const lastUpdatedClause = days === null
-      ? ''
-      : `WHERE  sn.sninc_last_updt_dttm::timestamp >= NOW() - INTERVAL '${days} days'`;
-    const platform = req.query.platform as string | undefined;
-    const platformClause = platform
-      ? `${days === null ? 'WHERE' : 'AND'} sn.sninc_applkp_pltf_nm = $1`
-      : '';
-    const params = platform ? [platform] : [];
-    const result = await pool.query(`
-      SELECT
-        TO_CHAR(day, 'YYYY-MM-DD') AS day,
-        SUM(CASE WHEN is_open THEN 1 ELSE 0 END)::int   AS open_count,
-        SUM(CASE WHEN NOT is_open THEN 1 ELSE 0 END)::int AS closed_count,
-        SUM(CASE WHEN is_priority_1_2 THEN 1 ELSE 0 END)::int AS p1_p2_count,
-        COUNT(*)::int                                     AS total_count
-      FROM (
-        SELECT DISTINCT ON (sn.sninc_inc_num, DATE(sn.sninc_last_updt_dttm::timestamp))
-               DATE(sn.sninc_last_updt_dttm::timestamp) AS day,
-               sg.short_priority IN ('P1', 'P2') AS is_priority_1_2,
-               COALESCE(LOWER(TRIM(sn.sninc_state)), '') NOT IN
-                 ('closed','resolved','canceled') AS is_open
-        FROM   edoops.service_now_inc sn
-        LEFT JOIN edoops.sla_glossary sg
-          ON sn.sninc_priority = sg.snow_priority
-        ${lastUpdatedClause}
-          ${platformClause}
-        ORDER BY sn.sninc_inc_num, DATE(sn.sninc_last_updt_dttm::timestamp), sn.sninc_last_updt_dttm DESC
-      ) latest_per_day
-      GROUP BY day
-      ORDER BY day
-    `, params);
+    const result = await pool.query(buildIncidentTrendDailyLineQuery());
     res.json(result.rows.map((r: any) => ({
-      day:          r.day ?? null,
-      open:         r.open_count,
-      closed:       r.closed_count,
-      p1p2:         r.p1_p2_count,
-      total:        r.total_count,
+      day: r.incident_date ?? null,
+      total: Number(r.incident_count ?? 0),
     })));
   } catch (err: any) {
     console.error('ServiceNow incident-trend error:', err.message);
@@ -686,44 +654,13 @@ router.get('/incident-trend', async (req: Request, res: Response) => {
 router.get('/incident-state-daily', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
-    const days = parseDays(req.query);
-    const lastUpdatedClause = days === null
-      ? ''
-      : `WHERE sn.sninc_last_updt_dttm::timestamp >= NOW() - INTERVAL '${days} days'`;
-    const platform = req.query.platform as string | undefined;
-    const platformClause = platform
-      ? `${days === null ? 'WHERE' : 'AND'} sn.sninc_applkp_pltf_nm = $1`
-      : '';
-    const params = platform ? [platform] : [];
-    const result = await pool.query(`
-      SELECT
-        TO_CHAR(day, 'YYYY-MM-DD') AS day,
-        SUM(CASE WHEN state_bucket = 'new' THEN 1 ELSE 0 END)::int AS new_count,
-        SUM(CASE WHEN state_bucket = 'open' THEN 1 ELSE 0 END)::int AS open_count,
-        SUM(CASE WHEN state_bucket = 'closed' THEN 1 ELSE 0 END)::int AS closed_count,
-        COUNT(*)::int AS total_count
-      FROM (
-        SELECT DISTINCT ON (sn.sninc_inc_num, DATE(sn.sninc_last_updt_dttm::timestamp))
-               DATE(sn.sninc_last_updt_dttm::timestamp) AS day,
-               CASE
-                 WHEN COALESCE(LOWER(TRIM(sn.sninc_state)), '') IN ('new', 'open') THEN 'new'
-                 WHEN COALESCE(LOWER(TRIM(sn.sninc_state)), '') IN ('in progress', 'on hold', 'onhold') THEN 'open'
-                 ELSE 'closed'
-               END AS state_bucket
-        FROM edoops.service_now_inc sn
-        ${lastUpdatedClause}
-          ${platformClause}
-        ORDER BY sn.sninc_inc_num, DATE(sn.sninc_last_updt_dttm::timestamp), sn.sninc_last_updt_dttm DESC
-      ) latest_per_day
-      GROUP BY day
-      ORDER BY day
-    `, params);
+    const result = await pool.query(buildIncidentStateOverTimeDailyStackedBarQuery());
     res.json(result.rows.map((r: any) => ({
-      day: r.day ?? null,
-      new: r.new_count,
-      open: r.open_count,
-      closed: r.closed_count,
-      total: r.total_count,
+      day: r.incident_date ?? null,
+      new: Number(r.new_count ?? 0),
+      open: Number(r.open_count ?? 0),
+      closed: Number(r.closed_count ?? 0),
+      total: Number(r.total_count ?? 0),
     })));
   } catch (err: any) {
     console.error('ServiceNow incident-state-daily error:', err.message);

@@ -124,3 +124,48 @@ ${buildPlatformFilter(hasPlatform, 1)};
 
   return applyQueryTokens(INCIDENT_LIFECYCLE_QUERY_TEMPLATE, days, hasPlatform)
 }
+
+export function buildIncidentTrendDailyLineQuery() {
+  return `
+WITH latest AS (
+  SELECT *,
+         ROW_NUMBER() OVER (
+           PARTITION BY sninc_inc_num
+           ORDER BY sninc_last_updt_dttm DESC NULLS LAST
+         ) AS rn
+  FROM edoops.service_now_inc
+)
+SELECT
+  sninc_opened_at::DATE AS incident_date,
+  COUNT(*)              AS incident_count
+FROM latest
+WHERE rn = 1
+  AND sninc_opened_at >= NOW() - INTERVAL '90 days'
+GROUP BY sninc_opened_at::DATE
+ORDER BY incident_date ASC;
+`
+}
+
+export function buildIncidentStateOverTimeDailyStackedBarQuery() {
+  return `
+WITH latest AS (
+  SELECT *,
+         ROW_NUMBER() OVER (
+           PARTITION BY sninc_inc_num
+           ORDER BY sninc_last_updt_dttm DESC NULLS LAST
+         ) AS rn
+  FROM edoops.service_now_inc
+)
+SELECT
+  sninc_opened_at::DATE                                            AS incident_date,
+  COUNT(*) FILTER (WHERE sninc_state = 'New')                      AS new_count,
+  COUNT(*) FILTER (WHERE sninc_state = 'Open')                     AS open_count,
+  COUNT(*) FILTER (WHERE sninc_state = 'Closed')                   AS closed_count,
+  COUNT(*)                                                          AS total_count
+FROM latest
+WHERE rn = 1
+  AND sninc_opened_at >= NOW() - INTERVAL '90 days'
+GROUP BY sninc_opened_at::DATE
+ORDER BY incident_date ASC;
+`
+}

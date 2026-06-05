@@ -23,7 +23,6 @@ import { TRUIST } from '../../theme/truistPalette'
 type PlatformOption = { platform: string; hasCritical: boolean }
 
 const INCIDENT_DAY_OPTIONS: ServiceNowDaysFilter[] = [30, 60, 90, 'all']
-const QUICK_PLATFORM_LIMIT = 6
 
 const KPI_CARD_STYLES: Record<string, { accent: string; bg: string; chipBg: string; chipColor: string }> = {
   total: { accent: '#0f6cbd', bg: '#f7fbff', chipBg: '#e3f2fd', chipColor: '#1565c0' },
@@ -58,21 +57,6 @@ function getXAxisInterval(length: number) {
   return Math.max(Math.ceil(length / 6) - 1, 0)
 }
 
-function calculateDelta(current: number, previous: number) {
-  if (previous === 0) return current === 0 ? 0 : 100
-  return ((current - previous) / previous) * 100
-}
-
-function formatDelta(current: number, previous: number) {
-  const delta = calculateDelta(current, previous)
-  const positive = delta >= 0
-  return {
-    label: `${positive ? '+' : '-'}${Math.abs(delta).toFixed(1)}%`,
-    color: positive ? '#2e7d32' : '#c62828',
-    bg: positive ? '#e8f5e9' : '#fdecea',
-  }
-}
-
 function formatMetric(value: number) {
   return value.toLocaleString('en-US')
 }
@@ -91,7 +75,6 @@ const MetricCard: React.FC<{
   isAllTime?: boolean
 }> = ({ title, value, currentWindowValue, previousWindowValue, subtitle, tone, isAllTime = false }) => {
   const style = KPI_CARD_STYLES[tone]
-  const delta = formatDelta(currentWindowValue, previousWindowValue)
 
   return (
     <Paper
@@ -114,7 +97,7 @@ const MetricCard: React.FC<{
         <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#3d4b5a', textTransform: 'uppercase', letterSpacing: '0.35px', lineHeight: 1.3 }}>
           {title}
         </Typography>
-        <Chip
+        {/* <Chip
           label={isAllTime ? 'All time' : delta.label}
           size="small"
           sx={{
@@ -125,7 +108,7 @@ const MetricCard: React.FC<{
             fontWeight: 800,
             '& .MuiChip-label': { px: 0.8 },
           }}
-        />
+        /> */}
       </Box>
       <Box>
         <Typography sx={{ fontSize: '24px', fontWeight: 800, color: '#102a43', letterSpacing: '-0.4px', lineHeight: 1.05 }}>
@@ -136,7 +119,7 @@ const MetricCard: React.FC<{
         </Typography>
       </Box>
       <Typography sx={{ fontSize: '9px', fontWeight: 700, color: style.chipColor, textTransform: 'uppercase', letterSpacing: '0.3px' }}>
-        {isAllTime ? 'Full history view' : `Current window ${formatMetric(currentWindowValue)} vs prior ${formatMetric(previousWindowValue)}`}
+        {isAllTime ? 'Full history view' : `${formatMetric(currentWindowValue)} vs prior ${formatMetric(previousWindowValue)}`}
       </Typography>
     </Paper>
   )
@@ -199,7 +182,6 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
       })
   }, [days, selectedPlatform, useMock])
 
-  const quickPlatforms = useMemo(() => platforms.slice(0, QUICK_PLATFORM_LIMIT), [platforms])
   const chartDonutData = useMemo(
     () => [
       { name: 'New', value: summary.new_current, color: '#ef6c00' },
@@ -217,7 +199,7 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
         value: summary.total_incidents,
         current: summary.current_90d,
         previous: summary.prev_90d,
-        subtitle: `${selectedPlatform ?? 'All platforms'} across the selected executive view`,
+        subtitle: '' /* `${selectedPlatform ?? 'All platforms'} across the selected executive view` */,
         tone: 'total' as const,
       },
       {
@@ -226,7 +208,7 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
         value: summary.new_current,
         current: summary.new_current,
         previous: summary.new_prev,
-        subtitle: isAllTime ? 'Tickets created across all available history' : `Tickets created in the last ${days} days`,
+        subtitle: '' /* isAllTime ? 'Tickets created across all available history' : `Tickets created in the last ${days} days` */,
         tone: 'new' as const,
       },
       {
@@ -244,7 +226,7 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
         value: summary.closed_current,
         current: summary.closed_current,
         previous: summary.closed_prev,
-        subtitle: isAllTime ? 'Closed-state tickets across all available history' : 'Closed-state tickets completed in the current window',
+        subtitle: '' /* isAllTime ? 'Closed-state tickets across all available history' : 'Closed-state tickets completed in the current window' */,
         tone: 'closed' as const,
       },
       {
@@ -253,7 +235,7 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
         value: summary.reopened_current,
         current: summary.reopened_current,
         previous: summary.reopened_prev,
-        subtitle: isAllTime ? 'Tickets that re-entered the queue across all available history' : 'Tickets that re-entered the queue in the current window',
+        subtitle: '' /* isAllTime ? 'Tickets that re-entered the queue across all available history' : 'Tickets that re-entered the queue in the current window' */,
         tone: 'reopened' as const,
       },
     ],
@@ -282,9 +264,9 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
                 <Typography sx={{ fontSize: '20px', fontWeight: 800, color: '#102a43', letterSpacing: '-0.3px' }}>
                   ServiceNow Incidents Overview
                 </Typography>
-                <Typography sx={{ mt: 0.4, fontSize: '12px', color: '#5b7083', maxWidth: 720 }}>
+                {/* <Typography sx={{ mt: 0.4, fontSize: '12px', color: '#5b7083', maxWidth: 720 }}>
                   First section of the incidents dashboard with executive KPIs, state mix, and volume movement. Quick filters are platform-only for now.
-                </Typography>
+                </Typography> */}
               </Box>
             </Box>
             <Chip
@@ -375,7 +357,7 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
             </Box>
           </Box>
 
-          <Box sx={{ mt: 1.5, display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
+          {/* <Box sx={{ mt: 1.5, display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
             <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#607080', textTransform: 'uppercase', letterSpacing: '0.45px' }}>
               Quick Filters
             </Typography>
@@ -411,7 +393,7 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
                 />
               )
             })}
-          </Box>
+          </Box> */}
         </Box>
 
         {loading ? (
@@ -445,7 +427,7 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.25 }}>
                   <TimelineIcon sx={{ fontSize: 18, color: '#0f6cbd' }} />
                   <Box>
-                    <Typography sx={{ fontSize: '13px', fontWeight: 800, color: '#102a43' }}>State Mix by Day</Typography>
+                    <Typography sx={{ fontSize: '13px', fontWeight: 800, color: '#102a43' }}>Incidents by State Over Time (Daily Stacked Bar)</Typography>
                     <Typography sx={{ fontSize: '11px', color: '#607080' }}>Daily stacked state composition for the selected interval</Typography>
                   </Box>
                 </Box>
@@ -482,8 +464,8 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.25 }}>
                   <TrendingUpIcon sx={{ fontSize: 18, color: '#0f6cbd' }} />
                   <Box>
-                    <Typography sx={{ fontSize: '13px', fontWeight: 800, color: '#102a43' }}>Incident Volume Trend</Typography>
-                    <Typography sx={{ fontSize: '11px', color: '#607080' }}>Daily total movement with priority 1/2 overlay kept in the same timeline</Typography>
+                    <Typography sx={{ fontSize: '13px', fontWeight: 800, color: '#102a43' }}>Incident Trend (Daily Line Chart)</Typography>
+                    <Typography sx={{ fontSize: '11px', color: '#607080' }}>Daily incident volume over the last 90 days</Typography>
                   </Box>
                 </Box>
                 <ComposedBarLineChart
@@ -492,7 +474,6 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
                   bars={[]}
                   lines={[
                     { key: 'total', label: 'Total', color: '#0f6cbd', strokeWidth: 2.5 },
-                    { key: 'p1p2', label: 'P1/P2', color: '#7b1fa2', strokeWidth: 2 },
                   ]}
                   height={228}
                   xAxisTickFormatter={formatShortDayLabel}

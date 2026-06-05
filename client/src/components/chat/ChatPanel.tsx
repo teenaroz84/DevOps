@@ -684,6 +684,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, popupMode = 'de
   const HEALTH_CHECK_QUERY = '__health_check__'
 
   const quickActions = agent.quickActions
+  const showPopupQuickActions = agent.id !== 'health-check'
   const isSessionLoading = loading && loadingSessionId === activeSessionId
   const hasConversationStarted = messages.some((msg) => msg.role === 'user') || messages.length > 1
   const visibleChatSessions = fullScreen && !showAllSessions
@@ -1818,48 +1819,50 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, popupMode = 'de
       </Box>
 
       {/* Collapsible Quick Actions */}
-      <Box sx={{ borderTop: '1px solid #f0f0f0', flexShrink: 0, backgroundColor: '#fff' }}>
-        <Box
-          onClick={() => setShowQuickActions(v => !v)}
-          sx={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            px: 1.5, py: 0.5, cursor: 'pointer',
-            '&:hover': { backgroundColor: '#f9f9f9' },
-          }}
-        >
-          <Typography sx={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', color: '#78909c' }}>
-            Quick Actions
-          </Typography>
-          {showQuickActions
-            ? <ExpandLessIcon sx={{ fontSize: 16, color: '#90a4ae' }} />
-            : <ExpandMoreIcon sx={{ fontSize: 16, color: '#90a4ae' }} />
-          }
-        </Box>
-        {showQuickActions && (
-          <Box sx={{ px: 1.5, pb: 0.75, display: 'flex', gap: 0.6, flexWrap: 'wrap' }}>
-            {quickActions.map((action, idx) => (
-              <Chip
-                key={idx}
-                label={action.label}
-                size="small"
-                onClick={() => sendMessage(action.query)}
-                disabled={isSessionLoading}
-                sx={{
-                  fontSize: '11px',
-                  height: 26,
-                  cursor: 'pointer',
-                  backgroundColor: '#e3f2fd',
-                  color: '#1565c0',
-                  border: '1px solid #bbdefb',
-                  fontWeight: 500,
-                  '&:hover': { backgroundColor: '#bbdefb' },
-                  '& .MuiChip-label': { px: 1 },
-                }}
-              />
-            ))}
+      {showPopupQuickActions && (
+        <Box sx={{ borderTop: '1px solid #f0f0f0', flexShrink: 0, backgroundColor: '#fff' }}>
+          <Box
+            onClick={() => setShowQuickActions(v => !v)}
+            sx={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              px: 1.5, py: 0.5, cursor: 'pointer',
+              '&:hover': { backgroundColor: '#f9f9f9' },
+            }}
+          >
+            <Typography sx={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', color: '#78909c' }}>
+              Quick Actions
+            </Typography>
+            {showQuickActions
+              ? <ExpandLessIcon sx={{ fontSize: 16, color: '#90a4ae' }} />
+              : <ExpandMoreIcon sx={{ fontSize: 16, color: '#90a4ae' }} />
+            }
           </Box>
-        )}
-      </Box>
+          {showQuickActions && (
+            <Box sx={{ px: 1.5, pb: 0.75, display: 'flex', gap: 0.6, flexWrap: 'wrap' }}>
+              {quickActions.map((action, idx) => (
+                <Chip
+                  key={idx}
+                  label={action.label}
+                  size="small"
+                  onClick={() => sendMessage(action.query)}
+                  disabled={isSessionLoading}
+                  sx={{
+                    fontSize: '11px',
+                    height: 26,
+                    cursor: 'pointer',
+                    backgroundColor: '#e3f2fd',
+                    color: '#1565c0',
+                    border: '1px solid #bbdefb',
+                    fontWeight: 500,
+                    '&:hover': { backgroundColor: '#bbdefb' },
+                    '& .MuiChip-label': { px: 1 },
+                  }}
+                />
+              ))}
+            </Box>
+          )}
+        </Box>
+      )}
 
       {/* Divider */}
       <Divider />
