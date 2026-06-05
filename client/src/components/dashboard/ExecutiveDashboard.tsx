@@ -30,6 +30,7 @@ import { MOCK_SF_PLATFORM_SUMMARY } from '../../services/snowflakeMockData'
 import { useMockData } from '../../context/MockDataContext'
 import { SESSION_ID } from '../../services/session'
 import { AGENTS, SOURCE_AGENT_MAP } from '../../config/agentConfig'
+import type { OpenAgentHandler } from '../../config/agentConfig'
 import { TRUIST } from '../../theme/truistPalette'
 
 // ─── Source definitions ────────────────────────────────────
@@ -878,7 +879,7 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
 interface ExecutiveDashboardProps {
   onChatClick: () => void
   /** Opens a dashboard-specific agent panel by agent ID */
-  onOpenAgent?: (agentId: string) => void
+  onOpenAgent?: OpenAgentHandler
   source?: SourceKey
   onSourceChange?: (source: SourceKey) => void
 }
@@ -891,6 +892,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onChatCl
   const active = visibleSources.find(s => s.key === source) ?? visibleSources[0]!
   const activeAgentId = SOURCE_AGENT_MAP[source] ?? 'knowledge'
   const activeAgent = AGENTS[activeAgentId] ?? AGENTS.knowledge
+  const healthCheckAgent = AGENTS['health-check']
   const showHeaderAgentButton = source === 'overview' || Boolean(onOpenAgent)
   const headerAgentLabel = source === 'overview' ? 'Ask DataOps Knowledge Assist' : `Ask ${active.label} Agent`
 
@@ -920,75 +922,144 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onChatCl
           </Typography> */}
         </Box>
         {showHeaderAgentButton && (
-          <Button
-            onClick={handleHeaderAgentClick}
-            variant="contained"
-            size="small"
-            startIcon={
-              <Box
-                sx={{
-                  width: 28,
-                  height: 28,
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+            <Button
+              onClick={handleHeaderAgentClick}
+              variant="contained"
+              size="small"
+              startIcon={
+                <Box
+                  sx={{
+                    width: 28,
+                    height: 28,
+                    borderRadius: '50%',
+                    display: 'grid',
+                    placeItems: 'center',
+                    background: `radial-gradient(circle at 30% 30%, ${TRUIST.white} 0%, ${activeAgent.color} 140%)`,
+                    boxShadow: `0 0 0 1px rgba(255,255,255,0.18), 0 8px 18px ${activeAgent.color}55`,
+                  }}
+                >
+                  <Box component="img" src={activeAgent.icon} alt={`${active.label} agent icon`} sx={{ width: 18, height: 18, borderRadius: '50%', objectFit: 'contain', display: 'block' }} />
+                </Box>
+              }
+              endIcon={<ArrowForwardIcon sx={{ fontSize: 16 }} />}
+              sx={{
+                position: 'relative',
+                overflow: 'hidden',
+                borderRadius: '999px',
+                border: '1px solid rgba(255,255,255,0.14)',
+                background: `linear-gradient(135deg, ${TRUIST.purple} 0%, #43305d 52%, ${activeAgent.color} 150%)`,
+                textTransform: 'none',
+                fontSize: '11px',
+                fontWeight: 700,
+                letterSpacing: '0.03em',
+                height: 40,
+                px: 1.6,
+                color: TRUIST.white,
+                boxShadow: `0 10px 24px rgba(12, 18, 28, 0.28), 0 0 0 1px rgba(255,255,255,0.05), 0 0 24px ${activeAgent.color}35`,
+                backdropFilter: 'blur(10px)',
+                '& .MuiButton-startIcon': {
+                  mr: 1,
+                },
+                '& .MuiButton-endIcon': {
+                  ml: 0.75,
+                },
+                '&::before': {
+                  content: '""',
+                  position: 'absolute',
+                  inset: 1,
+                  borderRadius: '999px',
+                  background: 'linear-gradient(135deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.02) 45%, transparent 70%)',
+                  pointerEvents: 'none',
+                },
+                '&::after': {
+                  content: '""',
+                  position: 'absolute',
+                  top: -24,
+                  right: -8,
+                  width: 68,
+                  height: 68,
                   borderRadius: '50%',
-                  display: 'grid',
-                  placeItems: 'center',
-                  background: `radial-gradient(circle at 30% 30%, ${TRUIST.white} 0%, ${activeAgent.color} 140%)`,
-                  boxShadow: `0 0 0 1px rgba(255,255,255,0.18), 0 8px 18px ${activeAgent.color}55`,
+                  background: `radial-gradient(circle, ${activeAgent.color}55 0%, transparent 72%)`,
+                  pointerEvents: 'none',
+                },
+                '&:hover': {
+                  transform: 'translateY(-1px)',
+                  boxShadow: `0 14px 28px rgba(12, 18, 28, 0.34), 0 0 0 1px rgba(255,255,255,0.05), 0 0 30px ${activeAgent.color}55`,
+                  background: `linear-gradient(135deg, #372356 0%, ${TRUIST.purple} 48%, ${activeAgent.color} 150%)`,
+                },
+              }}
+            >
+              {headerAgentLabel}
+            </Button>
+            {source === 'logs' && onOpenAgent && (
+              <Button
+                onClick={() => onOpenAgent('health-check', { popupMode: 'maximized' })}
+                variant="contained"
+                size="small"
+                startIcon={
+                  <Box
+                    sx={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: '50%',
+                      display: 'grid',
+                      placeItems: 'center',
+                      background: `radial-gradient(circle at 30% 30%, ${TRUIST.white} 0%, ${healthCheckAgent.color} 140%)`,
+                      boxShadow: `0 0 0 1px rgba(255,255,255,0.18), 0 8px 18px ${healthCheckAgent.color}55`,
+                    }}
+                  >
+                    <Box component="img" src={healthCheckAgent.icon} alt="Talend health check agent icon" sx={{ width: 18, height: 18, borderRadius: '50%', objectFit: 'contain', display: 'block' }} />
+                  </Box>
+                }
+                sx={{
+                  position: 'relative',
+                  overflow: 'hidden',
+                  borderRadius: '999px',
+                  border: '1px solid rgba(255,255,255,0.14)',
+                  background: `linear-gradient(135deg, ${healthCheckAgent.color} 0%, #184651 52%, #6ba7b4 150%)`,
+                  textTransform: 'none',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  letterSpacing: '0.03em',
+                  height: 40,
+                  px: 1.6,
+                  color: TRUIST.white,
+                  boxShadow: `0 10px 24px rgba(12, 18, 28, 0.28), 0 0 0 1px rgba(255,255,255,0.05), 0 0 24px ${healthCheckAgent.color}35`,
+                  backdropFilter: 'blur(10px)',
+                  '& .MuiButton-startIcon': {
+                    mr: 1,
+                  },
+                  '&::before': {
+                    content: '""',
+                    position: 'absolute',
+                    inset: 1,
+                    borderRadius: '999px',
+                    background: 'linear-gradient(135deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.02) 45%, transparent 70%)',
+                    pointerEvents: 'none',
+                  },
+                  '&::after': {
+                    content: '""',
+                    position: 'absolute',
+                    top: -24,
+                    right: -8,
+                    width: 68,
+                    height: 68,
+                    borderRadius: '50%',
+                    background: `radial-gradient(circle, ${healthCheckAgent.color}55 0%, transparent 72%)`,
+                    pointerEvents: 'none',
+                  },
+                  '&:hover': {
+                    transform: 'translateY(-1px)',
+                    boxShadow: `0 14px 28px rgba(12, 18, 28, 0.34), 0 0 0 1px rgba(255,255,255,0.05), 0 0 30px ${healthCheckAgent.color}55`,
+                    background: `linear-gradient(135deg, #123841 0%, ${healthCheckAgent.color} 48%, #8dc7d2 150%)`,
+                  },
                 }}
               >
-                <Box component="img" src={activeAgent.icon} alt={`${active.label} agent icon`} sx={{ width: 18, height: 18, borderRadius: '50%', objectFit: 'contain', display: 'block' }} />
-              </Box>
-            }
-            endIcon={<ArrowForwardIcon sx={{ fontSize: 16 }} />}
-            sx={{
-              position: 'relative',
-              overflow: 'hidden',
-              borderRadius: '999px',
-              border: '1px solid rgba(255,255,255,0.14)',
-              background: `linear-gradient(135deg, ${TRUIST.purple} 0%, #43305d 52%, ${activeAgent.color} 150%)`,
-              textTransform: 'none',
-              fontSize: '11px',
-              fontWeight: 700,
-              letterSpacing: '0.03em',
-              height: 40,
-              px: 1.6,
-              color: TRUIST.white,
-              boxShadow: `0 10px 24px rgba(12, 18, 28, 0.28), 0 0 0 1px rgba(255,255,255,0.05), 0 0 24px ${activeAgent.color}35`,
-              backdropFilter: 'blur(10px)',
-              '& .MuiButton-startIcon': {
-                mr: 1,
-              },
-              '& .MuiButton-endIcon': {
-                ml: 0.75,
-              },
-              '&::before': {
-                content: '""',
-                position: 'absolute',
-                inset: 1,
-                borderRadius: '999px',
-                background: 'linear-gradient(135deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.02) 45%, transparent 70%)',
-                pointerEvents: 'none',
-              },
-              '&::after': {
-                content: '""',
-                position: 'absolute',
-                top: -24,
-                right: -8,
-                width: 68,
-                height: 68,
-                borderRadius: '50%',
-                background: `radial-gradient(circle, ${activeAgent.color}55 0%, transparent 72%)`,
-                pointerEvents: 'none',
-              },
-              '&:hover': {
-                transform: 'translateY(-1px)',
-                boxShadow: `0 14px 28px rgba(12, 18, 28, 0.34), 0 0 0 1px rgba(255,255,255,0.05), 0 0 30px ${activeAgent.color}55`,
-                background: `linear-gradient(135deg, #372356 0%, ${TRUIST.purple} 48%, ${activeAgent.color} 150%)`,
-              },
-            }}
-          >
-            {headerAgentLabel}
-          </Button>
+                Talend Health Check
+              </Button>
+            )}
+          </Box>
         )}
       </Box>
 

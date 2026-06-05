@@ -37,7 +37,7 @@ import { chatService } from '../../services'
 import { getAuthenticatedUserId } from '../../services/auth'
 import { SESSION_ID } from '../../services/session'
 import { AGENTS } from '../../config/agentConfig'
-import type { AgentConfig } from '../../config/agentConfig'
+import type { AgentConfig, AgentPopupMode } from '../../config/agentConfig'
 import type { ConversationHistoryEntry } from '../../services/chatService'
 // import { sessionStore } from '../../services/sessionStore'
 import { FormattedMessage } from './FormattedMessage'
@@ -255,6 +255,7 @@ interface ChatPanelProps {
   isOpen: boolean
   onClose: () => void
   fullScreen?: boolean
+  popupMode?: AgentPopupMode
   /** When provided, the panel operates as a dashboard-specific agent */
   agentConfig?: AgentConfig
 }
@@ -267,7 +268,7 @@ const DEFAULT_WELCOME: Message = {
   type: 'info',
 }
 
-export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: ChatPanelProps) {
+export function ChatPanel({ isOpen, onClose, fullScreen = false, popupMode = 'default', agentConfig }: ChatPanelProps) {
   const PANEL_MARGIN = 24
   const MIN_PANEL_WIDTH = 400
   const MAX_PANEL_WIDTH = Number.MAX_SAFE_INTEGER
@@ -298,11 +299,13 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
     />
     )
   }
+  const isMaximizedPopup = !fullScreen && popupMode === 'maximized'
   const [input, setInput] = useState('')
-  const [expanded, setExpanded] = useState(false)
+  const [expanded, setExpanded] = useState(isMaximizedPopup)
   const [showQuickActions, setShowQuickActions] = useState(true)
   const [panelPosition, setPanelPosition] = useState(() => {
     if (typeof window === 'undefined' || fullScreen) return { x: PANEL_MARGIN, y: PANEL_MARGIN }
+    if (popupMode === 'maximized') return { x: PANEL_MARGIN, y: PANEL_MARGIN }
     if (window.innerWidth <= 600) return { x: 0, y: 0 }
     const defaultWidth = 440
     const defaultHeight = Math.min(window.innerHeight - PANEL_MARGIN * 2, 820)
@@ -459,6 +462,12 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
   const [panelSize, setPanelSize] = useState(() => {
     const fallback = { width: 440, height: 780 }
     if (typeof window === 'undefined') return fallback
+    if (popupMode === 'maximized') {
+      return {
+        width: Math.max(MIN_PANEL_WIDTH, window.innerWidth - PANEL_MARGIN * 2),
+        height: Math.max(MIN_PANEL_HEIGHT, window.innerHeight - PANEL_MARGIN * 2),
+      }
+    }
     return {
       width: fallback.width,
       height: Math.min(window.innerHeight - PANEL_MARGIN * 2, 820),
@@ -498,6 +507,10 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
       setPanelPosition(prev => (prev.x === 0 && prev.y === 0 ? prev : { x: 0, y: 0 }))
       return
     }
+    if (isMaximizedPopup) {
+      setPanelPosition(prev => (prev.x === PANEL_MARGIN && prev.y === PANEL_MARGIN ? prev : { x: PANEL_MARGIN, y: PANEL_MARGIN }))
+      return
+    }
     setPanelPosition(prev => {
       const defaultX = window.innerWidth - panelWidth - PANEL_MARGIN
       const defaultY = Math.max(PANEL_MARGIN, Math.round((window.innerHeight - panelHeight) / 2))
@@ -508,20 +521,25 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
       const next = clampPanelPosition(prev.x, prev.y)
       return next.x === prev.x && next.y === prev.y ? prev : next
     })
-  }, [clampPanelPosition, fullScreen, isMobileViewport, panelHeight, panelWidth])
+  }, [PANEL_MARGIN, clampPanelPosition, fullScreen, isMaximizedPopup, isMobileViewport, panelHeight, panelWidth])
 
   useEffect(() => {
     if (typeof window === 'undefined' || fullScreen || isMobileViewport) return
     const maxHeightInViewport = Math.min(window.innerHeight, MAX_PANEL_HEIGHT)
-    const targetWidth = expanded ? 760 : 440
+    const targetWidth = isMaximizedPopup
+      ? window.innerWidth - PANEL_MARGIN * 2
+      : expanded ? 760 : 440
+    const targetHeight = isMaximizedPopup
+      ? window.innerHeight - PANEL_MARGIN * 2
+      : Math.min(Math.max(panelSize.height, MIN_PANEL_HEIGHT), maxHeightInViewport)
     setPanelSize(prev => {
       const nextWidth = Math.min(Math.max(targetWidth, MIN_PANEL_WIDTH), MAX_PANEL_WIDTH)
-      const nextHeight = Math.min(Math.max(prev.height, MIN_PANEL_HEIGHT), maxHeightInViewport)
+      const nextHeight = Math.min(Math.max(targetHeight, MIN_PANEL_HEIGHT), maxHeightInViewport)
       return prev.width === nextWidth && prev.height === nextHeight
         ? prev
         : { width: nextWidth, height: nextHeight }
     })
-  }, [expanded, fullScreen, isMobileViewport])
+  }, [PANEL_MARGIN, expanded, fullScreen, isMaximizedPopup, isMobileViewport, panelSize.height])
 
   useEffect(() => {
     if (fullScreen || isMobileViewport || !dragging) return
@@ -610,7 +628,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
   }, [fullScreen, isMobileViewport, resizing])
 
   const handleDragStart = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (fullScreen || isMobileViewport) return
+    if (fullScreen || isMobileViewport || isMaximizedPopup) return
     const target = event.target as HTMLElement
     if (target.closest('button') || target.closest('input') || target.closest('textarea')) return
     dragRef.current = {
@@ -623,7 +641,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
   }
 
   const handleResizeStart = (direction: ResizeDirection) => (event: React.MouseEvent<HTMLDivElement>) => {
-    if (fullScreen || isMobileViewport) return
+    if (fullScreen || isMobileViewport || isMaximizedPopup) return
     event.preventDefault()
     event.stopPropagation()
     resizeRef.current = {
@@ -1612,11 +1630,13 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
               ↺ Clear
             </Button>
           )}
-          <Tooltip title={expanded ? 'Collapse panel' : 'Expand panel'} placement="bottom">
-            <IconButton size="small" onClick={() => setExpanded(e => !e)} sx={{ color: headerTextColor }}>
-              {expanded ? <CloseFullscreenIcon sx={{ fontSize: 18 }} /> : <OpenInFullIcon sx={{ fontSize: 18 }} />}
-            </IconButton>
-          </Tooltip>
+          {!isMaximizedPopup && (
+            <Tooltip title={expanded ? 'Collapse panel' : 'Expand panel'} placement="bottom">
+              <IconButton size="small" onClick={() => setExpanded(e => !e)} sx={{ color: headerTextColor }}>
+                {expanded ? <CloseFullscreenIcon sx={{ fontSize: 18 }} /> : <OpenInFullIcon sx={{ fontSize: 18 }} />}
+              </IconButton>
+            </Tooltip>
+          )}
           <IconButton size="small" onClick={onClose} sx={{ color: headerTextColor }}>
             <CloseIcon />
           </IconButton>
@@ -1905,7 +1925,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, agentConfig }: 
         </Typography>
       </Box>
 
-      {!fullScreen && !isMobileViewport && (
+      {!fullScreen && !isMobileViewport && !isMaximizedPopup && (
         <>
           <Box onMouseDown={handleResizeStart('top')} sx={{ position: 'absolute', top: 0, left: 10, right: 10, height: 8, cursor: 'ns-resize' }} />
           <Box onMouseDown={handleResizeStart('right')} sx={{ position: 'absolute', top: 10, right: 0, bottom: 10, width: 8, cursor: 'ew-resize' }} />

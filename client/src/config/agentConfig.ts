@@ -40,6 +40,14 @@ export interface AgentConfig {
   quickActions: Array<{ label: string; query: string }>
 }
 
+export type AgentPopupMode = 'default' | 'maximized'
+
+export interface AgentLaunchOptions {
+  popupMode?: AgentPopupMode
+}
+
+export type OpenAgentHandler = (agentId: string, options?: AgentLaunchOptions) => void
+
 export type FullscreenAgentMenuId =
   | 'chat'
   | 'health-check'
@@ -195,7 +203,6 @@ export const FULLSCREEN_AGENT_MENUS: Array<{
   label: string
   mockOnly?: boolean
 }> = [
-  { menuId: 'health-check',    agentId: 'health-check', label: 'Health Check Agent' },
   { menuId: 'chat',            agentId: 'knowledge',  label: 'TDT Knowledge Assist' },
   { menuId: 'servicenow-chat', agentId: 'servicenow', label: 'TDT ServiceNow Agent' },
   { menuId: 'talend-chat',     agentId: 'talend',     label: 'TDT Talend Agent' },

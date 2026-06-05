@@ -9,7 +9,7 @@ import { UserPreferences, WidgetPreferences } from './components/settings/UserPr
 import { ExecutiveDashboard, type SourceKey } from './components/dashboard/ExecutiveDashboard'
 import ExecutiveDashboardEnhanced from './components/dashboard/ExecutiveDashboardEnhanced'
 import { MockDataProvider } from './context/MockDataContext'
-import { AGENTS, FULLSCREEN_AGENT_MENUS, type FullscreenAgentMenuId } from './config/agentConfig'
+import { AGENTS, FULLSCREEN_AGENT_MENUS, type AgentLaunchOptions, type FullscreenAgentMenuId } from './config/agentConfig'
 import { authService, type AuthSession } from './services/auth'
 import { APP_COLORS } from './theme/truistPalette'
 
@@ -71,16 +71,17 @@ function App() {
   const [authSession, setAuthSession] = useState<AuthSession | null>(() => authService.getSession())
   const isLoginRoute = typeof window !== 'undefined' && window.location.pathname === '/login'
   const [activeMenu, setActiveMenu] = useState<'dashboard' | 'preferences' | 'executive' | 'quicksight-demo' | FullscreenAgentMenuId>('executive')
-  // null = closed; 'knowledge' | 'esp' | 'dmf' | etc = open panel for that agent
-  const [openAgentId, setOpenAgentId] = useState<string | null>(null)
+  const [openAgent, setOpenAgent] = useState<{ id: string; popupMode?: AgentLaunchOptions['popupMode'] } | null>(null)
   const [executiveSource, setExecutiveSource] = useState<SourceKey>('overview')
   const [preferences, setPreferences] = useState<WidgetPreferences>(DEFAULT_PREFERENCES)
   const [widgetOrder, setWidgetOrder] = useState<string[]>(DEFAULT_WIDGET_ORDER)
   const activeBrowserSessionId = authSession?.sessionId
 
-  const handleOpenAgent = useCallback((agentId: string) => setOpenAgentId(agentId), [])
-  const handleCloseAgent = useCallback(() => setOpenAgentId(null), [])
-  const handleChatClick = useCallback(() => setOpenAgentId('knowledge'), [])
+  const handleOpenAgent = useCallback((agentId: string, options?: AgentLaunchOptions) => {
+    setOpenAgent({ id: agentId, popupMode: options?.popupMode })
+  }, [])
+  const handleCloseAgent = useCallback(() => setOpenAgent(null), [])
+  const handleChatClick = useCallback(() => setOpenAgent({ id: 'knowledge' }), [])
   const handleLogin = useCallback((session: AuthSession) => {
     setAuthSession(session)
     if (typeof window !== 'undefined' && window.location.pathname === '/login') {
@@ -89,7 +90,7 @@ function App() {
   }, [])
   const handleLogout = useCallback(() => {
     authService.logout()
-    setOpenAgentId(null)
+    setOpenAgent(null)
     setActiveMenu('executive')
     setAuthSession(null)
     if (typeof window !== 'undefined') {
@@ -210,10 +211,11 @@ function App() {
           </Box>
 
           {/* Floating dashboard-specific or global agent panel */}
-          {openAgentId && (
+          {openAgent && (
             <ChatPanel
               isOpen={true}
-              agentConfig={AGENTS[openAgentId] ?? AGENTS.knowledge}
+              agentConfig={AGENTS[openAgent.id] ?? AGENTS.knowledge}
+              popupMode={openAgent.popupMode}
               onClose={handleCloseAgent}
             />
           )}
