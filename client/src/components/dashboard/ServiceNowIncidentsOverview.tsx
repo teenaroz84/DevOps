@@ -295,7 +295,7 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
         value: summary.open_current,
         current: summary.open_current,
         previous: summary.open_prev,
-        subtitle: isAllTime ? 'Open-state tickets across all available history' : 'Open-state tickets still active in the current window',
+        subtitle: ''/* isAllTime ? 'Open-state tickets across all available history' : 'Open-state tickets still active in the current window' */,
         tone: 'open' as const,
       },
       {
@@ -523,7 +523,7 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
                   <TimelineIcon sx={{ fontSize: 18, color: '#0f6cbd' }} />
                   <Box>
                     <Typography sx={{ fontSize: '13px', fontWeight: 800, color: '#102a43' }}>Incidents by State Over Time (Daily Stacked Bar)</Typography>
-                    <Typography sx={{ fontSize: '11px', color: '#607080' }}>Daily stacked state composition for the selected interval</Typography>
+                    {/* <Typography sx={{ fontSize: '11px', color: '#607080' }}>Daily stacked state composition for the selected interval</Typography> */}
                   </Box>
                 </Box>
                 <ComposedBarLineChart
@@ -547,7 +547,7 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
                   <DonutLargeIcon sx={{ fontSize: 18, color: TRUIST.dusk }} />
                   <Box>
                     <Typography sx={{ fontSize: '13px', fontWeight: 800, color: '#102a43' }}>Current State Breakdown</Typography>
-                    <Typography sx={{ fontSize: '11px', color: '#607080' }}>New, open, and closed incident mix in the active window</Typography>
+                    {/* <Typography sx={{ fontSize: '11px', color: '#607080' }}>New, open, and closed incident mix in the active window</Typography> */}
                   </Box>
                 </Box>
                 <Box sx={{ display: 'flex', justifyContent: 'center', pt: 1 }}>
@@ -560,7 +560,7 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
                   <TrendingUpIcon sx={{ fontSize: 18, color: '#0f6cbd' }} />
                   <Box>
                     <Typography sx={{ fontSize: '13px', fontWeight: 800, color: '#102a43' }}>Incident Trend (Daily Line Chart)</Typography>
-                    <Typography sx={{ fontSize: '11px', color: '#607080' }}>Daily incident volume over the last 90 days</Typography>
+                    {/* <Typography sx={{ fontSize: '11px', color: '#607080' }}>Daily incident volume over the last 90 days</Typography> */}
                   </Box>
                 </Box>
                 <ComposedBarLineChart
@@ -578,25 +578,37 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
               </Paper>
             </Box>
 
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr 1fr 1fr' }, gap: 1.1, alignItems: 'stretch' }}>
-              <Paper elevation={0} sx={{ borderRadius: 2.5, border: '1px solid #e6ebf2', p: 1.6, boxShadow: '0 8px 18px rgba(15, 23, 42, 0.04)' }}>
-                <Typography sx={{ fontSize: '14px', fontWeight: 800, color: '#102a43', mb: 1 }}>By Assignment Group (Top 10)</Typography>
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: {
+                  xs: '1fr',
+                  md: 'repeat(2, minmax(0, 1fr))',
+                  lg: 'minmax(0, 0.9fr) minmax(0, 0.9fr) minmax(0, 0.88fr) minmax(0, 1.02fr)',
+                  xl: 'minmax(0, 0.95fr) minmax(0, 0.95fr) minmax(0, 0.9fr) minmax(0, 1.08fr)',
+                },
+                gap: { xs: 1.1, lg: 0.85, xl: 1.1 },
+                alignItems: 'stretch',
+              }}
+            >
+              <Paper elevation={0} sx={{ minWidth: 0, borderRadius: 2.5, border: '1px solid #e6ebf2', p: { xs: 1.6, lg: 1.2, xl: 1.45 }, boxShadow: '0 8px 18px rgba(15, 23, 42, 0.04)' }}>
+                <Typography sx={{ fontSize: { xs: '14px', lg: '13px' }, fontWeight: 800, color: '#102a43', mb: 0.8 }}>By Assignment Group (Top 10)</Typography>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 1, lg: 0.78 } }}>
                   {assignmentTop10.map((row) => {
                     const max = Number(row.max_count || 1)
                     const value = Number(row.incident_count || 0)
                     const widthPct = Math.min((value / max) * 100, 100)
                     return (
                       <Box key={row.assignment_group}>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, mb: 0.2 }}>
-                          <Typography sx={{ fontSize: '11px', color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 0.8, mb: 0.15 }}>
+                          <Typography sx={{ fontSize: { xs: '11px', lg: '10px' }, color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {row.assignment_group}
                           </Typography>
-                          <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#0f6cbd' }}>
+                          <Typography sx={{ fontSize: { xs: '11px', lg: '10px' }, fontWeight: 700, color: '#0f6cbd' }}>
                             {formatMetric(value)}
                           </Typography>
                         </Box>
-                        <Box sx={{ height: 7, borderRadius: 4, backgroundColor: '#eaf1fb', overflow: 'hidden' }}>
+                        <Box sx={{ height: { xs: 7, lg: 6 }, borderRadius: 4, backgroundColor: '#eaf1fb', overflow: 'hidden' }}>
                           <Box sx={{ height: '100%', width: `${widthPct}%`, borderRadius: 4, backgroundColor: '#2f6bd2' }} />
                         </Box>
                       </Box>
@@ -605,24 +617,24 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
                 </Box>
               </Paper>
 
-              <Paper elevation={0} sx={{ borderRadius: 2.5, border: '1px solid #e6ebf2', p: 1.6, boxShadow: '0 8px 18px rgba(15, 23, 42, 0.04)' }}>
-                <Typography sx={{ fontSize: '14px', fontWeight: 800, color: '#102a43', mb: 1 }}>By Platform (Top 10)</Typography>
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <Paper elevation={0} sx={{ minWidth: 0, borderRadius: 2.5, border: '1px solid #e6ebf2', p: { xs: 1.6, lg: 1.2, xl: 1.45 }, boxShadow: '0 8px 18px rgba(15, 23, 42, 0.04)' }}>
+                <Typography sx={{ fontSize: { xs: '14px', lg: '13px' }, fontWeight: 800, color: '#102a43', mb: 0.8 }}>By Platform (Top 10)</Typography>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 1, lg: 0.78 } }}>
                   {platformAppTop10.map((row) => {
                     const max = Math.max(...platformAppTop10.map((item) => Number(item.total_count || 0)), 1)
                     const value = Number(row.total_count || 0)
                     const widthPct = Math.min((value / max) * 100, 100)
                     return (
                       <Box key={row.platform_app}>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, mb: 0.2 }}>
-                          <Typography sx={{ fontSize: '11px', color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 0.8, mb: 0.15 }}>
+                          <Typography sx={{ fontSize: { xs: '11px', lg: '10px' }, color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {row.platform_app}
                           </Typography>
-                          <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#6d5bd0' }}>
+                          <Typography sx={{ fontSize: { xs: '11px', lg: '10px' }, fontWeight: 700, color: '#6d5bd0' }}>
                             {formatMetric(value)}
                           </Typography>
                         </Box>
-                        <Box sx={{ height: 7, borderRadius: 4, backgroundColor: '#f0edfe', overflow: 'hidden' }}>
+                        <Box sx={{ height: { xs: 7, lg: 6 }, borderRadius: 4, backgroundColor: '#f0edfe', overflow: 'hidden' }}>
                           <Box sx={{ height: '100%', width: `${widthPct}%`, borderRadius: 4, backgroundColor: '#6d5bd0' }} />
                         </Box>
                       </Box>
@@ -631,45 +643,45 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
                 </Box>
               </Paper>
 
-              <Paper elevation={0} sx={{ borderRadius: 2.5, border: '1px solid #e6ebf2', p: 1.6, boxShadow: '0 8px 18px rgba(15, 23, 42, 0.04)' }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.8 }}>
-                  <Typography sx={{ fontSize: '14px', fontWeight: 800, color: '#102a43' }}>Incidents by Priority</Typography>
-                  <Typography sx={{ fontSize: '11px', color: '#607080' }}>All open</Typography>
+              <Paper elevation={0} sx={{ minWidth: 0, borderRadius: 2.5, border: '1px solid #e6ebf2', p: { xs: 1.6, lg: 1.15, xl: 1.4 }, boxShadow: '0 8px 18px rgba(15, 23, 42, 0.04)' }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.6 }}>
+                  <Typography sx={{ fontSize: { xs: '14px', lg: '13px' }, fontWeight: 800, color: '#102a43' }}>Incidents by Priority</Typography>
+                  <Typography sx={{ fontSize: { xs: '11px', lg: '10px' }, color: '#607080' }}>All open</Typography>
                 </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'center', py: 0.25 }}>
-                  <DonutChart data={priorityDonutSlices} centerLabel={totalPriorityIncidents} size={156} innerRadius={34} outerRadius={56} />
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 0.15 }}>
+                  <DonutChart data={priorityDonutSlices} centerLabel={totalPriorityIncidents} size={138} innerRadius={30} outerRadius={49} />
                 </Box>
-                <Box sx={{ mt: 0.6, display: 'flex', flexDirection: 'column', gap: 0.45 }}>
+                <Box sx={{ mt: 0.35, display: 'flex', flexDirection: 'column', gap: 0.35 }}>
                   {priorityDonut.map((row) => (
-                    <Box key={row.priority} sx={{ display: 'grid', gridTemplateColumns: '1fr auto auto', alignItems: 'center', gap: 1 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, minWidth: 0 }}>
-                        <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: PRIORITY_RING_COLORS[row.priority] ?? '#78909c' }} />
-                        <Typography sx={{ fontSize: '11px', color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <Box key={row.priority} sx={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto auto', alignItems: 'center', gap: 0.65 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.45, minWidth: 0 }}>
+                        <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: PRIORITY_RING_COLORS[row.priority] ?? '#78909c' }} />
+                        <Typography sx={{ fontSize: { xs: '11px', lg: '10px' }, color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {row.priority}
                         </Typography>
                       </Box>
-                      <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#102a43' }}>{formatMetric(Number(row.incident_count || 0))}</Typography>
-                      <Typography sx={{ fontSize: '11px', color: '#607080' }}>{Number(row.pct_of_total || 0).toFixed(1)}%</Typography>
+                      <Typography sx={{ fontSize: { xs: '11px', lg: '10px' }, fontWeight: 700, color: '#102a43' }}>{formatMetric(Number(row.incident_count || 0))}</Typography>
+                      <Typography sx={{ fontSize: { xs: '11px', lg: '10px' }, color: '#607080' }}>{Number(row.pct_of_total || 0).toFixed(1)}%</Typography>
                     </Box>
                   ))}
                 </Box>
               </Paper>
 
-              <Paper elevation={0} sx={{ borderRadius: 2.5, border: '1px solid #e6ebf2', p: 1.6, boxShadow: '0 8px 18px rgba(15, 23, 42, 0.04)' }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.8 }}>
-                  <Typography sx={{ fontSize: '14px', fontWeight: 800, color: '#102a43' }}>SLA Performance (Open)</Typography>
-                  <Typography sx={{ fontSize: '11px', color: '#0f6cbd' }}>View SLA Dashboard</Typography>
+              <Paper elevation={0} sx={{ minWidth: 0, borderRadius: 2.5, border: '1px solid #e6ebf2', p: { xs: 1.6, lg: 1.15, xl: 1.4 }, boxShadow: '0 8px 18px rgba(15, 23, 42, 0.04)' }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 0.8, mb: 0.6 }}>
+                  <Typography sx={{ fontSize: { xs: '14px', lg: '13px' }, fontWeight: 800, color: '#102a43', minWidth: 0 }}>SLA Performance (Open)</Typography>
+                  <Typography sx={{ fontSize: { xs: '11px', lg: '9.5px' }, color: '#0f6cbd', flexShrink: 0 }}>View SLA Dashboard</Typography>
                 </Box>
 
-                <Box sx={{ display: 'flex', justifyContent: 'center', py: 0.5 }}>
-                  <Box sx={{ position: 'relative', width: 188, height: 106, overflow: 'hidden' }}>
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 0.2 }}>
+                  <Box sx={{ position: 'relative', width: { xs: 188, lg: 160, xl: 176 }, height: { xs: 106, lg: 92, xl: 100 }, overflow: 'hidden' }}>
                     <Box
                       sx={{
                         position: 'absolute',
                         top: 0,
                         left: 0,
-                        width: 188,
-                        height: 188,
+                        width: { xs: 188, lg: 160, xl: 176 },
+                        height: { xs: 188, lg: 160, xl: 176 },
                         borderRadius: '50%',
                         background: 'conic-gradient(#2e7d32 0deg 220deg, #f9a825 220deg 300deg, #c62828 300deg 360deg)',
                       }}
@@ -677,10 +689,10 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
                     <Box
                       sx={{
                         position: 'absolute',
-                        top: 18,
-                        left: 18,
-                        width: 152,
-                        height: 152,
+                        top: { xs: 18, lg: 16, xl: 17 },
+                        left: { xs: 18, lg: 16, xl: 17 },
+                        width: { xs: 152, lg: 128, xl: 142 },
+                        height: { xs: 152, lg: 128, xl: 142 },
                         borderRadius: '50%',
                         backgroundColor: '#fff',
                       }}
@@ -689,42 +701,42 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
                       sx={{
                         position: 'absolute',
                         left: '50%',
-                        bottom: 14,
+                        bottom: { xs: 14, lg: 12, xl: 13 },
                         width: 2,
-                        height: 66,
+                        height: { xs: 66, lg: 54, xl: 60 },
                         backgroundColor: '#1f2937',
                         transformOrigin: 'bottom center',
                         transform: `translateX(-50%) rotate(${slaNeedleDegrees}deg)`,
                         borderRadius: 2,
                       }}
                     />
-                    <Box sx={{ position: 'absolute', left: '50%', bottom: 10, width: 10, height: 10, borderRadius: '50%', bgcolor: '#1f2937', transform: 'translateX(-50%)' }} />
-                    <Box sx={{ position: 'absolute', left: 0, right: 0, bottom: 2, textAlign: 'center' }}>
-                      <Typography sx={{ fontSize: '38px', fontWeight: 800, color: '#1f4732', letterSpacing: '-1px', lineHeight: 1 }}>
+                    <Box sx={{ position: 'absolute', left: '50%', bottom: { xs: 10, lg: 8, xl: 9 }, width: { xs: 10, lg: 8, xl: 9 }, height: { xs: 10, lg: 8, xl: 9 }, borderRadius: '50%', bgcolor: '#1f2937', transform: 'translateX(-50%)' }} />
+                    <Box sx={{ position: 'absolute', left: 0, right: 0, bottom: { xs: 2, lg: 0, xl: 1 }, textAlign: 'center' }}>
+                      <Typography sx={{ fontSize: { xs: '38px', lg: '31px', xl: '34px' }, fontWeight: 800, color: '#1f4732', letterSpacing: '-1px', lineHeight: 1 }}>
                         {slaPercent.toFixed(1)}%
                       </Typography>
-                      <Typography sx={{ fontSize: '11px', color: '#607080' }}>Within SLA</Typography>
+                      <Typography sx={{ fontSize: { xs: '11px', lg: '10px' }, color: '#607080' }}>Within SLA</Typography>
                     </Box>
                   </Box>
                 </Box>
 
-                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 0.8, mt: 0.7, alignItems: 'center' }}>
-                  <Typography sx={{ fontSize: '11px', color: '#2e7d32' }}>Within SLA</Typography>
-                  <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#102a43' }}>{formatMetric(Number(slaPanel.within_sla || 0))}</Typography>
-                  <Typography sx={{ fontSize: '11px', color: '#607080' }}>{((Number(slaPanel.within_sla || 0) / Math.max(Number(slaPanel.total_open || 1), 1)) * 100).toFixed(1)}%</Typography>
+                <Box sx={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto auto', gap: 0.55, mt: 0.45, alignItems: 'center' }}>
+                  <Typography sx={{ fontSize: { xs: '11px', lg: '10px' }, color: '#2e7d32' }}>Within SLA</Typography>
+                  <Typography sx={{ fontSize: { xs: '11px', lg: '10px' }, fontWeight: 700, color: '#102a43' }}>{formatMetric(Number(slaPanel.within_sla || 0))}</Typography>
+                  <Typography sx={{ fontSize: { xs: '11px', lg: '10px' }, color: '#607080' }}>{((Number(slaPanel.within_sla || 0) / Math.max(Number(slaPanel.total_open || 1), 1)) * 100).toFixed(1)}%</Typography>
 
-                  <Typography sx={{ fontSize: '11px', color: '#f57c00' }}>Breaching Soon</Typography>
-                  <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#102a43' }}>{formatMetric(Number(slaPanel.breaching_soon || 0))}</Typography>
-                  <Typography sx={{ fontSize: '11px', color: '#607080' }}>{((Number(slaPanel.breaching_soon || 0) / Math.max(Number(slaPanel.total_open || 1), 1)) * 100).toFixed(1)}%</Typography>
+                  <Typography sx={{ fontSize: { xs: '11px', lg: '10px' }, color: '#f57c00' }}>Breaching Soon</Typography>
+                  <Typography sx={{ fontSize: { xs: '11px', lg: '10px' }, fontWeight: 700, color: '#102a43' }}>{formatMetric(Number(slaPanel.breaching_soon || 0))}</Typography>
+                  <Typography sx={{ fontSize: { xs: '11px', lg: '10px' }, color: '#607080' }}>{((Number(slaPanel.breaching_soon || 0) / Math.max(Number(slaPanel.total_open || 1), 1)) * 100).toFixed(1)}%</Typography>
 
-                  <Typography sx={{ fontSize: '11px', color: '#c62828' }}>Breached</Typography>
-                  <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#102a43' }}>{formatMetric(Number(slaPanel.breached || 0))}</Typography>
-                  <Typography sx={{ fontSize: '11px', color: '#607080' }}>{((Number(slaPanel.breached || 0) / Math.max(Number(slaPanel.total_open || 1), 1)) * 100).toFixed(1)}%</Typography>
+                  <Typography sx={{ fontSize: { xs: '11px', lg: '10px' }, color: '#c62828' }}>Breached</Typography>
+                  <Typography sx={{ fontSize: { xs: '11px', lg: '10px' }, fontWeight: 700, color: '#102a43' }}>{formatMetric(Number(slaPanel.breached || 0))}</Typography>
+                  <Typography sx={{ fontSize: { xs: '11px', lg: '10px' }, color: '#607080' }}>{((Number(slaPanel.breached || 0) / Math.max(Number(slaPanel.total_open || 1), 1)) * 100).toFixed(1)}%</Typography>
                 </Box>
 
-                <Box sx={{ mt: 1, p: 0.9, borderRadius: 1.2, border: '1px solid #fde8d6', bgcolor: '#fff7ed' }}>
-                  <Typography sx={{ fontSize: '10px', color: '#9a3412', fontWeight: 700 }}>SLA Breach Risk Active</Typography>
-                  <Typography sx={{ mt: 0.25, fontSize: '10px', color: '#7c2d12' }}>
+                <Box sx={{ mt: 0.75, p: { xs: 0.9, lg: 0.7 }, borderRadius: 1.2, border: '1px solid #fde8d6', bgcolor: '#fff7ed' }}>
+                  <Typography sx={{ fontSize: { xs: '10px', lg: '9.5px' }, color: '#9a3412', fontWeight: 700 }}>SLA Breach Risk Active</Typography>
+                  <Typography sx={{ mt: 0.2, fontSize: { xs: '10px', lg: '9.5px' }, color: '#7c2d12' }}>
                     {formatMetric(Number(slaPanel.breaching_soon || 0))} incidents are due within 4 hours.
                   </Typography>
                 </Box>
