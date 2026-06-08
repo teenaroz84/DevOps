@@ -169,3 +169,129 @@ GROUP BY sninc_opened_at::DATE
 ORDER BY incident_date ASC;
 `
 }
+
+export function buildIncidentsByAssignmentGroupTop10Query() {
+  return `
+WITH latest AS (
+  SELECT *,
+         ROW_NUMBER() OVER (
+           PARTITION BY sninc_inc_num
+           ORDER BY sninc_last_updt_dttm DESC NULLS LAST
+         ) AS rn
+  FROM ebd.service_now_inc
+),
+grouped AS (
+  SELECT
+    sninc_assignment_grp AS assignment_group,
+    COUNT(*) AS incident_count
+  FROM latest
+  WHERE rn = 1
+    AND sninc_opened_at >= NOW() - INTERVAL '90 days'
+    AND sninc_assignment_grp IS NOT NULL
+  GROUP BY sninc_assignment_grp
+)
+SELECT
+  assignment_group,
+  incident_count,
+  MAX(incident_count) OVER () AS max_count,
+  ROUND(100.0 * incident_count / NULLIF(SUM(incident_count) OVER (), 0), 1) AS pct_of_total
+FROM grouped
+ORDER BY incident_count DESC
+LIMIT 10;
+`
+}
+
+export function buildIncidentsByPlatformApplicationTop10Query() {
+  return `
+WITH latest AS (
+  SELECT *,
+         ROW_NUMBER() OVER (
+           PARTITION BY sninc_inc_num
+           ORDER BY sninc_last_updt_dttm DESC NULLS LAST
+         ) AS rn
+  FROM ebd.service_now_inc
+),
+grouped AS (
+  SELECT
+    COALESCE(sninc_mon_app_name, sninc_appl, 'Unknown') AS platform_app,
+    COUNT(*) AS total_count,
+    COUNT(*) FILTER (WHERE sninc_state NOT IN ('Closed', 'Resolved')) AS open_count
+  FROM latest
+  WHERE rn = 1
+    AND sninc_opened_at >= NOW() - INTERVAL '90 days'
+  GROUP BY COALESCE(sninc_mon_app_name, sninc_appl, 'Unknown')
+)
+SELECT
+  platform_app,
+  total_count,
+  open_count,
+  ROUND(100.0 * open_count / NULLIF(SUM(open_count) OVER (), 0), 1) AS pct_of_open
+FROM grouped
+ORDER BY total_count DESC
+LIMIT 10;
+`
+}
+
+export function buildIncidentsByPriorityDonutQuery() {
+  return `
+WITH latest AS (
+  SELECT *,
+         ROW_NUMBER() OVER (
+           PARTITION BY sninc_inc_num
+           ORDER BY sninc_last_updt_dttm DESC NULLS LAST
+         ) AS rn
+  FROM ebd.service_now_inc
+),
+grouped AS (
+  SELECT
+    sninc_priority AS priority,
+    COUNT(*) AS incident_count
+  FROM latest
+  WHERE rn = 1
+    AND sninc_opened_at >= NOW() - INTERVAL '90 days'
+    AND sninc_priority IS NOT NULL
+  GROUP BY sninc_priority
+)
+SELECT
+  priority,
+  incident_count,
+  ROUND(100.0 * incident_count / NULLIF(SUM(incident_count) OVER (), 0), 1) AS pct_of_total
+FROM grouped
+ORDER BY priority ASC;
+`
+}
+
+export function buildSlaPerformancePanelGaugeQuery() {
+  return `
+WITH latest AS (
+  SELECT *,
+         ROW_NUMBER() OVER (
+           PARTITION BY sninc_inc_num
+           ORDER BY sninc_last_updt_dttm DESC NULLS LAST
+         ) AS rn
+  FROM ebd.service_now_inc
+)
+SELECT
+  COUNT(*) FILTER (
+    WHERE sninc_expiry_dttm > NOW() + INTERVAL '4 hours'
+  ) AS within_sla,
+  COUNT(*) FILTER (
+    WHERE sninc_expiry_dttm <= NOW() + INTERVAL '4 hours'
+      AND sninc_expiry_dttm > NOW()
+  ) AS breaching_soon,
+  COUNT(*) FILTER (
+    WHERE sninc_expiry_dttm <= NOW()
+  ) AS breached,
+  COUNT(*) AS total_open,
+  ROUND(
+    100.0 * COUNT(*) FILTER (
+      WHERE sninc_expiry_dttm > NOW() + INTERVAL '4 hours'
+    ) / NULLIF(COUNT(*), 0),
+    1
+  ) AS within_sla_pct
+FROM latest
+WHERE rn = 1
+  AND sninc_state NOT IN ('Closed', 'Resolved')
+  AND sninc_expiry_dttm IS NOT NULL;
+`
+}

@@ -15,8 +15,12 @@ import {
 } from '../../services/servicenowMockData'
 import {
   servicenowService,
+  type ServiceNowAssignmentGroupTop10Row,
   type ServiceNowDaysFilter,
   type ServiceNowIncidentDashboardSummary,
+  type ServiceNowPlatformApplicationTop10Row,
+  type ServiceNowPriorityDonutRow,
+  type ServiceNowSlaPerformancePanel,
 } from '../../services/servicenowService'
 import { TRUIST } from '../../theme/truistPalette'
 
@@ -30,6 +34,56 @@ const KPI_CARD_STYLES: Record<string, { accent: string; bg: string; chipBg: stri
   open: { accent: '#c62828', bg: '#fff7f7', chipBg: '#fdecea', chipColor: '#c62828' },
   closed: { accent: '#2e7d32', bg: '#f7fcf7', chipBg: '#e8f5e9', chipColor: '#2e7d32' },
   reopened: { accent: TRUIST.dusk, bg: '#faf7fd', chipBg: '#efe7fb', chipColor: TRUIST.dusk },
+}
+
+const PRIORITY_RING_COLORS: Record<string, string> = {
+  '1 - Critical': '#d32f2f',
+  '2 - High': '#f57c00',
+  '3 - Moderate': '#1976d2',
+  '4 - Low': '#2e7d32',
+  '5 - Planning': '#90a4ae',
+}
+
+const MOCK_ASSIGNMENT_GROUP_TOP10: ServiceNowAssignmentGroupTop10Row[] = [
+  { assignment_group: 'Service Desk', incident_count: 2786, max_count: 2786, pct_of_total: 22.7 },
+  { assignment_group: 'Infra Support', incident_count: 2164, max_count: 2786, pct_of_total: 17.6 },
+  { assignment_group: 'App Support', incident_count: 1942, max_count: 2786, pct_of_total: 15.8 },
+  { assignment_group: 'Network Support', incident_count: 1621, max_count: 2786, pct_of_total: 13.2 },
+  { assignment_group: 'DBA Support', incident_count: 1258, max_count: 2786, pct_of_total: 10.2 },
+  { assignment_group: 'Security Ops', incident_count: 1102, max_count: 2786, pct_of_total: 9.0 },
+  { assignment_group: 'Desktop Support', incident_count: 916, max_count: 2786, pct_of_total: 7.5 },
+  { assignment_group: 'SAP Support', incident_count: 843, max_count: 2786, pct_of_total: 6.9 },
+  { assignment_group: 'Middleware Support', incident_count: 689, max_count: 2786, pct_of_total: 5.6 },
+  { assignment_group: 'Storage Support', incident_count: 507, max_count: 2786, pct_of_total: 4.1 },
+]
+
+const MOCK_PLATFORM_APP_TOP10: ServiceNowPlatformApplicationTop10Row[] = [
+  { platform_app: 'Windows', total_count: 6125, open_count: 5021, pct_of_open: 15.2 },
+  { platform_app: 'SAP', total_count: 4234, open_count: 3698, pct_of_open: 11.2 },
+  { platform_app: 'Oracle EBS', total_count: 3125, open_count: 2711, pct_of_open: 8.2 },
+  { platform_app: 'Salesforce', total_count: 2342, open_count: 1962, pct_of_open: 6.0 },
+  { platform_app: 'Linux', total_count: 1987, open_count: 1692, pct_of_open: 5.1 },
+  { platform_app: 'Microsoft 365', total_count: 1856, open_count: 1535, pct_of_open: 4.7 },
+  { platform_app: 'Citrix', total_count: 1254, open_count: 1018, pct_of_open: 3.1 },
+  { platform_app: 'Azure', total_count: 987, open_count: 821, pct_of_open: 2.5 },
+  { platform_app: 'VMware', total_count: 765, open_count: 603, pct_of_open: 1.8 },
+  { platform_app: 'Others', total_count: 1893, open_count: 1614, pct_of_open: 4.9 },
+]
+
+const MOCK_PRIORITY_DONUT: ServiceNowPriorityDonutRow[] = [
+  { priority: '1 - Critical', incident_count: 1245, pct_of_total: 5.1 },
+  { priority: '2 - High', incident_count: 5328, pct_of_total: 21.7 },
+  { priority: '3 - Moderate', incident_count: 9842, pct_of_total: 40.1 },
+  { priority: '4 - Low', incident_count: 7256, pct_of_total: 29.8 },
+  { priority: '5 - Planning', incident_count: 897, pct_of_total: 3.6 },
+]
+
+const MOCK_SLA_PANEL: ServiceNowSlaPerformancePanel = {
+  within_sla: 7745,
+  breaching_soon: 1035,
+  breached: 376,
+  total_open: 9156,
+  within_sla_pct: 84.6,
 }
 
 function formatRangeLabel(days: ServiceNowDaysFilter) {
@@ -134,6 +188,10 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
   const [summary, setSummary] = useState<ServiceNowIncidentDashboardSummary>(MOCK_SERVICENOW_INCIDENT_DASHBOARD_SUMMARY)
   const [stateDaily, setStateDaily] = useState<any[]>([])
   const [trend, setTrend] = useState<any[]>([])
+  const [assignmentTop10, setAssignmentTop10] = useState<ServiceNowAssignmentGroupTop10Row[]>([])
+  const [platformAppTop10, setPlatformAppTop10] = useState<ServiceNowPlatformApplicationTop10Row[]>([])
+  const [priorityDonut, setPriorityDonut] = useState<ServiceNowPriorityDonutRow[]>([])
+  const [slaPanel, setSlaPanel] = useState<ServiceNowSlaPerformancePanel>(MOCK_SLA_PANEL)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const isAllTime = days === 'all'
@@ -161,6 +219,10 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
       setSummary({ ...MOCK_SERVICENOW_INCIDENT_DASHBOARD_SUMMARY, days, platform: selectedPlatform })
       setStateDaily(MOCK_SERVICENOW_INCIDENT_STATE_DAILY)
       setTrend(MOCK_SERVICENOW_INCIDENT_TREND)
+      setAssignmentTop10(MOCK_ASSIGNMENT_GROUP_TOP10)
+      setPlatformAppTop10(MOCK_PLATFORM_APP_TOP10)
+      setPriorityDonut(MOCK_PRIORITY_DONUT)
+      setSlaPanel(MOCK_SLA_PANEL)
       setLoading(false)
       return
     }
@@ -169,11 +231,27 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
       servicenowService.getIncidentDashboardSummary(selectedPlatform ?? undefined, days),
       servicenowService.getIncidentStateDaily(selectedPlatform ?? undefined, days),
       servicenowService.getIncidentTrend(selectedPlatform ?? undefined, days),
+      servicenowService.getIncidentsAssignmentGroupTop10(),
+      servicenowService.getIncidentsPlatformApplicationTop10(),
+      servicenowService.getIncidentsPriorityDonut(),
+      servicenowService.getSlaPerformancePanel(),
     ])
-      .then(([summaryData, stateDailyData, trendData]) => {
+      .then(([
+        summaryData,
+        stateDailyData,
+        trendData,
+        assignmentData,
+        platformData,
+        priorityData,
+        slaData,
+      ]) => {
         setSummary(summaryData)
         setStateDaily(Array.isArray(stateDailyData) ? stateDailyData : [])
         setTrend(Array.isArray(trendData) ? trendData : [])
+        setAssignmentTop10(Array.isArray(assignmentData) ? assignmentData : [])
+        setPlatformAppTop10(Array.isArray(platformData) ? platformData : [])
+        setPriorityDonut(Array.isArray(priorityData) ? priorityData : [])
+        setSlaPanel(slaData ?? MOCK_SLA_PANEL)
         setLoading(false)
       })
       .catch((err) => {
@@ -241,6 +319,23 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
     ],
     [days, isAllTime, selectedPlatform, summary],
   )
+
+  const priorityDonutSlices = useMemo(
+    () => priorityDonut.map((item) => ({
+      name: item.priority,
+      value: Number(item.incident_count ?? 0),
+      color: PRIORITY_RING_COLORS[item.priority] ?? '#78909c',
+    })),
+    [priorityDonut],
+  )
+
+  const totalPriorityIncidents = useMemo(
+    () => priorityDonut.reduce((sum, item) => sum + Number(item.incident_count ?? 0), 0),
+    [priorityDonut],
+  )
+
+  const slaPercent = Math.max(0, Math.min(100, Number(slaPanel.within_sla_pct ?? 0)))
+  const slaNeedleDegrees = -90 + (slaPercent * 1.8)
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -480,6 +575,159 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
                   xAxisInterval={getXAxisInterval(trend.length)}
                   xAxisHeight={36}
                 />
+              </Paper>
+            </Box>
+
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr 1fr 1fr' }, gap: 1.1, alignItems: 'stretch' }}>
+              <Paper elevation={0} sx={{ borderRadius: 2.5, border: '1px solid #e6ebf2', p: 1.6, boxShadow: '0 8px 18px rgba(15, 23, 42, 0.04)' }}>
+                <Typography sx={{ fontSize: '14px', fontWeight: 800, color: '#102a43', mb: 1 }}>By Assignment Group (Top 10)</Typography>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  {assignmentTop10.map((row) => {
+                    const max = Number(row.max_count || 1)
+                    const value = Number(row.incident_count || 0)
+                    const widthPct = Math.min((value / max) * 100, 100)
+                    return (
+                      <Box key={row.assignment_group}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, mb: 0.2 }}>
+                          <Typography sx={{ fontSize: '11px', color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {row.assignment_group}
+                          </Typography>
+                          <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#0f6cbd' }}>
+                            {formatMetric(value)}
+                          </Typography>
+                        </Box>
+                        <Box sx={{ height: 7, borderRadius: 4, backgroundColor: '#eaf1fb', overflow: 'hidden' }}>
+                          <Box sx={{ height: '100%', width: `${widthPct}%`, borderRadius: 4, backgroundColor: '#2f6bd2' }} />
+                        </Box>
+                      </Box>
+                    )
+                  })}
+                </Box>
+              </Paper>
+
+              <Paper elevation={0} sx={{ borderRadius: 2.5, border: '1px solid #e6ebf2', p: 1.6, boxShadow: '0 8px 18px rgba(15, 23, 42, 0.04)' }}>
+                <Typography sx={{ fontSize: '14px', fontWeight: 800, color: '#102a43', mb: 1 }}>By Platform (Top 10)</Typography>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  {platformAppTop10.map((row) => {
+                    const max = Math.max(...platformAppTop10.map((item) => Number(item.total_count || 0)), 1)
+                    const value = Number(row.total_count || 0)
+                    const widthPct = Math.min((value / max) * 100, 100)
+                    return (
+                      <Box key={row.platform_app}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, mb: 0.2 }}>
+                          <Typography sx={{ fontSize: '11px', color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {row.platform_app}
+                          </Typography>
+                          <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#6d5bd0' }}>
+                            {formatMetric(value)}
+                          </Typography>
+                        </Box>
+                        <Box sx={{ height: 7, borderRadius: 4, backgroundColor: '#f0edfe', overflow: 'hidden' }}>
+                          <Box sx={{ height: '100%', width: `${widthPct}%`, borderRadius: 4, backgroundColor: '#6d5bd0' }} />
+                        </Box>
+                      </Box>
+                    )
+                  })}
+                </Box>
+              </Paper>
+
+              <Paper elevation={0} sx={{ borderRadius: 2.5, border: '1px solid #e6ebf2', p: 1.6, boxShadow: '0 8px 18px rgba(15, 23, 42, 0.04)' }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.8 }}>
+                  <Typography sx={{ fontSize: '14px', fontWeight: 800, color: '#102a43' }}>Incidents by Priority</Typography>
+                  <Typography sx={{ fontSize: '11px', color: '#607080' }}>All open</Typography>
+                </Box>
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 0.25 }}>
+                  <DonutChart data={priorityDonutSlices} centerLabel={totalPriorityIncidents} size={156} innerRadius={34} outerRadius={56} />
+                </Box>
+                <Box sx={{ mt: 0.6, display: 'flex', flexDirection: 'column', gap: 0.45 }}>
+                  {priorityDonut.map((row) => (
+                    <Box key={row.priority} sx={{ display: 'grid', gridTemplateColumns: '1fr auto auto', alignItems: 'center', gap: 1 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, minWidth: 0 }}>
+                        <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: PRIORITY_RING_COLORS[row.priority] ?? '#78909c' }} />
+                        <Typography sx={{ fontSize: '11px', color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {row.priority}
+                        </Typography>
+                      </Box>
+                      <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#102a43' }}>{formatMetric(Number(row.incident_count || 0))}</Typography>
+                      <Typography sx={{ fontSize: '11px', color: '#607080' }}>{Number(row.pct_of_total || 0).toFixed(1)}%</Typography>
+                    </Box>
+                  ))}
+                </Box>
+              </Paper>
+
+              <Paper elevation={0} sx={{ borderRadius: 2.5, border: '1px solid #e6ebf2', p: 1.6, boxShadow: '0 8px 18px rgba(15, 23, 42, 0.04)' }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.8 }}>
+                  <Typography sx={{ fontSize: '14px', fontWeight: 800, color: '#102a43' }}>SLA Performance (Open)</Typography>
+                  <Typography sx={{ fontSize: '11px', color: '#0f6cbd' }}>View SLA Dashboard</Typography>
+                </Box>
+
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 0.5 }}>
+                  <Box sx={{ position: 'relative', width: 188, height: 106, overflow: 'hidden' }}>
+                    <Box
+                      sx={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: 188,
+                        height: 188,
+                        borderRadius: '50%',
+                        background: 'conic-gradient(#2e7d32 0deg 220deg, #f9a825 220deg 300deg, #c62828 300deg 360deg)',
+                      }}
+                    />
+                    <Box
+                      sx={{
+                        position: 'absolute',
+                        top: 18,
+                        left: 18,
+                        width: 152,
+                        height: 152,
+                        borderRadius: '50%',
+                        backgroundColor: '#fff',
+                      }}
+                    />
+                    <Box
+                      sx={{
+                        position: 'absolute',
+                        left: '50%',
+                        bottom: 14,
+                        width: 2,
+                        height: 66,
+                        backgroundColor: '#1f2937',
+                        transformOrigin: 'bottom center',
+                        transform: `translateX(-50%) rotate(${slaNeedleDegrees}deg)`,
+                        borderRadius: 2,
+                      }}
+                    />
+                    <Box sx={{ position: 'absolute', left: '50%', bottom: 10, width: 10, height: 10, borderRadius: '50%', bgcolor: '#1f2937', transform: 'translateX(-50%)' }} />
+                    <Box sx={{ position: 'absolute', left: 0, right: 0, bottom: 2, textAlign: 'center' }}>
+                      <Typography sx={{ fontSize: '38px', fontWeight: 800, color: '#1f4732', letterSpacing: '-1px', lineHeight: 1 }}>
+                        {slaPercent.toFixed(1)}%
+                      </Typography>
+                      <Typography sx={{ fontSize: '11px', color: '#607080' }}>Within SLA</Typography>
+                    </Box>
+                  </Box>
+                </Box>
+
+                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 0.8, mt: 0.7, alignItems: 'center' }}>
+                  <Typography sx={{ fontSize: '11px', color: '#2e7d32' }}>Within SLA</Typography>
+                  <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#102a43' }}>{formatMetric(Number(slaPanel.within_sla || 0))}</Typography>
+                  <Typography sx={{ fontSize: '11px', color: '#607080' }}>{((Number(slaPanel.within_sla || 0) / Math.max(Number(slaPanel.total_open || 1), 1)) * 100).toFixed(1)}%</Typography>
+
+                  <Typography sx={{ fontSize: '11px', color: '#f57c00' }}>Breaching Soon</Typography>
+                  <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#102a43' }}>{formatMetric(Number(slaPanel.breaching_soon || 0))}</Typography>
+                  <Typography sx={{ fontSize: '11px', color: '#607080' }}>{((Number(slaPanel.breaching_soon || 0) / Math.max(Number(slaPanel.total_open || 1), 1)) * 100).toFixed(1)}%</Typography>
+
+                  <Typography sx={{ fontSize: '11px', color: '#c62828' }}>Breached</Typography>
+                  <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#102a43' }}>{formatMetric(Number(slaPanel.breached || 0))}</Typography>
+                  <Typography sx={{ fontSize: '11px', color: '#607080' }}>{((Number(slaPanel.breached || 0) / Math.max(Number(slaPanel.total_open || 1), 1)) * 100).toFixed(1)}%</Typography>
+                </Box>
+
+                <Box sx={{ mt: 1, p: 0.9, borderRadius: 1.2, border: '1px solid #fde8d6', bgcolor: '#fff7ed' }}>
+                  <Typography sx={{ fontSize: '10px', color: '#9a3412', fontWeight: 700 }}>SLA Breach Risk Active</Typography>
+                  <Typography sx={{ mt: 0.25, fontSize: '10px', color: '#7c2d12' }}>
+                    {formatMetric(Number(slaPanel.breaching_soon || 0))} incidents are due within 4 hours.
+                  </Typography>
+                </Box>
               </Paper>
             </Box>
           </Box>

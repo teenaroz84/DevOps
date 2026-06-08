@@ -6,9 +6,13 @@
 import { Router, Request, Response } from 'express';
 import { getPgPool } from '../db/postgres';
 import {
+  buildIncidentsByAssignmentGroupTop10Query,
+  buildIncidentsByPlatformApplicationTop10Query,
+  buildIncidentsByPriorityDonutQuery,
   buildIncidentStateOverTimeDailyStackedBarQuery,
   buildIncidentTrendDailyLineQuery,
   buildIncidentLifecycleDashboardQuery,
+  buildSlaPerformancePanelGaugeQuery,
   buildTotalIncidentsDashboardQuery,
 } from './queries/servicenowIncidentDashboardQueries';
 
@@ -728,6 +732,64 @@ router.get('/top-incident-updates', async (req: Request, res: Response) => {
     res.json(result.rows);
   } catch (err: any) {
     console.error('ServiceNow top-incident-updates error:', err.message);
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
+// GET /api/servicenow/incidents-assignment-group-top10
+// Widget 6: Incidents by Assignment Group (top 10 horizontal bars)
+router.get('/incidents-assignment-group-top10', async (_req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const result = await pool.query(buildIncidentsByAssignmentGroupTop10Query());
+    res.json(result.rows);
+  } catch (err: any) {
+    console.error('ServiceNow incidents-assignment-group-top10 error:', err.message);
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
+// GET /api/servicenow/incidents-platform-application-top10
+// Widget 7: Incidents by Platform/Application (top 10 horizontal bars)
+router.get('/incidents-platform-application-top10', async (_req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const result = await pool.query(buildIncidentsByPlatformApplicationTop10Query());
+    res.json(result.rows);
+  } catch (err: any) {
+    console.error('ServiceNow incidents-platform-application-top10 error:', err.message);
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
+// GET /api/servicenow/incidents-priority-donut
+// Widget 8: Incidents by Priority (donut chart)
+router.get('/incidents-priority-donut', async (_req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const result = await pool.query(buildIncidentsByPriorityDonutQuery());
+    res.json(result.rows);
+  } catch (err: any) {
+    console.error('ServiceNow incidents-priority-donut error:', err.message);
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
+// GET /api/servicenow/sla-performance-panel
+// Widget 9: SLA performance panel (gauge)
+router.get('/sla-performance-panel', async (_req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const result = await pool.query(buildSlaPerformancePanelGaugeQuery());
+    res.json(result.rows[0] ?? {
+      within_sla: 0,
+      breaching_soon: 0,
+      breached: 0,
+      total_open: 0,
+      within_sla_pct: 0,
+    });
+  } catch (err: any) {
+    console.error('ServiceNow sla-performance-panel error:', err.message);
     res.status(500).json({ error: 'Query failed', details: err.message });
   }
 });

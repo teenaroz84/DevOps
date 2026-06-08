@@ -18,6 +18,34 @@ export interface ServiceNowIncidentDashboardSummary {
   reopened_prev: number
 }
 
+export interface ServiceNowAssignmentGroupTop10Row {
+  assignment_group: string
+  incident_count: number
+  max_count: number
+  pct_of_total: number
+}
+
+export interface ServiceNowPlatformApplicationTop10Row {
+  platform_app: string
+  total_count: number
+  open_count: number
+  pct_of_open: number
+}
+
+export interface ServiceNowPriorityDonutRow {
+  priority: string
+  incident_count: number
+  pct_of_total: number
+}
+
+export interface ServiceNowSlaPerformancePanel {
+  within_sla: number
+  breaching_soon: number
+  breached: number
+  total_open: number
+  within_sla_pct: number
+}
+
 const withDays = (basePath: string, days: ServiceNowDaysFilter = 7, platform?: string) => {
   const params = new URLSearchParams()
   if (platform) params.set('platform', platform)
@@ -68,4 +96,12 @@ export const servicenowService = {
     apiClient.get(`/api/servicenow/top-incident-updates${platform ? `?platform=${encodeURIComponent(platform)}` : ''}`),
   getIncidentTrend: (platform?: string, days: ServiceNowDaysFilter = 7) =>
     apiClient.get(withDays('/api/servicenow/incident-trend', days, platform)),
+  getIncidentsAssignmentGroupTop10: () =>
+    apiClient.get<ServiceNowAssignmentGroupTop10Row[]>('/api/servicenow/incidents-assignment-group-top10'),
+  getIncidentsPlatformApplicationTop10: () =>
+    apiClient.get<ServiceNowPlatformApplicationTop10Row[]>('/api/servicenow/incidents-platform-application-top10'),
+  getIncidentsPriorityDonut: () =>
+    apiClient.get<ServiceNowPriorityDonutRow[]>('/api/servicenow/incidents-priority-donut'),
+  getSlaPerformancePanel: () =>
+    apiClient.get<ServiceNowSlaPerformancePanel>('/api/servicenow/sla-performance-panel'),
 }
