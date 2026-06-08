@@ -1,14 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Autocomplete, Box, Chip, CircularProgress, MenuItem, Paper, TextField, Typography } from '@mui/material'
+import { Autocomplete, Box, Chip, CircularProgress, InputAdornment, MenuItem, Paper, TablePagination, TextField, Typography } from '@mui/material'
 import DonutLargeIcon from '@mui/icons-material/DonutLarge'
+import SearchIcon from '@mui/icons-material/Search'
 import SupportAgentIcon from '@mui/icons-material/SupportAgent'
 import TimelineIcon from '@mui/icons-material/Timeline'
 import TrendingUpIcon from '@mui/icons-material/TrendingUp'
 import WarningAmberIcon from '@mui/icons-material/WarningAmber'
-import { ComposedBarLineChart, DonutChart } from '../widgets'
+import { ComposedBarLineChart, DataTable, DonutChart, type ColumnDef } from '../widgets'
 import { useMockData } from '../../context/MockDataContext'
 import {
   MOCK_SERVICENOW_INCIDENT_DASHBOARD_SUMMARY,
+  MOCK_SERVICENOW_INCIDENT_LIST,
   MOCK_SERVICENOW_INCIDENT_STATE_DAILY,
   MOCK_SERVICENOW_INCIDENT_TREND,
   MOCK_SERVICENOW_OPEN_INCIDENT_AGEING,
@@ -95,6 +97,23 @@ const MOCK_SLA_PANEL: ServiceNowSlaPerformancePanel = {
 }
 
 const AGE_BUCKET_COLORS = ['#3b82f6', '#60a5fa', '#f59e0b', '#d97706', '#dc2626', '#991b1b']
+const INCIDENT_PRIORITY_COLORS: Record<string, string> = {
+  P1: '#d32f2f',
+  P2: '#f57c00',
+  P3: '#1976d2',
+  P4: '#2e7d32',
+  P5: '#607d8b',
+  All: '#1565c0',
+}
+
+const INCIDENT_PRIORITY_BACKGROUNDS: Record<string, string> = {
+  P1: '#fdecea',
+  P2: '#fff3e0',
+  P3: '#e3f2fd',
+  P4: '#e8f5e9',
+  P5: '#eceff1',
+  All: '#e3f2fd',
+}
 
 function formatRangeLabel(days: ServiceNowDaysFilter) {
   if (days === 'all') return 'All available history'
@@ -135,6 +154,56 @@ function formatMinutes(minutes: number | null | undefined) {
   const hours = Math.floor(minutes / 60)
   const remainder = minutes % 60
   return remainder === 0 ? `${hours}h` : `${hours}h ${remainder}m`
+}
+
+function normalizeIncidentState(state?: string | null) {
+  return (state || '').trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+function getIncidentStatusGroup(state?: string | null) {
+  const normalized = normalizeIncidentState(state)
+  if (['new', 'open'].includes(normalized)) return 'New'
+  if (normalized === 'in progress') return 'In Progress'
+  if (['on hold', 'onhold'].includes(normalized)) return 'On Hold'
+  if (['closed', 'resolved', 'canceled', 'cancelled'].includes(normalized)) return 'Resolved/Closed/Canceled'
+  return 'Open'
+}
+
+function getIncidentStatusRank(state?: string | null) {
+  const statusGroup = getIncidentStatusGroup(state)
+  if (statusGroup === 'New') return 0
+  if (statusGroup === 'In Progress') return 1
+  if (statusGroup === 'Resolved/Closed/Canceled') return 2
+  if (statusGroup === 'On Hold') return 3
+  return 4
+}
+
+function getIncidentStateRank(state?: string | null) {
+  const normalized = normalizeIncidentState(state)
+  if (normalized === 'new') return 0
+  if (normalized === 'in progress') return 1
+  if (['resolved', 'closed', 'canceled', 'cancelled'].includes(normalized)) return 2
+  if (normalized === 'on hold' || normalized === 'onhold') return 3
+  return 4
+}
+
+function formatIncidentOpenedAt(value?: string | null) {
+  if (!value) return '—'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(date)
+}
+
+function getIncidentOpenedAtTime(value?: string | null) {
+  if (!value) return 0
+  const time = new Date(value).getTime()
+  return Number.isNaN(time) ? 0 : time
 }
 
 const MetricCard: React.FC<{
@@ -214,9 +283,16 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
   const [topIncidentCategories, setTopIncidentCategories] = useState<ServiceNowTopIncidentCategoryRow[]>([])
   const [topIncidentUpdates, setTopIncidentUpdates] = useState<ServiceNowTopIncidentUpdateRow[]>([])
   const [breachRiskTickets, setBreachRiskTickets] = useState<ServiceNowSlaBreachRiskTicket[]>([])
+  const [incidentList, setIncidentList] = useState<any[]>([])
+  const [priorityFilter, setPriorityFilter] = useState('All')
+  const [statusFilter, setStatusFilter] = useState('All')
+  const [incidentSearch, setIncidentSearch] = useState('')
+  const [incidentPage, setIncidentPage] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const isAllTime = days === 'all'
+  const rowsPerPage = 100
+  const statusFilterOptions = ['All', 'New', 'In Progress', 'Resolved/Closed/Canceled', 'On Hold']
 
   useEffect(() => {
     setPlatformsLoading(true)
@@ -249,6 +325,7 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
       setTopIncidentCategories(MOCK_SERVICENOW_TOP_INCIDENT_CATEGORIES)
       setTopIncidentUpdates(MOCK_SERVICENOW_TOP_INCIDENTS_BY_UPDATE_COUNT)
       setBreachRiskTickets(MOCK_SERVICENOW_SLA_BREACH_RISK_ALERT_TICKETS)
+      setIncidentList(MOCK_SERVICENOW_INCIDENT_LIST)
       setLoading(false)
       return
     }
@@ -265,6 +342,7 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
       servicenowService.getTopIncidentCategories(),
       servicenowService.getTopIncidentsByUpdateCount(),
       servicenowService.getSlaBreachRiskAlertTickets(),
+      servicenowService.getIncidentList(selectedPlatform ?? undefined, days),
     ])
       .then(([
         summaryData,
@@ -278,6 +356,7 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
         categoriesData,
         updatesData,
         breachRiskData,
+        incidentListData,
       ]) => {
         setSummary(summaryData)
         setStateDaily(Array.isArray(stateDailyData) ? stateDailyData : [])
@@ -290,6 +369,7 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
         setTopIncidentCategories(Array.isArray(categoriesData) ? categoriesData : [])
         setTopIncidentUpdates(Array.isArray(updatesData) ? updatesData : [])
         setBreachRiskTickets(Array.isArray(breachRiskData) ? breachRiskData : [])
+        setIncidentList(Array.isArray(incidentListData) ? incidentListData : [])
         setLoading(false)
       })
       .catch((err) => {
@@ -388,6 +468,95 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
     () => openPlatformDonutSlices.reduce((sum, item) => sum + item.value, 0),
     [openPlatformDonutSlices],
   )
+
+  const filteredIncidentList = useMemo(
+    () => incidentList
+      .filter((row) => priorityFilter === 'All' || row.priority_field === priorityFilter)
+      .filter((row) => statusFilter === 'All' || getIncidentStatusGroup(row.sninc_state) === statusFilter)
+      .filter((row) => !incidentSearch || [
+        row.sninc_inc_num,
+        row.sninc_capability,
+        row.sninc_short_desc,
+        row.sninc_assignment_grp,
+        row.sninc_opened_at,
+      ].some((value) => String(value || '').toLowerCase().includes(incidentSearch.toLowerCase())))
+      .sort((left, right) => {
+        const rankDifference = getIncidentStatusRank(left.sninc_state) - getIncidentStatusRank(right.sninc_state)
+        if (rankDifference !== 0) return rankDifference
+
+        const stateDifference = getIncidentStateRank(left.sninc_state) - getIncidentStateRank(right.sninc_state)
+        if (stateDifference !== 0) return stateDifference
+
+        const stateLabelDifference = normalizeIncidentState(left.sninc_state).localeCompare(normalizeIncidentState(right.sninc_state))
+        if (stateLabelDifference !== 0) return stateLabelDifference
+
+        return getIncidentOpenedAtTime(right.sninc_opened_at) - getIncidentOpenedAtTime(left.sninc_opened_at)
+      }),
+    [incidentList, priorityFilter, statusFilter, incidentSearch],
+  )
+
+  const paginatedIncidentList = useMemo(
+    () => filteredIncidentList.slice(incidentPage * rowsPerPage, (incidentPage + 1) * rowsPerPage),
+    [filteredIncidentList, incidentPage],
+  )
+
+  const incidentColumns: ColumnDef[] = [
+    {
+      key: 'sninc_inc_num',
+      header: 'Incident #',
+      width: 100,
+      render: (row) => <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#1976d2', fontFamily: 'monospace' }}>{row.sninc_inc_num || '—'}</Typography>,
+    },
+    {
+      key: 'priority_field',
+      header: 'Priority',
+      width: 75,
+      render: (row) => (
+        <Chip
+          label={row.priority_field || '—'}
+          size="small"
+          sx={{
+            height: 20,
+            fontSize: '10px',
+            fontWeight: 700,
+            color: INCIDENT_PRIORITY_COLORS[row.priority_field] || '#555',
+            backgroundColor: INCIDENT_PRIORITY_BACKGROUNDS[row.priority_field] || '#eee',
+          }}
+        />
+      ),
+    },
+    {
+      key: 'sninc_state',
+      header: 'Status',
+      width: 140,
+      render: (row) => {
+        const statusGroup = getIncidentStatusGroup(row.sninc_state)
+        const isOpen = statusGroup !== 'Resolved/Closed/Canceled'
+        return (
+          <Chip
+            label={row.sninc_state || '—'}
+            size="small"
+            sx={{
+              height: 20,
+              fontSize: '10px',
+              fontWeight: 700,
+              color: isOpen ? '#c62828' : '#2e7d32',
+              backgroundColor: isOpen ? '#ffebee' : '#e8f5e9',
+            }}
+          />
+        )
+      },
+    },
+    {
+      key: 'sninc_opened_at',
+      header: 'Opened At',
+      width: 160,
+      render: (row) => <Typography sx={{ fontSize: '11px', color: '#555' }}>{formatIncidentOpenedAt(row.sninc_opened_at)}</Typography>,
+    },
+    { key: 'sninc_capability', header: 'Capability', width: 150, render: (row) => <Typography sx={{ fontSize: '11px', color: '#555' }}>{row.sninc_capability || '—'}</Typography> },
+    { key: 'sninc_short_desc', header: 'Description', flex: 1, render: (row) => <Typography sx={{ fontSize: '11px', color: '#333' }}>{row.sninc_short_desc || '—'}</Typography> },
+    { key: 'sninc_assignment_grp', header: 'Assignment Group', width: 160, render: (row) => <Typography sx={{ fontSize: '11px', color: '#666' }}>{row.sninc_assignment_grp || '—'}</Typography> },
+  ]
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -801,7 +970,7 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
                 gridTemplateColumns: {
                   xs: '1fr',
                   md: 'repeat(2, minmax(0, 1fr))',
-                  xl: 'minmax(0, 0.95fr) minmax(0, 0.95fr) minmax(0, 0.95fr) minmax(0, 1.15fr)',
+                  lg: 'repeat(3, minmax(0, 1fr))',
                 },
                 gap: 1.1,
                 alignItems: 'stretch',
@@ -870,6 +1039,7 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
                 </Box>
               </Paper>
 
+              {false && (
               <Paper elevation={0} sx={{ minWidth: 0, borderRadius: 2.5, border: '1px solid #e6ebf2', p: 1.35, boxShadow: '0 8px 18px rgba(15, 23, 42, 0.04)' }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.75 }}>
                   <Typography sx={{ fontSize: '14px', fontWeight: 800, color: '#102a43' }}>Top by Updates & AI Feed</Typography>
@@ -909,7 +1079,112 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
                   ))}
                 </Box>
               </Paper>
+              )}
             </Box>
+
+            <Paper elevation={0} sx={{ borderRadius: 2.5, border: '1px solid #e6ebf2', overflow: 'hidden', boxShadow: '0 8px 18px rgba(15, 23, 42, 0.04)' }}>
+              <Box sx={{ px: 1.6, py: 1.1, borderBottom: '1px solid #eef2f7', display: 'flex', alignItems: 'center', gap: 1 }}>
+                <WarningAmberIcon sx={{ fontSize: 18, color: '#1565c0' }} />
+                <Typography sx={{ fontSize: '14px', fontWeight: 800, color: '#102a43' }}>All Incidents</Typography>
+                <Typography sx={{ fontSize: '10px', color: '#64748b', ml: 'auto' }}>
+                  {days === 'all' ? 'all incidents with most recent status' : `active during last ${days}d`} · {filteredIncidentList.length} records
+                </Typography>
+              </Box>
+
+              <Box sx={{ px: 1.5, pt: 0.7, pb: 0.55, display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap', borderBottom: '1px solid #f0f0f0' }}>
+                <TextField
+                  size="small"
+                  placeholder="Search incidents..."
+                  value={incidentSearch}
+                  onChange={(event) => { setIncidentSearch(event.target.value); setIncidentPage(0) }}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchIcon sx={{ fontSize: 14, color: '#aaa' }} />
+                      </InputAdornment>
+                    ),
+                  }}
+                  sx={{ minWidth: 220, '& .MuiOutlinedInput-root': { fontSize: '11px', borderRadius: 2, height: 30 } }}
+                />
+
+                {['All', 'P1', 'P2', 'P3', 'P4', 'P5'].map((priority) => (
+                  <Chip
+                    key={priority}
+                    label={priority}
+                    size="small"
+                    onClick={() => { setPriorityFilter(priority); setIncidentPage(0) }}
+                    sx={{
+                      fontSize: '10px',
+                      height: 22,
+                      cursor: 'pointer',
+                      fontWeight: priorityFilter === priority ? 700 : 400,
+                      backgroundColor: priorityFilter === priority ? (INCIDENT_PRIORITY_BACKGROUNDS[priority] ?? '#f5f5f5') : '#f5f5f5',
+                      color: priorityFilter === priority ? (INCIDENT_PRIORITY_COLORS[priority] ?? '#1565c0') : '#aaa',
+                      border: priorityFilter === priority ? `1px solid ${(INCIDENT_PRIORITY_COLORS[priority] ?? '#1565c0')}40` : '1px solid transparent',
+                      '& .MuiChip-label': { px: 1 },
+                    }}
+                  />
+                ))}
+
+                {statusFilterOptions.map((status) => {
+                  const isActive = statusFilter === status
+                  const colors = status === 'New'
+                    ? { color: '#c62828', bg: '#ffebee' }
+                    : status === 'In Progress'
+                      ? { color: '#1565c0', bg: '#e3f2fd' }
+                      : status === 'Resolved/Closed/Canceled'
+                        ? { color: '#2e7d32', bg: '#e8f5e9' }
+                        : status === 'On Hold'
+                          ? { color: '#ef6c00', bg: '#fff3e0' }
+                          : { color: '#1565c0', bg: '#e3f2fd' }
+                  return (
+                    <Chip
+                      key={status}
+                      label={status}
+                      size="small"
+                      onClick={() => { setStatusFilter(status); setIncidentPage(0) }}
+                      sx={{
+                        fontSize: '10px',
+                        height: 22,
+                        cursor: 'pointer',
+                        fontWeight: isActive ? 700 : 400,
+                        backgroundColor: isActive ? colors.bg : '#f5f5f5',
+                        color: isActive ? colors.color : '#aaa',
+                        border: isActive ? `1px solid ${colors.color}40` : '1px solid transparent',
+                        '& .MuiChip-label': { px: 1 },
+                      }}
+                    />
+                  )
+                })}
+              </Box>
+
+              <Box sx={{ px: 1.5, py: 0.9 }}>
+                <DataTable
+                  columns={incidentColumns}
+                  rows={paginatedIncidentList}
+                  rowKey="sninc_inc_num"
+                  compact
+                  accentColor="#1565c0"
+                  maxHeight={360}
+                />
+              </Box>
+
+              {filteredIncidentList.length > rowsPerPage && (
+                <TablePagination
+                  component="div"
+                  count={filteredIncidentList.length}
+                  page={incidentPage}
+                  onPageChange={(_event, newPage) => setIncidentPage(newPage)}
+                  rowsPerPage={rowsPerPage}
+                  rowsPerPageOptions={[rowsPerPage]}
+                  sx={{
+                    borderTop: '1px solid #f0f0f0',
+                    '& .MuiTablePagination-toolbar': { minHeight: 36, fontSize: '11px' },
+                    '& .MuiTablePagination-displayedRows': { fontSize: '11px' },
+                  }}
+                />
+              )}
+            </Paper>
           </Box>
         )}
       </Paper>

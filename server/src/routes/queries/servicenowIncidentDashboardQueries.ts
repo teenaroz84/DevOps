@@ -178,7 +178,7 @@ WITH latest AS (
            PARTITION BY sninc_inc_num
            ORDER BY sninc_last_updt_dttm DESC NULLS LAST
          ) AS rn
-  FROM ebd.service_now_inc
+  FROM edoops.service_now_inc
 ),
 grouped AS (
   SELECT
@@ -209,7 +209,7 @@ WITH latest AS (
            PARTITION BY sninc_inc_num
            ORDER BY sninc_last_updt_dttm DESC NULLS LAST
          ) AS rn
-  FROM ebd.service_now_inc
+  FROM edoops.service_now_inc
 ),
 grouped AS (
   SELECT
@@ -240,7 +240,7 @@ WITH latest AS (
            PARTITION BY sninc_inc_num
            ORDER BY sninc_last_updt_dttm DESC NULLS LAST
          ) AS rn
-  FROM ebd.service_now_inc
+  FROM edoops.service_now_inc
 ),
 grouped AS (
   SELECT
@@ -269,7 +269,7 @@ WITH latest AS (
            PARTITION BY sninc_inc_num
            ORDER BY sninc_last_updt_dttm DESC NULLS LAST
          ) AS rn
-  FROM ebd.service_now_inc
+  FROM edoops.service_now_inc
 )
 SELECT
   COUNT(*) FILTER (
@@ -304,7 +304,7 @@ WITH latest AS (
            PARTITION BY sninc_inc_num
            ORDER BY sninc_last_updt_dttm DESC NULLS LAST
          ) AS rn
-  FROM ebd.service_now_inc
+  FROM edoops.service_now_inc
 )
 SELECT
   sninc_inc_num,
@@ -332,7 +332,7 @@ WITH latest AS (
            PARTITION BY sninc_inc_num
            ORDER BY sninc_last_updt_dttm DESC NULLS LAST
          ) AS rn
-  FROM ebd.service_now_inc
+  FROM edoops.service_now_inc
 ),
 bucketed AS (
   SELECT
@@ -375,7 +375,7 @@ WITH latest AS (
            PARTITION BY sninc_inc_num
            ORDER BY sninc_last_updt_dttm DESC NULLS LAST
          ) AS rn
-  FROM ebd.service_now_inc
+  FROM edoops.service_now_inc
 ),
 grouped AS (
   SELECT
@@ -404,7 +404,7 @@ WITH update_counts AS (
     sninc_inc_num,
     COUNT(*) AS update_count,
     MAX(sninc_last_updt_dttm) AS last_updated
-  FROM ebd.service_now_inc
+  FROM edoops.service_now_inc
   GROUP BY sninc_inc_num
 ),
 latest AS (
@@ -413,7 +413,7 @@ latest AS (
            PARTITION BY sninc_inc_num
            ORDER BY sninc_last_updt_dttm DESC NULLS LAST
          ) AS rn
-  FROM ebd.service_now_inc
+  FROM edoops.service_now_inc
 )
 SELECT
   u.sninc_inc_num,
