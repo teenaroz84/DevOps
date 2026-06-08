@@ -257,6 +257,37 @@ export const MOCK_SERVICENOW_TOP_INCIDENT_UPDATES = [
   { sninc_inc_num: 'INC0002211', updates_count: 28, current_state: 'Open', last_updated_at: '2026-05-19T13:02:00.000Z' },
 ]
 
+export const MOCK_SERVICENOW_SLA_BREACH_RISK_ALERT_TICKETS = [
+  { sninc_inc_num: 'INC0042849', sninc_short_desc: 'ESP overnight processing window at risk', sninc_assignment_grp: 'Platform Ops', sninc_priority: '2 - High', sninc_expiry_dttm: '2026-06-08T12:45:00.000Z', minutes_to_breach: 45, sninc_mon_sla: 'Incident Response', sninc_last_updt_dttm: '2026-06-08T12:00:00.000Z' },
+  { sninc_inc_num: 'INC0042833', sninc_short_desc: 'Data quality triage ticket nearing SLA', sninc_assignment_grp: 'Cloud Analytics', sninc_priority: '3 - Moderate', sninc_expiry_dttm: '2026-06-08T14:00:00.000Z', minutes_to_breach: 120, sninc_mon_sla: 'Incident Response', sninc_last_updt_dttm: '2026-06-08T11:40:00.000Z' },
+  { sninc_inc_num: 'INC0042819', sninc_short_desc: 'Talend engine instability follow-up', sninc_assignment_grp: 'DataOps Platform', sninc_priority: '3 - Moderate', sninc_expiry_dttm: '2026-06-08T16:00:00.000Z', minutes_to_breach: 240, sninc_mon_sla: 'Incident Response', sninc_last_updt_dttm: '2026-06-08T10:55:00.000Z' },
+]
+
+export const MOCK_SERVICENOW_OPEN_INCIDENT_AGEING = [
+  { age_bucket: '0-1 Days', incident_count: 2143, pct_of_open: 23.4 },
+  { age_bucket: '2-3 Days', incident_count: 1876, pct_of_open: 20.5 },
+  { age_bucket: '4-7 Days', incident_count: 2234, pct_of_open: 24.4 },
+  { age_bucket: '8-15 Days', incident_count: 1842, pct_of_open: 20.1 },
+  { age_bucket: '16-30 Days', incident_count: 742, pct_of_open: 8.1 },
+  { age_bucket: '31+ Days', incident_count: 319, pct_of_open: 3.5 },
+]
+
+export const MOCK_SERVICENOW_TOP_INCIDENT_CATEGORIES = [
+  { category: 'Access / Login Issues', incident_count: 2145, pct_of_open: 23.4 },
+  { category: 'Performance Issues', incident_count: 1732, pct_of_open: 18.9 },
+  { category: 'Application Errors', incident_count: 1421, pct_of_open: 15.5 },
+  { category: 'Connectivity Issues', incident_count: 1090, pct_of_open: 11.9 },
+  { category: 'Data Issues', incident_count: 832, pct_of_open: 9.1 },
+]
+
+export const MOCK_SERVICENOW_TOP_INCIDENTS_BY_UPDATE_COUNT = [
+  { sninc_inc_num: 'INC0001234', update_count: 56, sninc_state: 'Open', sninc_priority: '2 - High', sninc_short_desc: 'ESP recovery incident', sninc_assignment_grp: 'Platform Ops', sninc_last_updt_dttm: '2026-05-25T22:45:00.000Z' },
+  { sninc_inc_num: 'INC0005678', update_count: 48, sninc_state: 'Open', sninc_priority: '3 - Moderate', sninc_short_desc: 'Oracle EBS incident chatter', sninc_assignment_grp: 'Oracle Apps', sninc_last_updt_dttm: '2026-05-25T21:32:00.000Z' },
+  { sninc_inc_num: 'INC0002345', update_count: 42, sninc_state: 'Closed', sninc_priority: '3 - Moderate', sninc_short_desc: 'Connectivity issue follow-ups', sninc_assignment_grp: 'Network Support', sninc_last_updt_dttm: '2026-05-25T20:10:00.000Z' },
+  { sninc_inc_num: 'INC0003456', update_count: 38, sninc_state: 'Open', sninc_priority: '1 - Critical', sninc_short_desc: 'Monitoring escalations', sninc_assignment_grp: 'Platform Ops', sninc_last_updt_dttm: '2026-05-25T19:42:00.000Z' },
+  { sninc_inc_num: 'INC0006789', update_count: 37, sninc_state: 'Closed', sninc_priority: '2 - High', sninc_short_desc: 'Batch SLA breach remediation', sninc_assignment_grp: 'DataOps Platform', sninc_last_updt_dttm: '2026-05-25T18:51:00.000Z' },
+]
+
 export const MOCK_SERVICENOW_PLATFORMS = [
   { platform: 'BI Analytics',      hasCritical: true  },
   { platform: 'BI Reporting',      hasCritical: true  },

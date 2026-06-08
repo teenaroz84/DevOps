@@ -6,13 +6,17 @@
 import { Router, Request, Response } from 'express';
 import { getPgPool } from '../db/postgres';
 import {
+  buildAgingOfOpenIncidentsHorizontalBarQuery,
   buildIncidentsByAssignmentGroupTop10Query,
   buildIncidentsByPlatformApplicationTop10Query,
   buildIncidentsByPriorityDonutQuery,
   buildIncidentStateOverTimeDailyStackedBarQuery,
   buildIncidentTrendDailyLineQuery,
   buildIncidentLifecycleDashboardQuery,
+  buildSlaBreachRiskAlertBannerTicketsQuery,
   buildSlaPerformancePanelGaugeQuery,
+  buildTopIncidentCategoriesQuery,
+  buildTopIncidentsByUpdateCountQuery,
   buildTotalIncidentsDashboardQuery,
 } from './queries/servicenowIncidentDashboardQueries';
 
@@ -790,6 +794,58 @@ router.get('/sla-performance-panel', async (_req: Request, res: Response) => {
     });
   } catch (err: any) {
     console.error('ServiceNow sla-performance-panel error:', err.message);
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
+// GET /api/servicenow/sla-breach-risk-alert-tickets
+// Widget 10: SLA breach risk tickets within the next 4 hours
+router.get('/sla-breach-risk-alert-tickets', async (_req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const result = await pool.query(buildSlaBreachRiskAlertBannerTicketsQuery());
+    res.json(result.rows);
+  } catch (err: any) {
+    console.error('ServiceNow sla-breach-risk-alert-tickets error:', err.message);
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
+// GET /api/servicenow/open-incident-ageing
+// Widget 11: Aging buckets for open incidents
+router.get('/open-incident-ageing', async (_req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const result = await pool.query(buildAgingOfOpenIncidentsHorizontalBarQuery());
+    res.json(result.rows);
+  } catch (err: any) {
+    console.error('ServiceNow open-incident-ageing error:', err.message);
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
+// GET /api/servicenow/top-incident-categories
+// Widget 12: Top 5 open incident categories
+router.get('/top-incident-categories', async (_req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const result = await pool.query(buildTopIncidentCategoriesQuery());
+    res.json(result.rows);
+  } catch (err: any) {
+    console.error('ServiceNow top-incident-categories error:', err.message);
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
+// GET /api/servicenow/top-incidents-by-update-count
+// Widget 13: Most frequently updated incidents
+router.get('/top-incidents-by-update-count', async (_req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const result = await pool.query(buildTopIncidentsByUpdateCountQuery());
+    res.json(result.rows);
+  } catch (err: any) {
+    console.error('ServiceNow top-incidents-by-update-count error:', err.message);
     res.status(500).json({ error: 'Query failed', details: err.message });
   }
 });

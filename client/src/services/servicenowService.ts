@@ -46,6 +46,39 @@ export interface ServiceNowSlaPerformancePanel {
   within_sla_pct: number
 }
 
+export interface ServiceNowSlaBreachRiskTicket {
+  sninc_inc_num: string
+  sninc_short_desc: string
+  sninc_assignment_grp: string | null
+  sninc_priority: string | null
+  sninc_expiry_dttm: string | null
+  minutes_to_breach: number | null
+  sninc_mon_sla: string | null
+  sninc_last_updt_dttm: string | null
+}
+
+export interface ServiceNowOpenIncidentAgeingRow {
+  age_bucket: string
+  incident_count: number
+  pct_of_open: number
+}
+
+export interface ServiceNowTopIncidentCategoryRow {
+  category: string
+  incident_count: number
+  pct_of_open: number
+}
+
+export interface ServiceNowTopIncidentUpdateRow {
+  sninc_inc_num: string
+  update_count: number
+  sninc_state: string | null
+  sninc_priority: string | null
+  sninc_short_desc: string | null
+  sninc_assignment_grp: string | null
+  sninc_last_updt_dttm: string | null
+}
+
 const withDays = (basePath: string, days: ServiceNowDaysFilter = 7, platform?: string) => {
   const params = new URLSearchParams()
   if (platform) params.set('platform', platform)
@@ -104,4 +137,12 @@ export const servicenowService = {
     apiClient.get<ServiceNowPriorityDonutRow[]>('/api/servicenow/incidents-priority-donut'),
   getSlaPerformancePanel: () =>
     apiClient.get<ServiceNowSlaPerformancePanel>('/api/servicenow/sla-performance-panel'),
+  getSlaBreachRiskAlertTickets: () =>
+    apiClient.get<ServiceNowSlaBreachRiskTicket[]>('/api/servicenow/sla-breach-risk-alert-tickets'),
+  getOpenIncidentAgeing: () =>
+    apiClient.get<ServiceNowOpenIncidentAgeingRow[]>('/api/servicenow/open-incident-ageing'),
+  getTopIncidentCategories: () =>
+    apiClient.get<ServiceNowTopIncidentCategoryRow[]>('/api/servicenow/top-incident-categories'),
+  getTopIncidentsByUpdateCount: () =>
+    apiClient.get<ServiceNowTopIncidentUpdateRow[]>('/api/servicenow/top-incidents-by-update-count'),
 }
