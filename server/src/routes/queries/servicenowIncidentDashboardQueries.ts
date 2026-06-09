@@ -431,3 +431,209 @@ ORDER BY u.update_count DESC
 LIMIT 10;
 `
 }
+
+export function buildOperationalKpisQuery(days: number | null, hasPlatform: boolean) {
+  if (days === null) {
+    return `
+WITH latest AS (
+  SELECT *,
+         ROW_NUMBER() OVER (
+           PARTITION BY sninc_inc_num
+           ORDER BY sninc_last_updt_dttm DESC NULLS LAST
+         ) AS rn
+  FROM edoops.service_now_inc
+),
+first_touch AS (
+  -- Separate CTE using ALL rows to find first agent response per ticket
+  SELECT DISTINCT ON (sninc_inc_num)
+    sninc_inc_num,
+    sninc_opened_at,
+    EXTRACT(EPOCH FROM (sninc_sys_updt_on - sninc_opened_at)) / 3600.0 AS hours_to_first_response
+  FROM edoops.service_now_inc
+  WHERE sninc_opened_at IS NOT NULL
+    AND sninc_sys_updt_on IS NOT NULL
+    AND sninc_sys_updt_on > sninc_opened_at
+  ORDER BY sninc_inc_num, sninc_sys_updt_on ASC
+),
+base AS (
+  SELECT
+    l.sninc_inc_num,
+    l.sninc_state,
+    l.sninc_opened_at,
+    l.sninc_resolved_at,
+    l.sninc_closed_at,
+    l.sninc_reopened_dttm,
+    l.sninc_knowledge,
+    l.sninc_applkp_pltf_nm,
+    f.hours_to_first_response,
+    EXTRACT(EPOCH FROM (l.sninc_resolved_at - l.sninc_opened_at)) / 86400.0 AS days_to_resolve
+  FROM latest l
+  LEFT JOIN first_touch f
+    ON l.sninc_inc_num = f.sninc_inc_num
+  WHERE l.rn = 1
+${hasPlatform ? '    AND l.sninc_applkp_pltf_nm = $1' : ''}
+)
+SELECT
+  -- KPI 1: Avg Time to Resolve
+  ROUND(AVG(days_to_resolve) FILTER (
+    WHERE sninc_state IN ('Resolved','Closed')
+    AND sninc_resolved_at >= sninc_opened_at
+  )::NUMERIC, 1) AS avg_resolve_days_current,
+
+  NULL::NUMERIC AS avg_resolve_days_prev,
+
+  -- KPI 2: First Response Time
+  ROUND(AVG(hours_to_first_response) FILTER (
+    WHERE sninc_opened_at IS NOT NULL
+  )::NUMERIC, 1) AS avg_first_response_hrs_current,
+
+  NULL::NUMERIC AS avg_first_response_hrs_prev,
+
+  -- KPI 3: Backlog Trend
+  COUNT(*) FILTER (
+    WHERE sninc_state NOT IN ('Closed','Resolved')
+  ) AS backlog_now,
+
+  0::BIGINT AS backlog_90d_ago,
+
+  -- KPI 4: Reopen Rate
+  ROUND(100.0
+    * COUNT(*) FILTER (
+      WHERE sninc_reopened_dttm IS NOT NULL
+    )
+    / NULLIF(COUNT(*) FILTER (
+      WHERE sninc_resolved_at IS NOT NULL
+      OR sninc_closed_at IS NOT NULL
+    ), 0)
+  , 1) AS reopen_rate_pct_current,
+
+  NULL::NUMERIC AS reopen_rate_pct_prev,
+
+  -- KPI 5: Knowledge Articles Used
+  COUNT(DISTINCT NULLIF(TRIM(sninc_knowledge), '')) FILTER (
+    WHERE sninc_opened_at IS NOT NULL
+  ) AS unique_articles_current,
+
+  0::BIGINT AS unique_articles_prev
+
+FROM base;
+`
+  }
+
+  const currentInterval = `${days} days`
+  const previousInterval = `${days * 2} days`
+
+  return `
+WITH latest AS (
+  SELECT *,
+         ROW_NUMBER() OVER (
+           PARTITION BY sninc_inc_num
+           ORDER BY sninc_last_updt_dttm DESC NULLS LAST
+         ) AS rn
+  FROM edoops.service_now_inc
+),
+first_touch AS (
+  -- Separate CTE using ALL rows to find first agent response per ticket
+  SELECT DISTINCT ON (sninc_inc_num)
+    sninc_inc_num,
+    sninc_opened_at,
+    EXTRACT(EPOCH FROM (sninc_sys_updt_on - sninc_opened_at)) / 3600.0 AS hours_to_first_response
+  FROM edoops.service_now_inc
+  WHERE sninc_opened_at IS NOT NULL
+    AND sninc_sys_updt_on IS NOT NULL
+    AND sninc_sys_updt_on > sninc_opened_at
+  ORDER BY sninc_inc_num, sninc_sys_updt_on ASC
+),
+base AS (
+  SELECT
+    l.sninc_inc_num,
+    l.sninc_state,
+    l.sninc_opened_at,
+    l.sninc_resolved_at,
+    l.sninc_closed_at,
+    l.sninc_reopened_dttm,
+    l.sninc_knowledge,
+    l.sninc_applkp_pltf_nm,
+    f.hours_to_first_response,
+    EXTRACT(EPOCH FROM (l.sninc_resolved_at - l.sninc_opened_at)) / 86400.0 AS days_to_resolve
+  FROM latest l
+  LEFT JOIN first_touch f
+    ON l.sninc_inc_num = f.sninc_inc_num
+  WHERE l.rn = 1
+${hasPlatform ? '    AND l.sninc_applkp_pltf_nm = $1' : ''}
+)
+SELECT
+  -- KPI 1: Avg Time to Resolve
+  ROUND(AVG(days_to_resolve) FILTER (
+    WHERE sninc_state IN ('Resolved','Closed')
+    AND sninc_resolved_at >= NOW() - INTERVAL '${currentInterval}'
+    AND sninc_resolved_at >= sninc_opened_at
+  )::NUMERIC, 1) AS avg_resolve_days_current,
+
+  ROUND(AVG(days_to_resolve) FILTER (
+    WHERE sninc_state IN ('Resolved','Closed')
+    AND sninc_resolved_at >= NOW() - INTERVAL '${previousInterval}'
+    AND sninc_resolved_at < NOW() - INTERVAL '${currentInterval}'
+    AND sninc_resolved_at >= sninc_opened_at
+  )::NUMERIC, 1) AS avg_resolve_days_prev,
+
+  -- KPI 2: First Response Time
+  ROUND(AVG(hours_to_first_response) FILTER (
+    WHERE sninc_opened_at >= NOW() - INTERVAL '${currentInterval}'
+  )::NUMERIC, 1) AS avg_first_response_hrs_current,
+
+  ROUND(AVG(hours_to_first_response) FILTER (
+    WHERE sninc_opened_at >= NOW() - INTERVAL '${previousInterval}'
+    AND sninc_opened_at < NOW() - INTERVAL '${currentInterval}'
+  )::NUMERIC, 1) AS avg_first_response_hrs_prev,
+
+  -- KPI 3: Backlog Trend
+  COUNT(*) FILTER (
+    WHERE sninc_state NOT IN ('Closed','Resolved')
+  ) AS backlog_now,
+
+  COUNT(*) FILTER (
+    WHERE sninc_opened_at <= NOW() - INTERVAL '${currentInterval}'
+    AND (sninc_resolved_at IS NULL OR sninc_resolved_at > NOW() - INTERVAL '${currentInterval}')
+    AND (sninc_closed_at IS NULL OR sninc_closed_at > NOW() - INTERVAL '${currentInterval}')
+  ) AS backlog_90d_ago,
+
+  -- KPI 4: Reopen Rate
+  ROUND(100.0
+    * COUNT(*) FILTER (
+      WHERE sninc_reopened_dttm IS NOT NULL
+      AND sninc_reopened_dttm >= NOW() - INTERVAL '${currentInterval}'
+    )
+    / NULLIF(COUNT(*) FILTER (
+      WHERE sninc_resolved_at >= NOW() - INTERVAL '${currentInterval}'
+      OR sninc_closed_at >= NOW() - INTERVAL '${currentInterval}'
+    ), 0)
+  , 1) AS reopen_rate_pct_current,
+
+  ROUND(100.0
+    * COUNT(*) FILTER (
+      WHERE sninc_reopened_dttm IS NOT NULL
+      AND sninc_reopened_dttm >= NOW() - INTERVAL '${previousInterval}'
+      AND sninc_reopened_dttm < NOW() - INTERVAL '${currentInterval}'
+    )
+    / NULLIF(COUNT(*) FILTER (
+      WHERE (sninc_resolved_at >= NOW() - INTERVAL '${previousInterval}'
+        OR sninc_closed_at >= NOW() - INTERVAL '${previousInterval}')
+      AND (sninc_resolved_at < NOW() - INTERVAL '${currentInterval}'
+        OR sninc_closed_at < NOW() - INTERVAL '${currentInterval}')
+    ), 0)
+  , 1) AS reopen_rate_pct_prev,
+
+  -- KPI 5: Knowledge Articles Used
+  COUNT(DISTINCT NULLIF(TRIM(sninc_knowledge), '')) FILTER (
+    WHERE sninc_opened_at >= NOW() - INTERVAL '${currentInterval}'
+  ) AS unique_articles_current,
+
+  COUNT(DISTINCT NULLIF(TRIM(sninc_knowledge), '')) FILTER (
+    WHERE sninc_opened_at >= NOW() - INTERVAL '${previousInterval}'
+    AND sninc_opened_at < NOW() - INTERVAL '${currentInterval}'
+  ) AS unique_articles_prev
+
+FROM base;
+`
+}

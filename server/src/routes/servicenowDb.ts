@@ -13,6 +13,7 @@ import {
   buildIncidentStateOverTimeDailyStackedBarQuery,
   buildIncidentTrendDailyLineQuery,
   buildIncidentLifecycleDashboardQuery,
+  buildOperationalKpisQuery,
   buildSlaBreachRiskAlertBannerTicketsQuery,
   buildSlaPerformancePanelGaugeQuery,
   buildTopIncidentCategoriesQuery,
@@ -846,6 +847,21 @@ router.get('/top-incidents-by-update-count', async (_req: Request, res: Response
     res.json(result.rows);
   } catch (err: any) {
     console.error('ServiceNow top-incidents-by-update-count error:', err.message);
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
+// GET /api/servicenow/operational-kpis?platform=<value>&days=<n>
+router.get('/operational-kpis', async (req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const days = parseDays(req.query);
+    const platform = req.query.platform as string | undefined;
+    const params = platform ? [platform] : [];
+    const result = await pool.query(buildOperationalKpisQuery(days, Boolean(platform)), params);
+    res.json(result.rows[0] ?? {});
+  } catch (err: any) {
+    console.error('ServiceNow operational-kpis error:', err.message);
     res.status(500).json({ error: 'Query failed', details: err.message });
   }
 });

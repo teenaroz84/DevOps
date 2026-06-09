@@ -79,6 +79,19 @@ export interface ServiceNowTopIncidentUpdateRow {
   sninc_last_updt_dttm: string | null
 }
 
+export interface ServiceNowOperationalKpis {
+  avg_resolve_days_current: number | null
+  avg_resolve_days_prev: number | null
+  avg_first_response_hrs_current: number | null
+  avg_first_response_hrs_prev: number | null
+  backlog_now: number
+  backlog_90d_ago: number
+  reopen_rate_pct_current: number | null
+  reopen_rate_pct_prev: number | null
+  unique_articles_current: number
+  unique_articles_prev: number
+}
+
 const withDays = (basePath: string, days: ServiceNowDaysFilter = 7, platform?: string) => {
   const params = new URLSearchParams()
   if (platform) params.set('platform', platform)
@@ -145,4 +158,6 @@ export const servicenowService = {
     apiClient.get<ServiceNowTopIncidentCategoryRow[]>('/api/servicenow/top-incident-categories'),
   getTopIncidentsByUpdateCount: () =>
     apiClient.get<ServiceNowTopIncidentUpdateRow[]>('/api/servicenow/top-incidents-by-update-count'),
+  getOperationalKpis: (platform?: string, days: ServiceNowDaysFilter = 90) =>
+    apiClient.get<ServiceNowOperationalKpis>(withDays('/api/servicenow/operational-kpis', days, platform)),
 }

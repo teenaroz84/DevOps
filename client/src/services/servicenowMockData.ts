@@ -74,6 +74,19 @@ export const MOCK_SERVICENOW_INCIDENT_DASHBOARD_SUMMARY = {
   reopened_prev: 973,
 }
 
+export const MOCK_SERVICENOW_OPERATIONAL_KPIS = {
+  avg_resolve_days_current: 3.6,
+  avg_resolve_days_prev: 4.0,
+  avg_first_response_hrs_current: 1.2,
+  avg_first_response_hrs_prev: 1.4,
+  backlog_now: 12842,
+  backlog_90d_ago: 11816,
+  reopen_rate_pct_current: 4.6,
+  reopen_rate_pct_prev: 5.3,
+  unique_articles_current: 12842,
+  unique_articles_prev: 11235,
+}
+
 // Query 2: P3/P4 open ("missed") incident counts — bar chart
 export const MOCK_SERVICENOW_MISSED_INCIDENTS = [
   { priority_field: 'P1', incident_count: 3, breached_count: 2, response_sla: '1 Hr',  resolution_sla: '4 Hrs', details_url: 'https://example.local/sla/p1' },

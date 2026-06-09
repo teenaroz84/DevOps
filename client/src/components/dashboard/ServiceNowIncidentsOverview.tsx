@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Autocomplete, Box, Chip, CircularProgress, InputAdornment, MenuItem, Paper, TablePagination, TextField, Typography } from '@mui/material'
 import DonutLargeIcon from '@mui/icons-material/DonutLarge'
+import AutorenewIcon from '@mui/icons-material/Autorenew'
+import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined'
 import SearchIcon from '@mui/icons-material/Search'
 import SupportAgentIcon from '@mui/icons-material/SupportAgent'
 import TimelineIcon from '@mui/icons-material/Timeline'
@@ -13,6 +15,7 @@ import {
   MOCK_SERVICENOW_INCIDENT_LIST,
   MOCK_SERVICENOW_INCIDENT_STATE_DAILY,
   MOCK_SERVICENOW_INCIDENT_TREND,
+  MOCK_SERVICENOW_OPERATIONAL_KPIS,
   MOCK_SERVICENOW_OPEN_INCIDENT_AGEING,
   MOCK_SERVICENOW_PLATFORMS,
   MOCK_SERVICENOW_SLA_BREACH_RISK_ALERT_TICKETS,
@@ -24,6 +27,7 @@ import {
   type ServiceNowAssignmentGroupTop10Row,
   type ServiceNowDaysFilter,
   type ServiceNowIncidentDashboardSummary,
+  type ServiceNowOperationalKpis,
   type ServiceNowOpenIncidentAgeingRow,
   type ServiceNowPlatformApplicationTop10Row,
   type ServiceNowPriorityDonutRow,
@@ -206,6 +210,70 @@ function getIncidentOpenedAtTime(value?: string | null) {
   return Number.isNaN(time) ? 0 : time
 }
 
+function formatKpiDelta(value: number | null | undefined, decimals = 1) {
+  if (value === null || value === undefined || Number.isNaN(value)) return 'N/A'
+  const absolute = Math.abs(value)
+  return `${value > 0 ? '▲' : value < 0 ? '▼' : '•'} ${absolute.toFixed(decimals)}`
+}
+
+function getPercentChange(current: number | null | undefined, previous: number | null | undefined) {
+  if (
+    current === null || current === undefined || Number.isNaN(current) ||
+    previous === null || previous === undefined || Number.isNaN(previous) ||
+    previous === 0
+  ) {
+    return null
+  }
+  return ((current - previous) / previous) * 100
+}
+
+function getOperationalComparisonLabel(days: ServiceNowDaysFilter) {
+  if (days === 'all') return 'vs previous period unavailable in all-time view'
+  return `vs prev ${days} days`
+}
+
+function getOperationalBacklogTitle(days: ServiceNowDaysFilter) {
+  if (days === 'all') return 'Backlog Trend (all time)'
+  return `Backlog Trend (vs last ${days}d)`
+}
+
+const OperationalKpiCard: React.FC<{
+  icon: React.ReactNode
+  title: string
+  value: string
+  deltaLabel: string
+  deltaValue: number | null
+  tone: keyof typeof KPI_CARD_STYLES
+  positiveIsGood?: boolean
+}> = ({ icon, title, value, deltaLabel, deltaValue, tone, positiveIsGood = true }) => {
+  const style = KPI_CARD_STYLES[tone]
+  const isNeutral = deltaValue === null || Number.isNaN(deltaValue)
+  const isPositive = (deltaValue ?? 0) >= 0
+  const deltaTone = isNeutral
+    ? { color: '#64748b', bg: '#f8fafc' }
+    : positiveIsGood === isPositive
+      ? { color: '#15803d', bg: '#f0fdf4' }
+      : { color: '#b45309', bg: '#fff7ed' }
+
+  return (
+    <Paper elevation={0} sx={{ borderRadius: 2.5, border: '1px solid #e6ebf2', borderTop: `3px solid ${style.accent}`, backgroundColor: style.bg, px: 1.5, py: 1.35, minHeight: 108, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxShadow: '0 8px 18px rgba(15, 23, 42, 0.04)' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.9 }}>
+        <Box sx={{ width: 24, height: 24, borderRadius: 1.2, bgcolor: '#f8fafc', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {icon}
+        </Box>
+        <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>{title}</Typography>
+      </Box>
+      <Typography sx={{ fontSize: '28px', fontWeight: 800, color: '#102a43', lineHeight: 1.05, letterSpacing: '-0.5px' }}>
+        {value}
+      </Typography>
+      <Box sx={{ mt: 0.8, display: 'inline-flex', alignItems: 'center', gap: 0.5, px: 0.8, py: 0.35, borderRadius: 99, bgcolor: deltaTone.bg }}>
+        <Typography sx={{ fontSize: '10px', fontWeight: 800, color: deltaTone.color }}>{formatKpiDelta(deltaValue)}</Typography>
+      </Box>
+      <Typography sx={{ mt: 0.45, fontSize: '10px', color: style.chipColor, textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.25px' }}>{deltaLabel}</Typography>
+    </Paper>
+  )
+}
+
 const MetricCard: React.FC<{
   title: string
   value: number
@@ -283,6 +351,7 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
   const [topIncidentCategories, setTopIncidentCategories] = useState<ServiceNowTopIncidentCategoryRow[]>([])
   const [topIncidentUpdates, setTopIncidentUpdates] = useState<ServiceNowTopIncidentUpdateRow[]>([])
   const [breachRiskTickets, setBreachRiskTickets] = useState<ServiceNowSlaBreachRiskTicket[]>([])
+  const [operationalKpis, setOperationalKpis] = useState<ServiceNowOperationalKpis>(MOCK_SERVICENOW_OPERATIONAL_KPIS)
   const [incidentList, setIncidentList] = useState<any[]>([])
   const [priorityFilter, setPriorityFilter] = useState('All')
   const [statusFilter, setStatusFilter] = useState('All')
@@ -325,6 +394,7 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
       setTopIncidentCategories(MOCK_SERVICENOW_TOP_INCIDENT_CATEGORIES)
       setTopIncidentUpdates(MOCK_SERVICENOW_TOP_INCIDENTS_BY_UPDATE_COUNT)
       setBreachRiskTickets(MOCK_SERVICENOW_SLA_BREACH_RISK_ALERT_TICKETS)
+      setOperationalKpis(MOCK_SERVICENOW_OPERATIONAL_KPIS)
       setIncidentList(MOCK_SERVICENOW_INCIDENT_LIST)
       setLoading(false)
       return
@@ -342,6 +412,7 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
       servicenowService.getTopIncidentCategories(),
       servicenowService.getTopIncidentsByUpdateCount(),
       servicenowService.getSlaBreachRiskAlertTickets(),
+      servicenowService.getOperationalKpis(selectedPlatform ?? undefined, days),
       servicenowService.getIncidentList(selectedPlatform ?? undefined, days),
     ])
       .then(([
@@ -356,6 +427,7 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
         categoriesData,
         updatesData,
         breachRiskData,
+        operationalKpiData,
         incidentListData,
       ]) => {
         setSummary(summaryData)
@@ -369,6 +441,7 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
         setTopIncidentCategories(Array.isArray(categoriesData) ? categoriesData : [])
         setTopIncidentUpdates(Array.isArray(updatesData) ? updatesData : [])
         setBreachRiskTickets(Array.isArray(breachRiskData) ? breachRiskData : [])
+        setOperationalKpis(operationalKpiData ?? MOCK_SERVICENOW_OPERATIONAL_KPIS)
         setIncidentList(Array.isArray(incidentListData) ? incidentListData : [])
         setLoading(false)
       })
@@ -557,6 +630,67 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
     { key: 'sninc_short_desc', header: 'Description', flex: 1, render: (row) => <Typography sx={{ fontSize: '11px', color: '#333' }}>{row.sninc_short_desc || '—'}</Typography> },
     { key: 'sninc_assignment_grp', header: 'Assignment Group', width: 160, render: (row) => <Typography sx={{ fontSize: '11px', color: '#666' }}>{row.sninc_assignment_grp || '—'}</Typography> },
   ]
+
+  const backlogTrendPct = useMemo(
+    () => getPercentChange(Number(operationalKpis.backlog_now ?? 0), Number(operationalKpis.backlog_90d_ago ?? 0)),
+    [operationalKpis.backlog_90d_ago, operationalKpis.backlog_now],
+  )
+
+  const operationalCards = useMemo(
+    () => [
+      {
+        key: 'avg-resolve',
+        icon: <TimelineIcon sx={{ fontSize: 14 }} />,
+        title: 'Avg Time to Resolve (Open)',
+        value: `${Number(operationalKpis.avg_resolve_days_current ?? 0).toFixed(1)} Days`,
+        deltaLabel: getOperationalComparisonLabel(days),
+        deltaValue: (operationalKpis.avg_resolve_days_current ?? 0) - (operationalKpis.avg_resolve_days_prev ?? 0),
+        tone: 'new' as const,
+        positiveIsGood: false,
+      },
+      {
+        key: 'first-response',
+        icon: <WarningAmberIcon sx={{ fontSize: 14 }} />,
+        title: 'First Response Time (Open)',
+        value: `${Number(operationalKpis.avg_first_response_hrs_current ?? 0).toFixed(1)} Hours`,
+        deltaLabel: getOperationalComparisonLabel(days),
+        deltaValue: (operationalKpis.avg_first_response_hrs_current ?? 0) - (operationalKpis.avg_first_response_hrs_prev ?? 0),
+        tone: 'total' as const,
+        positiveIsGood: false,
+      },
+      {
+        key: 'backlog-trend',
+        icon: <TrendingUpIcon sx={{ fontSize: 14 }} />,
+        title: getOperationalBacklogTitle(days),
+        value: `${Math.abs(backlogTrendPct ?? 0).toFixed(1)}%`,
+        deltaLabel: backlogTrendPct === null ? 'insufficient history' : backlogTrendPct >= 0 ? 'Increasing - monitor' : 'Decreasing',
+        deltaValue: backlogTrendPct,
+        tone: 'open' as const,
+        positiveIsGood: false,
+      },
+      {
+        key: 'reopen-rate',
+        icon: <AutorenewIcon sx={{ fontSize: 14 }} />,
+        title: 'Reopen Rate',
+        value: `${Number(operationalKpis.reopen_rate_pct_current ?? 0).toFixed(1)}%`,
+        deltaLabel: getOperationalComparisonLabel(days),
+        deltaValue: (operationalKpis.reopen_rate_pct_current ?? 0) - (operationalKpis.reopen_rate_pct_prev ?? 0),
+        tone: 'reopened' as const,
+        positiveIsGood: false,
+      },
+      {
+        key: 'knowledge',
+        icon: <Inventory2OutlinedIcon sx={{ fontSize: 14 }} />,
+        title: 'Knowledge Articles Used',
+        value: formatMetric(Number(operationalKpis.unique_articles_current ?? 0)),
+        deltaLabel: getOperationalComparisonLabel(days),
+        deltaValue: getPercentChange(Number(operationalKpis.unique_articles_current ?? 0), Number(operationalKpis.unique_articles_prev ?? 0)),
+        tone: 'closed' as const,
+        positiveIsGood: true,
+      },
+    ],
+    [backlogTrendPct, days, operationalKpis],
+  )
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -1185,6 +1319,26 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
                 />
               )}
             </Paper>
+
+            <Box>
+              <Typography sx={{ px: 0.2, mb: 0.9, fontSize: '11px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Operational KPIs
+              </Typography>
+              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', lg: 'repeat(5, minmax(0, 1fr))' }, gap: 1.1 }}>
+                {operationalCards.map((card) => (
+                  <OperationalKpiCard
+                    key={card.key}
+                    icon={card.icon}
+                    title={card.title}
+                    value={card.value}
+                    deltaLabel={card.deltaLabel}
+                    deltaValue={card.deltaValue}
+                    tone={card.tone}
+                    positiveIsGood={card.positiveIsGood}
+                  />
+                ))}
+              </Box>
+            </Box>
           </Box>
         )}
       </Paper>
