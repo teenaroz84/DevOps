@@ -16,6 +16,27 @@ export interface ServiceNowIncidentDashboardSummary {
   open_prev: number
   closed_prev: number
   reopened_prev: number
+  ai_triaged_current: number
+  ai_total_current: number
+  ai_triaged_prev: number
+  ai_total_prev: number
+}
+
+export interface ServiceNowTopKpiTrendRow {
+  day: string
+  kpi1_total_opened: number
+  kpi1_rolling_7d: number
+  kpi2_new_count: number
+  kpi2_rolling_7d: number
+  kpi3_open_snapshot: number
+  kpi3_rolling_7d: number
+  kpi4_closed_count: number
+  kpi4_rolling_7d: number
+  kpi5_reopened_count: number
+  kpi5_rolling_7d: number
+  kpi6_ai_triaged: number
+  kpi6_ai_rag_pct: number
+  kpi6_rolling_7d: number
 }
 
 export interface ServiceNowAssignmentGroupTop10Row {
@@ -104,6 +125,8 @@ export const servicenowService = {
   getPlatforms:         (days: ServiceNowDaysFilter = 7) => apiClient.get(withDays('/api/servicenow/platforms', days)),
   getIncidentDashboardSummary: (platform?: string, days: ServiceNowDaysFilter = 90) =>
     apiClient.get<ServiceNowIncidentDashboardSummary>(withDays('/api/servicenow/incidents-dashboard-summary', days, platform)),
+  getTopKpiTrends: (platform?: string, days: ServiceNowDaysFilter = 90) =>
+    apiClient.get<ServiceNowTopKpiTrendRow[]>(withDays('/api/servicenow/top-kpi-trends', days, platform)),
   getIncidentSummary:   (platform?: string) =>
     apiClient.get(`/api/servicenow/incidents-summary${platform ? `?platform=${encodeURIComponent(platform)}` : ''}`),
   getIncidents:         (platform?: string) =>

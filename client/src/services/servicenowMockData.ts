@@ -72,7 +72,47 @@ export const MOCK_SERVICENOW_INCIDENT_DASHBOARD_SUMMARY = {
   open_prev: 8057,
   closed_prev: 7001,
   reopened_prev: 973,
+  ai_triaged_current: 1123,
+  ai_total_current: 1434,
+  ai_triaged_prev: 1007,
+  ai_total_prev: 1375,
 }
+
+export const MOCK_SERVICENOW_TOP_KPI_TRENDS = (() => {
+  const today = new Date()
+  let openSnapshot = 8600
+  return Array.from({ length: 90 }, (_unused, index) => {
+    const date = new Date(today)
+    date.setDate(date.getDate() - (89 - index))
+
+    const totalOpened = 220 + Math.round(40 * Math.sin(index / 6)) + (index % 5)
+    const newCount = 68 + Math.round(12 * Math.sin(index / 7))
+    const closedCount = 205 + Math.round(28 * Math.cos(index / 8))
+    const reopenedCount = 20 + Math.round(5 * Math.sin(index / 9))
+    const aiTriaged = 28 + Math.round(8 * Math.sin(index / 5))
+    const openRag = 36 + Math.round(9 * Math.cos(index / 6))
+
+    openSnapshot += totalOpened - closedCount
+    if (openSnapshot < 0) openSnapshot = 0
+
+    return {
+      day: date.toISOString().split('T')[0],
+      kpi1_total_opened: totalOpened,
+      kpi1_rolling_7d: totalOpened,
+      kpi2_new_count: newCount,
+      kpi2_rolling_7d: newCount,
+      kpi3_open_snapshot: openSnapshot,
+      kpi3_rolling_7d: openSnapshot,
+      kpi4_closed_count: closedCount,
+      kpi4_rolling_7d: closedCount,
+      kpi5_reopened_count: reopenedCount,
+      kpi5_rolling_7d: reopenedCount,
+      kpi6_ai_triaged: aiTriaged,
+      kpi6_ai_rag_pct: Math.round((100 * aiTriaged / Math.max(openRag, 1)) * 10) / 10,
+      kpi6_rolling_7d: Math.round((100 * aiTriaged / Math.max(openRag, 1)) * 10) / 10,
+    }
+  })
+})()
 
 export const MOCK_SERVICENOW_OPERATIONAL_KPIS = {
   avg_resolve_days_current: 3.6,

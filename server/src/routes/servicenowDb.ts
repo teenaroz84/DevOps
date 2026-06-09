@@ -16,6 +16,7 @@ import {
   buildOperationalKpisQuery,
   buildSlaBreachRiskAlertBannerTicketsQuery,
   buildSlaPerformancePanelGaugeQuery,
+  buildTopKpiTrendsQuery,
   buildTopIncidentCategoriesQuery,
   buildTopIncidentsByUpdateCountQuery,
   buildTotalIncidentsDashboardQuery,
@@ -635,9 +636,44 @@ router.get('/incidents-dashboard-summary', async (req: Request, res: Response) =
       open_prev: Number(lifecycle.open_prev ?? 0),
       closed_prev: Number(lifecycle.closed_prev ?? 0),
       reopened_prev: Number(lifecycle.reopened_prev ?? 0),
+      ai_triaged_current: Number(lifecycle.ai_triaged_current ?? 0),
+      ai_total_current: Number(lifecycle.ai_total_current ?? 0),
+      ai_triaged_prev: Number(lifecycle.ai_triaged_prev ?? 0),
+      ai_total_prev: Number(lifecycle.ai_total_prev ?? 0),
     });
   } catch (err: any) {
     console.error('ServiceNow incidents-dashboard-summary error:', err.message);
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
+// GET /api/servicenow/top-kpi-trends?platform=<value>&days=<n>
+// 6 KPI sparklines for top cards with 7-day rolling smoothing
+router.get('/top-kpi-trends', async (req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const platform = (req.query.platform as string | undefined)?.trim() || undefined;
+    const days = parseDays(req.query);
+    const params = platform ? [platform] : [];
+    const result = await pool.query(buildTopKpiTrendsQuery(days, Boolean(platform)), params);
+    res.json(result.rows.map((row: any) => ({
+      day: row.trend_date ?? null,
+      kpi1_total_opened: Number(row.kpi1_total_opened ?? 0),
+      kpi1_rolling_7d: Number(row.kpi1_rolling_7d ?? 0),
+      kpi2_new_count: Number(row.kpi2_new_count ?? 0),
+      kpi2_rolling_7d: Number(row.kpi2_rolling_7d ?? 0),
+      kpi3_open_snapshot: Number(row.kpi3_open_snapshot ?? 0),
+      kpi3_rolling_7d: Number(row.kpi3_rolling_7d ?? 0),
+      kpi4_closed_count: Number(row.kpi4_closed_count ?? 0),
+      kpi4_rolling_7d: Number(row.kpi4_rolling_7d ?? 0),
+      kpi5_reopened_count: Number(row.kpi5_reopened_count ?? 0),
+      kpi5_rolling_7d: Number(row.kpi5_rolling_7d ?? 0),
+      kpi6_ai_triaged: Number(row.kpi6_ai_triaged ?? 0),
+      kpi6_ai_rag_pct: Number(row.kpi6_ai_rag_pct ?? 0),
+      kpi6_rolling_7d: Number(row.kpi6_rolling_7d ?? 0),
+    })));
+  } catch (err: any) {
+    console.error('ServiceNow top-kpi-trends error:', err.message);
     res.status(500).json({ error: 'Query failed', details: err.message });
   }
 });

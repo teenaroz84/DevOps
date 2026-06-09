@@ -51,7 +51,19 @@ SELECT
                    AND sninc_opened_at < NOW() - INTERVAL '${CURRENT_INTERVAL_TOKEN}') AS closed_prev,
   COUNT(*) FILTER (WHERE sninc_reopened_dttm IS NOT NULL
                    AND sninc_opened_at >= NOW() - INTERVAL '${PREVIOUS_INTERVAL_TOKEN}'
-                   AND sninc_opened_at < NOW() - INTERVAL '${CURRENT_INTERVAL_TOKEN}') AS reopened_prev
+                   AND sninc_opened_at < NOW() - INTERVAL '${CURRENT_INTERVAL_TOKEN}') AS reopened_prev,
+  COUNT(*) FILTER (WHERE sninc_inc_rag = 1
+                   AND sninc_open_rag = 1
+                   AND sninc_opened_at >= NOW() - INTERVAL '${CURRENT_INTERVAL_TOKEN}') AS ai_triaged_current,
+  COUNT(*) FILTER (WHERE sninc_open_rag = 1
+                   AND sninc_opened_at >= NOW() - INTERVAL '${CURRENT_INTERVAL_TOKEN}') AS ai_total_current,
+  COUNT(*) FILTER (WHERE sninc_inc_rag = 1
+                   AND sninc_open_rag = 1
+                   AND sninc_opened_at >= NOW() - INTERVAL '${PREVIOUS_INTERVAL_TOKEN}'
+                   AND sninc_opened_at < NOW() - INTERVAL '${CURRENT_INTERVAL_TOKEN}') AS ai_triaged_prev,
+  COUNT(*) FILTER (WHERE sninc_open_rag = 1
+                   AND sninc_opened_at >= NOW() - INTERVAL '${PREVIOUS_INTERVAL_TOKEN}'
+                   AND sninc_opened_at < NOW() - INTERVAL '${CURRENT_INTERVAL_TOKEN}') AS ai_total_prev
 FROM latest
 WHERE rn = 1
   AND sninc_opened_at >= NOW() - INTERVAL '${PREVIOUS_INTERVAL_TOKEN}'
@@ -115,7 +127,11 @@ SELECT
   0 AS new_prev,
   0 AS open_prev,
   0 AS closed_prev,
-  0 AS reopened_prev
+  0 AS reopened_prev,
+  COUNT(*) FILTER (WHERE sninc_inc_rag = 1 AND sninc_open_rag = 1) AS ai_triaged_current,
+  COUNT(*) FILTER (WHERE sninc_open_rag = 1) AS ai_total_current,
+  0 AS ai_triaged_prev,
+  0 AS ai_total_prev
 FROM latest
 WHERE rn = 1
 ${buildPlatformFilter(hasPlatform, 1)};
@@ -143,6 +159,123 @@ WHERE rn = 1
   AND sninc_opened_at >= NOW() - INTERVAL '90 days'
 GROUP BY sninc_opened_at::DATE
 ORDER BY incident_date ASC;
+`
+}
+
+export function buildTopKpiTrendsQuery(days: number | null, hasPlatform: boolean) {
+  const effectiveDays = days ?? 90
+  const lookbackDays = Math.max(effectiveDays - 1, 0)
+
+  return `
+WITH date_spine AS (
+  SELECT generate_series(
+    (NOW() - INTERVAL '${lookbackDays} days')::DATE,
+    NOW()::DATE,
+    '1 day'::INTERVAL
+  )::DATE AS trend_date
+),
+latest AS (
+  SELECT *,
+         ROW_NUMBER() OVER (
+           PARTITION BY sninc_inc_num
+           ORDER BY sninc_last_updt_dttm DESC NULLS LAST
+         ) AS rn
+  FROM edoops.service_now_inc
+),
+latest_filtered AS (
+  SELECT *
+  FROM latest
+  WHERE rn = 1
+${hasPlatform ? '    AND sninc_applkp_pltf_nm = $1' : ''}
+),
+ticket_window AS (
+  SELECT
+    sninc_inc_num,
+    sninc_opened_at::DATE AS open_from,
+    LEAST(sninc_resolved_at::DATE, sninc_closed_at::DATE) AS open_until
+  FROM latest_filtered
+  WHERE sninc_opened_at IS NOT NULL
+),
+daily_flow AS (
+  SELECT
+    sninc_opened_at::DATE AS trend_date,
+    COUNT(*) AS total_opened,
+    COUNT(*) FILTER (WHERE sninc_state = 'New') AS new_count,
+    COUNT(*) FILTER (WHERE sninc_inc_rag = 1) AS ai_triaged,
+    COUNT(*) FILTER (WHERE sninc_open_rag = 1) AS open_rag
+  FROM latest_filtered
+  WHERE sninc_opened_at >= NOW() - INTERVAL '${lookbackDays} days'
+    AND sninc_opened_at IS NOT NULL
+  GROUP BY sninc_opened_at::DATE
+),
+daily_closed AS (
+  SELECT
+    LEAST(sninc_resolved_at::DATE, sninc_closed_at::DATE) AS trend_date,
+    COUNT(*) AS closed_count
+  FROM latest_filtered
+  WHERE sninc_state IN ('Resolved', 'Closed')
+    AND LEAST(sninc_resolved_at::DATE, sninc_closed_at::DATE) >= NOW() - INTERVAL '${lookbackDays} days'
+    AND LEAST(sninc_resolved_at::DATE, sninc_closed_at::DATE) IS NOT NULL
+  GROUP BY LEAST(sninc_resolved_at::DATE, sninc_closed_at::DATE)
+),
+daily_reopened AS (
+  SELECT
+    sninc_reopened_dttm::DATE AS trend_date,
+    COUNT(*) AS reopened_count
+  FROM latest_filtered
+  WHERE sninc_reopened_dttm IS NOT NULL
+    AND sninc_reopened_dttm >= NOW() - INTERVAL '${lookbackDays} days'
+  GROUP BY sninc_reopened_dttm::DATE
+),
+daily_open_snapshot AS (
+  SELECT
+    d.trend_date,
+    COUNT(t.sninc_inc_num) AS open_snapshot
+  FROM date_spine d
+  LEFT JOIN ticket_window t
+    ON t.open_from <= d.trend_date
+   AND (t.open_until IS NULL OR t.open_until > d.trend_date)
+  GROUP BY d.trend_date
+)
+SELECT
+  d.trend_date,
+  COALESCE(f.total_opened, 0) AS kpi1_total_opened,
+  ROUND(AVG(COALESCE(f.total_opened, 0)) OVER (
+    ORDER BY d.trend_date ASC
+    ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
+  )::NUMERIC, 1) AS kpi1_rolling_7d,
+  COALESCE(f.new_count, 0) AS kpi2_new_count,
+  ROUND(AVG(COALESCE(f.new_count, 0)) OVER (
+    ORDER BY d.trend_date ASC
+    ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
+  )::NUMERIC, 1) AS kpi2_rolling_7d,
+  COALESCE(os.open_snapshot, 0) AS kpi3_open_snapshot,
+  ROUND(AVG(COALESCE(os.open_snapshot, 0)) OVER (
+    ORDER BY d.trend_date ASC
+    ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
+  )::NUMERIC, 1) AS kpi3_rolling_7d,
+  COALESCE(c.closed_count, 0) AS kpi4_closed_count,
+  ROUND(AVG(COALESCE(c.closed_count, 0)) OVER (
+    ORDER BY d.trend_date ASC
+    ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
+  )::NUMERIC, 1) AS kpi4_rolling_7d,
+  COALESCE(r.reopened_count, 0) AS kpi5_reopened_count,
+  ROUND(AVG(COALESCE(r.reopened_count, 0)) OVER (
+    ORDER BY d.trend_date ASC
+    ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
+  )::NUMERIC, 1) AS kpi5_rolling_7d,
+  COALESCE(f.ai_triaged, 0) AS kpi6_ai_triaged,
+  ROUND(100.0 * COALESCE(f.ai_triaged, 0) / NULLIF(COALESCE(f.open_rag, 0), 0), 1) AS kpi6_ai_rag_pct,
+  ROUND(AVG(ROUND(100.0 * COALESCE(f.ai_triaged, 0) / NULLIF(COALESCE(f.open_rag, 0), 0), 1)) OVER (
+    ORDER BY d.trend_date ASC
+    ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
+  )::NUMERIC, 1) AS kpi6_rolling_7d
+FROM date_spine d
+LEFT JOIN daily_flow f ON f.trend_date = d.trend_date
+LEFT JOIN daily_closed c ON c.trend_date = d.trend_date
+LEFT JOIN daily_reopened r ON r.trend_date = d.trend_date
+LEFT JOIN daily_open_snapshot os ON os.trend_date = d.trend_date
+ORDER BY d.trend_date ASC;
 `
 }
 

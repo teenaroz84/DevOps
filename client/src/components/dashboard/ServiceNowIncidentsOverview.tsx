@@ -19,6 +19,7 @@ import {
   MOCK_SERVICENOW_OPEN_INCIDENT_AGEING,
   MOCK_SERVICENOW_PLATFORMS,
   MOCK_SERVICENOW_SLA_BREACH_RISK_ALERT_TICKETS,
+  MOCK_SERVICENOW_TOP_KPI_TRENDS,
   MOCK_SERVICENOW_TOP_INCIDENT_CATEGORIES,
   MOCK_SERVICENOW_TOP_INCIDENTS_BY_UPDATE_COUNT,
 } from '../../services/servicenowMockData'
@@ -33,6 +34,7 @@ import {
   type ServiceNowPriorityDonutRow,
   type ServiceNowSlaBreachRiskTicket,
   type ServiceNowSlaPerformancePanel,
+  type ServiceNowTopKpiTrendRow,
   type ServiceNowTopIncidentCategoryRow,
   type ServiceNowTopIncidentUpdateRow,
 } from '../../services/servicenowService'
@@ -277,13 +279,40 @@ const OperationalKpiCard: React.FC<{
 const MetricCard: React.FC<{
   title: string
   value: number
-  currentWindowValue: number
-  previousWindowValue: number
+  valueSuffix?: string
+  deltaPercent: number | null
+  deltaLabel: string
+  sparkline: number[]
   subtitle: string
   tone: keyof typeof KPI_CARD_STYLES
   isAllTime?: boolean
-}> = ({ title, value, currentWindowValue, previousWindowValue, subtitle, tone, isAllTime = false }) => {
+}> = ({ title, value, valueSuffix, deltaPercent, deltaLabel, sparkline, subtitle, tone, isAllTime = false }) => {
   const style = KPI_CARD_STYLES[tone]
+  const sparklineWidth = 116
+  const sparklineHeight = 24
+  const sparklinePadding = 2
+
+  const points = useMemo(() => {
+    if (!sparkline.length) return ''
+    const min = Math.min(...sparkline)
+    const max = Math.max(...sparkline)
+    const denominator = max - min || 1
+    return sparkline
+      .map((point, index) => {
+        const x = sparklinePadding + (index * (sparklineWidth - sparklinePadding * 2)) / Math.max(sparkline.length - 1, 1)
+        const normalized = (point - min) / denominator
+        const y = sparklineHeight - sparklinePadding - normalized * (sparklineHeight - sparklinePadding * 2)
+        return `${x},${y}`
+      })
+      .join(' ')
+  }, [sparkline])
+
+  const deltaArrow =
+    deltaPercent === null || Number.isNaN(deltaPercent)
+      ? '•'
+      : deltaPercent >= 0
+        ? '▲'
+        : '▼'
 
   return (
     <Paper
@@ -321,15 +350,29 @@ const MetricCard: React.FC<{
       </Box>
       <Box>
         <Typography sx={{ fontSize: '24px', fontWeight: 800, color: '#102a43', letterSpacing: '-0.4px', lineHeight: 1.05 }}>
-          {formatMetric(value)}
+          {valueSuffix ? `${Number(value || 0).toFixed(1)}${valueSuffix}` : formatMetric(value)}
         </Typography>
         <Typography sx={{ mt: 0.5, fontSize: '10px', color: '#607080', lineHeight: 1.4 }}>
           {subtitle}
         </Typography>
       </Box>
       <Typography sx={{ fontSize: '9px', fontWeight: 700, color: style.chipColor, textTransform: 'uppercase', letterSpacing: '0.3px' }}>
-        {isAllTime ? 'Full history view' : `${formatMetric(currentWindowValue)} vs prior ${formatMetric(previousWindowValue)}`}
+        {isAllTime
+          ? 'Full history view'
+          : `${deltaArrow} ${deltaPercent === null ? 'N/A' : `${Math.abs(deltaPercent).toFixed(1)}%`} ${deltaLabel}`}
       </Typography>
+      <Box sx={{ mt: 0.45 }}>
+        <svg width={sparklineWidth} height={sparklineHeight} viewBox={`0 0 ${sparklineWidth} ${sparklineHeight}`}>
+          <polyline
+            fill="none"
+            stroke={style.accent}
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            points={points}
+          />
+        </svg>
+      </Box>
     </Paper>
   )
 }
@@ -351,6 +394,7 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
   const [topIncidentCategories, setTopIncidentCategories] = useState<ServiceNowTopIncidentCategoryRow[]>([])
   const [topIncidentUpdates, setTopIncidentUpdates] = useState<ServiceNowTopIncidentUpdateRow[]>([])
   const [breachRiskTickets, setBreachRiskTickets] = useState<ServiceNowSlaBreachRiskTicket[]>([])
+  const [topKpiTrends, setTopKpiTrends] = useState<ServiceNowTopKpiTrendRow[]>([])
   const [operationalKpis, setOperationalKpis] = useState<ServiceNowOperationalKpis>(MOCK_SERVICENOW_OPERATIONAL_KPIS)
   const [incidentList, setIncidentList] = useState<any[]>([])
   const [priorityFilter, setPriorityFilter] = useState('All')
@@ -394,6 +438,7 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
       setTopIncidentCategories(MOCK_SERVICENOW_TOP_INCIDENT_CATEGORIES)
       setTopIncidentUpdates(MOCK_SERVICENOW_TOP_INCIDENTS_BY_UPDATE_COUNT)
       setBreachRiskTickets(MOCK_SERVICENOW_SLA_BREACH_RISK_ALERT_TICKETS)
+      setTopKpiTrends(MOCK_SERVICENOW_TOP_KPI_TRENDS)
       setOperationalKpis(MOCK_SERVICENOW_OPERATIONAL_KPIS)
       setIncidentList(MOCK_SERVICENOW_INCIDENT_LIST)
       setLoading(false)
@@ -412,6 +457,7 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
       servicenowService.getTopIncidentCategories(),
       servicenowService.getTopIncidentsByUpdateCount(),
       servicenowService.getSlaBreachRiskAlertTickets(),
+      servicenowService.getTopKpiTrends(selectedPlatform ?? undefined, days),
       servicenowService.getOperationalKpis(selectedPlatform ?? undefined, days),
       servicenowService.getIncidentList(selectedPlatform ?? undefined, days),
     ])
@@ -427,6 +473,7 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
         categoriesData,
         updatesData,
         breachRiskData,
+        topKpiTrendData,
         operationalKpiData,
         incidentListData,
       ]) => {
@@ -441,6 +488,7 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
         setTopIncidentCategories(Array.isArray(categoriesData) ? categoriesData : [])
         setTopIncidentUpdates(Array.isArray(updatesData) ? updatesData : [])
         setBreachRiskTickets(Array.isArray(breachRiskData) ? breachRiskData : [])
+        setTopKpiTrends(Array.isArray(topKpiTrendData) ? topKpiTrendData : [])
         setOperationalKpis(operationalKpiData ?? MOCK_SERVICENOW_OPERATIONAL_KPIS)
         setIncidentList(Array.isArray(incidentListData) ? incidentListData : [])
         setLoading(false)
@@ -461,13 +509,31 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
   )
 
   const metricCards = useMemo(
-    () => [
+    () => {
+      const aiCurrentRate = summary.ai_total_current > 0
+        ? (100 * summary.ai_triaged_current) / summary.ai_total_current
+        : 0
+      const aiPrevRate = summary.ai_total_prev > 0
+        ? (100 * summary.ai_triaged_prev) / summary.ai_total_prev
+        : 0
+
+      const sparklineByKey: Record<string, number[]> = {
+        total: topKpiTrends.map((row) => Number(row.kpi1_rolling_7d ?? row.kpi1_total_opened ?? 0)),
+        new: topKpiTrends.map((row) => Number(row.kpi2_rolling_7d ?? row.kpi2_new_count ?? 0)),
+        open: topKpiTrends.map((row) => Number(row.kpi3_rolling_7d ?? row.kpi3_open_snapshot ?? 0)),
+        closed: topKpiTrends.map((row) => Number(row.kpi4_rolling_7d ?? row.kpi4_closed_count ?? 0)),
+        reopened: topKpiTrends.map((row) => Number(row.kpi5_rolling_7d ?? row.kpi5_reopened_count ?? 0)),
+        ai: topKpiTrends.map((row) => Number(row.kpi6_rolling_7d ?? row.kpi6_ai_rag_pct ?? 0)),
+      }
+
+      return [
       {
         key: 'total',
         title: 'Total Incidents',
         value: summary.total_incidents,
-        current: summary.current_90d,
-        previous: summary.prev_90d,
+        deltaPercent: getPercentChange(summary.current_90d, summary.prev_90d),
+        deltaLabel: days === 'all' ? 'vs previous period' : `vs prev ${days}d`,
+        sparkline: sparklineByKey.total,
         subtitle: '' /* `${selectedPlatform ?? 'All platforms'} across the selected executive view` */,
         tone: 'total' as const,
       },
@@ -475,8 +541,9 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
         key: 'new',
         title: 'New Incidents',
         value: summary.new_current,
-        current: summary.new_current,
-        previous: summary.new_prev,
+        deltaPercent: getPercentChange(summary.new_current, summary.new_prev),
+        deltaLabel: days === 'all' ? 'vs previous period' : `vs prev ${days}d`,
+        sparkline: sparklineByKey.new,
         subtitle: '' /* isAllTime ? 'Tickets created across all available history' : `Tickets created in the last ${days} days` */,
         tone: 'new' as const,
       },
@@ -484,8 +551,9 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
         key: 'open',
         title: 'Open Incidents',
         value: summary.open_current,
-        current: summary.open_current,
-        previous: summary.open_prev,
+        deltaPercent: getPercentChange(summary.open_current, summary.open_prev),
+        deltaLabel: days === 'all' ? 'vs previous period' : `vs prev ${days}d`,
+        sparkline: sparklineByKey.open,
         subtitle: ''/* isAllTime ? 'Open-state tickets across all available history' : 'Open-state tickets still active in the current window' */,
         tone: 'open' as const,
       },
@@ -493,8 +561,9 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
         key: 'closed',
         title: 'Closed Incidents',
         value: summary.closed_current,
-        current: summary.closed_current,
-        previous: summary.closed_prev,
+        deltaPercent: getPercentChange(summary.closed_current, summary.closed_prev),
+        deltaLabel: days === 'all' ? 'vs previous period' : `vs prev ${days}d`,
+        sparkline: sparklineByKey.closed,
         subtitle: '' /* isAllTime ? 'Closed-state tickets across all available history' : 'Closed-state tickets completed in the current window' */,
         tone: 'closed' as const,
       },
@@ -502,13 +571,26 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
         key: 'reopened',
         title: 'Reopened Incidents',
         value: summary.reopened_current,
-        current: summary.reopened_current,
-        previous: summary.reopened_prev,
+        deltaPercent: getPercentChange(summary.reopened_current, summary.reopened_prev),
+        deltaLabel: days === 'all' ? 'vs previous period' : `vs prev ${days}d`,
+        sparkline: sparklineByKey.reopened,
         subtitle: '' /* isAllTime ? 'Tickets that re-entered the queue across all available history' : 'Tickets that re-entered the queue in the current window' */,
         tone: 'reopened' as const,
       },
-    ],
-    [days, isAllTime, selectedPlatform, summary],
+      {
+        key: 'ai',
+        title: 'AI RAG Triage Rate',
+        value: aiCurrentRate,
+        valueSuffix: '%',
+        deltaPercent: getPercentChange(aiCurrentRate, aiPrevRate),
+        deltaLabel: days === 'all' ? 'vs previous period' : `vs prev ${days}d`,
+        sparkline: sparklineByKey.ai,
+        subtitle: '',
+        tone: 'total' as const,
+      },
+    ]
+    },
+    [days, summary, topKpiTrends],
   )
 
   const priorityDonutSlices = useMemo(
@@ -857,14 +939,16 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
           </Box>
         ) : (
           <Box sx={{ p: { xs: 2, md: 2.5 }, display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', lg: 'repeat(5, minmax(0, 1fr))' }, gap: 1.1 }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', lg: 'repeat(6, minmax(0, 1fr))' }, gap: 1.1 }}>
               {metricCards.map((card) => (
                 <MetricCard
                   key={card.key}
                   title={card.title}
                   value={card.value}
-                  currentWindowValue={card.current}
-                  previousWindowValue={card.previous}
+                  valueSuffix={card.valueSuffix}
+                  deltaPercent={card.deltaPercent}
+                  deltaLabel={card.deltaLabel}
+                  sparkline={card.sparkline}
                   subtitle={card.subtitle}
                   tone={card.tone}
                   isAllTime={isAllTime}
