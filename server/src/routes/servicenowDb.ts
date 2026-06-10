@@ -683,7 +683,10 @@ router.get('/top-kpi-trends', async (req: Request, res: Response) => {
 router.get('/incident-trend', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
-    const result = await pool.query(buildIncidentTrendDailyLineQuery());
+    const days = parseDays(req.query);
+    const platform = (req.query.platform as string | undefined)?.trim() || undefined;
+    const params = platform ? [platform] : [];
+    const result = await pool.query(buildIncidentTrendDailyLineQuery(days, Boolean(platform)), params);
     res.json(result.rows.map((r: any) => ({
       day: r.incident_date ?? null,
       total: Number(r.incident_count ?? 0),
@@ -699,7 +702,10 @@ router.get('/incident-trend', async (req: Request, res: Response) => {
 router.get('/incident-state-daily', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
-    const result = await pool.query(buildIncidentStateOverTimeDailyStackedBarQuery());
+    const days = parseDays(req.query);
+    const platform = (req.query.platform as string | undefined)?.trim() || undefined;
+    const params = platform ? [platform] : [];
+    const result = await pool.query(buildIncidentStateOverTimeDailyStackedBarQuery(days, Boolean(platform)), params);
     res.json(result.rows.map((r: any) => ({
       day: r.incident_date ?? null,
       new: Number(r.new_count ?? 0),
@@ -779,10 +785,13 @@ router.get('/top-incident-updates', async (req: Request, res: Response) => {
 
 // GET /api/servicenow/incidents-assignment-group-top10
 // Widget 6: Incidents by Assignment Group (top 10 horizontal bars)
-router.get('/incidents-assignment-group-top10', async (_req: Request, res: Response) => {
+router.get('/incidents-assignment-group-top10', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
-    const result = await pool.query(buildIncidentsByAssignmentGroupTop10Query());
+    const days = parseDays(req.query);
+    const platform = (req.query.platform as string | undefined)?.trim() || undefined;
+    const params = platform ? [platform] : [];
+    const result = await pool.query(buildIncidentsByAssignmentGroupTop10Query(days, Boolean(platform)), params);
     res.json(result.rows);
   } catch (err: any) {
     console.error('ServiceNow incidents-assignment-group-top10 error:', err.message);
@@ -792,10 +801,13 @@ router.get('/incidents-assignment-group-top10', async (_req: Request, res: Respo
 
 // GET /api/servicenow/incidents-platform-application-top10
 // Widget 7: Incidents by Platform/Application (top 10 horizontal bars)
-router.get('/incidents-platform-application-top10', async (_req: Request, res: Response) => {
+router.get('/incidents-platform-application-top10', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
-    const result = await pool.query(buildIncidentsByPlatformApplicationTop10Query());
+    const days = parseDays(req.query);
+    const platform = (req.query.platform as string | undefined)?.trim() || undefined;
+    const params = platform ? [platform] : [];
+    const result = await pool.query(buildIncidentsByPlatformApplicationTop10Query(days, Boolean(platform)), params);
     res.json(result.rows);
   } catch (err: any) {
     console.error('ServiceNow incidents-platform-application-top10 error:', err.message);
@@ -805,10 +817,13 @@ router.get('/incidents-platform-application-top10', async (_req: Request, res: R
 
 // GET /api/servicenow/incidents-priority-donut
 // Widget 8: Incidents by Priority (donut chart)
-router.get('/incidents-priority-donut', async (_req: Request, res: Response) => {
+router.get('/incidents-priority-donut', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
-    const result = await pool.query(buildIncidentsByPriorityDonutQuery());
+    const days = parseDays(req.query);
+    const platform = (req.query.platform as string | undefined)?.trim() || undefined;
+    const params = platform ? [platform] : [];
+    const result = await pool.query(buildIncidentsByPriorityDonutQuery(days, Boolean(platform)), params);
     res.json(result.rows);
   } catch (err: any) {
     console.error('ServiceNow incidents-priority-donut error:', err.message);
@@ -818,10 +833,13 @@ router.get('/incidents-priority-donut', async (_req: Request, res: Response) => 
 
 // GET /api/servicenow/sla-performance-panel
 // Widget 9: SLA performance panel (gauge)
-router.get('/sla-performance-panel', async (_req: Request, res: Response) => {
+router.get('/sla-performance-panel', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
-    const result = await pool.query(buildSlaPerformancePanelGaugeQuery());
+    const days = parseDays(req.query);
+    const platform = (req.query.platform as string | undefined)?.trim() || undefined;
+    const params = platform ? [platform] : [];
+    const result = await pool.query(buildSlaPerformancePanelGaugeQuery(days, Boolean(platform)), params);
     res.json(result.rows[0] ?? {
       within_sla: 0,
       breaching_soon: 0,
@@ -837,10 +855,13 @@ router.get('/sla-performance-panel', async (_req: Request, res: Response) => {
 
 // GET /api/servicenow/sla-breach-risk-alert-tickets
 // Widget 10: SLA breach risk tickets within the next 4 hours
-router.get('/sla-breach-risk-alert-tickets', async (_req: Request, res: Response) => {
+router.get('/sla-breach-risk-alert-tickets', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
-    const result = await pool.query(buildSlaBreachRiskAlertBannerTicketsQuery());
+    const days = parseDays(req.query);
+    const platform = (req.query.platform as string | undefined)?.trim() || undefined;
+    const params = platform ? [platform] : [];
+    const result = await pool.query(buildSlaBreachRiskAlertBannerTicketsQuery(days, Boolean(platform)), params);
     res.json(result.rows);
   } catch (err: any) {
     console.error('ServiceNow sla-breach-risk-alert-tickets error:', err.message);
@@ -850,10 +871,13 @@ router.get('/sla-breach-risk-alert-tickets', async (_req: Request, res: Response
 
 // GET /api/servicenow/open-incident-ageing
 // Widget 11: Aging buckets for open incidents
-router.get('/open-incident-ageing', async (_req: Request, res: Response) => {
+router.get('/open-incident-ageing', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
-    const result = await pool.query(buildAgingOfOpenIncidentsHorizontalBarQuery());
+    const days = parseDays(req.query);
+    const platform = (req.query.platform as string | undefined)?.trim() || undefined;
+    const params = platform ? [platform] : [];
+    const result = await pool.query(buildAgingOfOpenIncidentsHorizontalBarQuery(days, Boolean(platform)), params);
     res.json(result.rows);
   } catch (err: any) {
     console.error('ServiceNow open-incident-ageing error:', err.message);
@@ -863,10 +887,13 @@ router.get('/open-incident-ageing', async (_req: Request, res: Response) => {
 
 // GET /api/servicenow/top-incident-categories
 // Widget 12: Top 5 open incident categories
-router.get('/top-incident-categories', async (_req: Request, res: Response) => {
+router.get('/top-incident-categories', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
-    const result = await pool.query(buildTopIncidentCategoriesQuery());
+    const days = parseDays(req.query);
+    const platform = (req.query.platform as string | undefined)?.trim() || undefined;
+    const params = platform ? [platform] : [];
+    const result = await pool.query(buildTopIncidentCategoriesQuery(days, Boolean(platform)), params);
     res.json(result.rows);
   } catch (err: any) {
     console.error('ServiceNow top-incident-categories error:', err.message);
@@ -876,10 +903,13 @@ router.get('/top-incident-categories', async (_req: Request, res: Response) => {
 
 // GET /api/servicenow/top-incidents-by-update-count
 // Widget 13: Most frequently updated incidents
-router.get('/top-incidents-by-update-count', async (_req: Request, res: Response) => {
+router.get('/top-incidents-by-update-count', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
-    const result = await pool.query(buildTopIncidentsByUpdateCountQuery());
+    const days = parseDays(req.query);
+    const platform = (req.query.platform as string | undefined)?.trim() || undefined;
+    const params = platform ? [platform] : [];
+    const result = await pool.query(buildTopIncidentsByUpdateCountQuery(days, Boolean(platform)), params);
     res.json(result.rows);
   } catch (err: any) {
     console.error('ServiceNow top-incidents-by-update-count error:', err.message);

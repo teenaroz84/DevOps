@@ -165,22 +165,22 @@ export const servicenowService = {
     apiClient.get(`/api/servicenow/top-incident-updates${platform ? `?platform=${encodeURIComponent(platform)}` : ''}`),
   getIncidentTrend: (platform?: string, days: ServiceNowDaysFilter = 7) =>
     apiClient.get(withDays('/api/servicenow/incident-trend', days, platform)),
-  getIncidentsAssignmentGroupTop10: () =>
-    apiClient.get<ServiceNowAssignmentGroupTop10Row[]>('/api/servicenow/incidents-assignment-group-top10'),
-  getIncidentsPlatformApplicationTop10: () =>
-    apiClient.get<ServiceNowPlatformApplicationTop10Row[]>('/api/servicenow/incidents-platform-application-top10'),
-  getIncidentsPriorityDonut: () =>
-    apiClient.get<ServiceNowPriorityDonutRow[]>('/api/servicenow/incidents-priority-donut'),
-  getSlaPerformancePanel: () =>
-    apiClient.get<ServiceNowSlaPerformancePanel>('/api/servicenow/sla-performance-panel'),
-  getSlaBreachRiskAlertTickets: () =>
-    apiClient.get<ServiceNowSlaBreachRiskTicket[]>('/api/servicenow/sla-breach-risk-alert-tickets'),
-  getOpenIncidentAgeing: () =>
-    apiClient.get<ServiceNowOpenIncidentAgeingRow[]>('/api/servicenow/open-incident-ageing'),
-  getTopIncidentCategories: () =>
-    apiClient.get<ServiceNowTopIncidentCategoryRow[]>('/api/servicenow/top-incident-categories'),
-  getTopIncidentsByUpdateCount: () =>
-    apiClient.get<ServiceNowTopIncidentUpdateRow[]>('/api/servicenow/top-incidents-by-update-count'),
+  getIncidentsAssignmentGroupTop10: (platform?: string, days: ServiceNowDaysFilter = 90) =>
+    apiClient.get<ServiceNowAssignmentGroupTop10Row[]>(withDays('/api/servicenow/incidents-assignment-group-top10', days, platform)),
+  getIncidentsPlatformApplicationTop10: (platform?: string, days: ServiceNowDaysFilter = 90) =>
+    apiClient.get<ServiceNowPlatformApplicationTop10Row[]>(withDays('/api/servicenow/incidents-platform-application-top10', days, platform)),
+  getIncidentsPriorityDonut: (platform?: string, days: ServiceNowDaysFilter = 90) =>
+    apiClient.get<ServiceNowPriorityDonutRow[]>(withDays('/api/servicenow/incidents-priority-donut', days, platform)),
+  getSlaPerformancePanel: (platform?: string, days: ServiceNowDaysFilter = 90) =>
+    apiClient.get<ServiceNowSlaPerformancePanel>(withDays('/api/servicenow/sla-performance-panel', days, platform)),
+  getSlaBreachRiskAlertTickets: (platform?: string, days: ServiceNowDaysFilter = 90) =>
+    apiClient.get<ServiceNowSlaBreachRiskTicket[]>(withDays('/api/servicenow/sla-breach-risk-alert-tickets', days, platform)),
+  getOpenIncidentAgeing: (platform?: string, days: ServiceNowDaysFilter = 90) =>
+    apiClient.get<ServiceNowOpenIncidentAgeingRow[]>(withDays('/api/servicenow/open-incident-ageing', days, platform)),
+  getTopIncidentCategories: (platform?: string, days: ServiceNowDaysFilter = 90) =>
+    apiClient.get<ServiceNowTopIncidentCategoryRow[]>(withDays('/api/servicenow/top-incident-categories', days, platform)),
+  getTopIncidentsByUpdateCount: (platform?: string, days: ServiceNowDaysFilter = 90) =>
+    apiClient.get<ServiceNowTopIncidentUpdateRow[]>(withDays('/api/servicenow/top-incidents-by-update-count', days, platform)),
   getOperationalKpis: (platform?: string, days: ServiceNowDaysFilter = 90) =>
     apiClient.get<ServiceNowOperationalKpis>(withDays('/api/servicenow/operational-kpis', days, platform)),
 }

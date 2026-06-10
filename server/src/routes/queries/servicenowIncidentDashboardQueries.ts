@@ -34,7 +34,7 @@ WITH latest AS (
 SELECT
   COUNT(*) FILTER (WHERE sninc_state = 'New'
                    AND sninc_opened_at >= NOW() - INTERVAL '${CURRENT_INTERVAL_TOKEN}') AS new_current,
-  COUNT(*) FILTER (WHERE sninc_state in ('in Progress', 'On Hold')
+  COUNT(*) FILTER (WHERE sninc_state in ('In Progress', 'On Hold')
                    AND sninc_opened_at >= NOW() - INTERVAL '${CURRENT_INTERVAL_TOKEN}') AS open_current,
   COUNT(*) FILTER (WHERE sninc_state in ('Closed', 'Resolved', 'Canceled')
                    AND sninc_opened_at >= NOW() - INTERVAL '${CURRENT_INTERVAL_TOKEN}') AS closed_current,
@@ -43,7 +43,7 @@ SELECT
   COUNT(*) FILTER (WHERE sninc_state = 'New'
                    AND sninc_opened_at >= NOW() - INTERVAL '${PREVIOUS_INTERVAL_TOKEN}'
                    AND sninc_opened_at < NOW() - INTERVAL '${CURRENT_INTERVAL_TOKEN}') AS new_prev,
-  COUNT(*) FILTER (WHERE sninc_state in ('in Progress', 'On Hold')
+  COUNT(*) FILTER (WHERE sninc_state in ('In Progress', 'On Hold')
                    AND sninc_opened_at >= NOW() - INTERVAL '${PREVIOUS_INTERVAL_TOKEN}'
                    AND sninc_opened_at < NOW() - INTERVAL '${CURRENT_INTERVAL_TOKEN}') AS open_prev,
   COUNT(*) FILTER (WHERE sninc_state in ('Closed', 'Resolved', 'Canceled')
@@ -121,7 +121,7 @@ WITH latest AS (
 )
 SELECT
   COUNT(*) FILTER (WHERE sninc_state = 'New') AS new_current,
-  COUNT(*) FILTER (WHERE sninc_state in ('in Progress', 'On Hold')) AS open_current,
+  COUNT(*) FILTER (WHERE sninc_state in ('In Progress', 'On Hold')) AS open_current,
   COUNT(*) FILTER (WHERE sninc_state in ('Closed', 'Resolved', 'Canceled')) AS closed_current,
   COUNT(*) FILTER (WHERE sninc_reopened_dttm IS NOT NULL) AS reopened_current,
   0 AS new_prev,
@@ -141,7 +141,8 @@ ${buildPlatformFilter(hasPlatform, 1)};
   return applyQueryTokens(INCIDENT_LIFECYCLE_QUERY_TEMPLATE, days, hasPlatform)
 }
 
-export function buildIncidentTrendDailyLineQuery() {
+export function buildIncidentTrendDailyLineQuery(days: number | null, hasPlatform: boolean) {
+  const openedAtFilter = days === null ? '' : `\n  AND sninc_opened_at >= NOW() - INTERVAL '${days} days'`
   return `
 WITH latest AS (
   SELECT *,
@@ -156,7 +157,7 @@ SELECT
   COUNT(*)              AS incident_count
 FROM latest
 WHERE rn = 1
-  AND sninc_opened_at >= NOW() - INTERVAL '90 days'
+${buildPlatformFilter(hasPlatform, 1)}${openedAtFilter}
 GROUP BY sninc_opened_at::DATE
 ORDER BY incident_date ASC;
 `
@@ -213,7 +214,7 @@ daily_closed AS (
     LEAST(sninc_resolved_at::DATE, sninc_closed_at::DATE) AS trend_date,
     COUNT(*) AS closed_count
   FROM latest_filtered
-  WHERE sninc_state IN ('Resolved', 'Closed')
+  WHERE sninc_state IN ('Resolved', 'Closed', 'Canceled')
     AND LEAST(sninc_resolved_at::DATE, sninc_closed_at::DATE) >= NOW() - INTERVAL '${lookbackDays} days'
     AND LEAST(sninc_resolved_at::DATE, sninc_closed_at::DATE) IS NOT NULL
   GROUP BY LEAST(sninc_resolved_at::DATE, sninc_closed_at::DATE)
@@ -279,7 +280,8 @@ ORDER BY d.trend_date ASC;
 `
 }
 
-export function buildIncidentStateOverTimeDailyStackedBarQuery() {
+export function buildIncidentStateOverTimeDailyStackedBarQuery(days: number | null, hasPlatform: boolean) {
+  const openedAtFilter = days === null ? '' : `\n  AND sninc_opened_at >= NOW() - INTERVAL '${days} days'`
   return `
 WITH latest AS (
   SELECT *,
@@ -292,18 +294,19 @@ WITH latest AS (
 SELECT
   sninc_opened_at::DATE                                            AS incident_date,
   COUNT(*) FILTER (WHERE sninc_state = 'New')                      AS new_count,
-  COUNT(*) FILTER (WHERE sninc_state in ('in Progress', 'On Hold')) AS open_count,
+  COUNT(*) FILTER (WHERE sninc_state in ('In Progress', 'On Hold')) AS open_count,
   COUNT(*) FILTER (WHERE sninc_state in ('Closed', 'Resolved', 'Canceled')) AS closed_count,
   COUNT(*)                                                          AS total_count
 FROM latest
 WHERE rn = 1
-  AND sninc_opened_at >= NOW() - INTERVAL '90 days'
+${buildPlatformFilter(hasPlatform, 1)}${openedAtFilter}
 GROUP BY sninc_opened_at::DATE
 ORDER BY incident_date ASC;
 `
 }
 
-export function buildIncidentsByAssignmentGroupTop10Query() {
+export function buildIncidentsByAssignmentGroupTop10Query(days: number | null, hasPlatform: boolean) {
+  const openedAtFilter = days === null ? '' : `\n    AND sninc_opened_at >= NOW() - INTERVAL '${days} days'`
   return `
 WITH latest AS (
   SELECT *,
@@ -319,7 +322,7 @@ grouped AS (
     COUNT(*) AS incident_count
   FROM latest
   WHERE rn = 1
-    AND sninc_opened_at >= NOW() - INTERVAL '90 days'
+${buildPlatformFilter(hasPlatform, 1)}${openedAtFilter}
     AND sninc_assignment_grp IS NOT NULL
   GROUP BY sninc_assignment_grp
 )
@@ -334,7 +337,8 @@ LIMIT 10;
 `
 }
 
-export function buildIncidentsByPlatformApplicationTop10Query() {
+export function buildIncidentsByPlatformApplicationTop10Query(days: number | null, hasPlatform: boolean) {
+  const openedAtFilter = days === null ? '' : `\n    AND sninc_opened_at >= NOW() - INTERVAL '${days} days'`
   return `
 WITH latest AS (
   SELECT *,
@@ -351,7 +355,7 @@ grouped AS (
     COUNT(*) FILTER (WHERE sninc_state NOT IN ('Closed', 'Resolved', 'Canceled')) AS open_count
   FROM latest
   WHERE rn = 1
-    AND sninc_opened_at >= NOW() - INTERVAL '90 days'
+${buildPlatformFilter(hasPlatform, 1)}${openedAtFilter}
   GROUP BY COALESCE(sninc_mon_app_name, sninc_appl, 'Unknown')
 )
 SELECT
@@ -365,7 +369,8 @@ LIMIT 10;
 `
 }
 
-export function buildIncidentsByPriorityDonutQuery() {
+export function buildIncidentsByPriorityDonutQuery(days: number | null, hasPlatform: boolean) {
+  const openedAtFilter = days === null ? '' : `\n    AND sninc_opened_at >= NOW() - INTERVAL '${days} days'`
   return `
 WITH latest AS (
   SELECT *,
@@ -381,7 +386,7 @@ grouped AS (
     COUNT(*) AS incident_count
   FROM latest
   WHERE rn = 1
-    AND sninc_opened_at >= NOW() - INTERVAL '90 days'
+${buildPlatformFilter(hasPlatform, 1)}${openedAtFilter}
     AND sninc_priority IS NOT NULL
   GROUP BY sninc_priority
 )
@@ -394,7 +399,8 @@ ORDER BY priority ASC;
 `
 }
 
-export function buildSlaPerformancePanelGaugeQuery() {
+export function buildSlaPerformancePanelGaugeQuery(days: number | null, hasPlatform: boolean) {
+  const openedAtFilter = days === null ? '' : `\n  AND sninc_opened_at >= NOW() - INTERVAL '${days} days'`
   return `
 WITH latest AS (
   SELECT *,
@@ -424,12 +430,14 @@ SELECT
   ) AS within_sla_pct
 FROM latest
 WHERE rn = 1
+${buildPlatformFilter(hasPlatform, 1)}${openedAtFilter}
   AND sninc_state NOT IN ('Closed', 'Resolved', 'Canceled')
   AND sninc_expiry_dttm IS NOT NULL;
 `
 }
 
-export function buildSlaBreachRiskAlertBannerTicketsQuery() {
+export function buildSlaBreachRiskAlertBannerTicketsQuery(days: number | null, hasPlatform: boolean) {
+  const openedAtFilter = days === null ? '' : `\n  AND sninc_opened_at >= NOW() - INTERVAL '${days} days'`
   return `
 WITH latest AS (
   SELECT *,
@@ -450,14 +458,16 @@ SELECT
   sninc_last_updt_dttm
 FROM latest
 WHERE rn = 1
-  AND sninc_state NOT IN ('Closed', 'Resolved')
+${buildPlatformFilter(hasPlatform, 1)}${openedAtFilter}
+  AND sninc_state NOT IN ('Closed', 'Resolved', 'Canceled')
   AND sninc_expiry_dttm BETWEEN NOW() AND NOW() + INTERVAL '4 hours'
 ORDER BY sninc_expiry_dttm ASC
 LIMIT 10;
 `
 }
 
-export function buildAgingOfOpenIncidentsHorizontalBarQuery() {
+export function buildAgingOfOpenIncidentsHorizontalBarQuery(days: number | null, hasPlatform: boolean) {
+  const openedAtFilter = days === null ? '' : `\n    AND sninc_opened_at >= NOW() - INTERVAL '${days} days'`
   return `
 WITH latest AS (
   SELECT *,
@@ -480,7 +490,8 @@ bucketed AS (
     (NOW()::DATE - sninc_opened_at::DATE) AS age_days
   FROM latest
   WHERE rn = 1
-    AND sninc_state NOT IN ('Closed', 'Resolved')
+${buildPlatformFilter(hasPlatform, 1)}${openedAtFilter}
+    AND sninc_state NOT IN ('Closed', 'Resolved', 'Canceled')
     AND sninc_opened_at IS NOT NULL
 ),
 grouped AS (
@@ -500,7 +511,8 @@ ORDER BY min_age_days ASC;
 `
 }
 
-export function buildTopIncidentCategoriesQuery() {
+export function buildTopIncidentCategoriesQuery(days: number | null, hasPlatform: boolean) {
+  const openedAtFilter = days === null ? '' : `\n    AND sninc_opened_at >= NOW() - INTERVAL '${days} days'`
   return `
 WITH latest AS (
   SELECT *,
@@ -516,7 +528,8 @@ grouped AS (
     COUNT(*) AS incident_count
   FROM latest
   WHERE rn = 1
-    AND sninc_state NOT IN ('Closed', 'Resolved')
+${buildPlatformFilter(hasPlatform, 1)}${openedAtFilter}
+    AND sninc_state NOT IN ('Closed', 'Resolved', 'Canceled')
     AND sninc_category_cd IS NOT NULL
   GROUP BY sninc_category_cd
 )
@@ -530,14 +543,19 @@ LIMIT 5;
 `
 }
 
-export function buildTopIncidentsByUpdateCountQuery() {
+export function buildTopIncidentsByUpdateCountQuery(days: number | null, hasPlatform: boolean) {
+  const updateFilter = days === null ? '' : `\n  WHERE sninc_last_updt_dttm >= NOW() - INTERVAL '${days} days'`
   return `
+WITH source_rows AS (
+  SELECT *
+  FROM edoops.service_now_inc${updateFilter}
+),
 WITH update_counts AS (
   SELECT
     sninc_inc_num,
     COUNT(*) AS update_count,
     MAX(sninc_last_updt_dttm) AS last_updated
-  FROM edoops.service_now_inc
+  FROM source_rows
   GROUP BY sninc_inc_num
 ),
 latest AS (
@@ -546,7 +564,7 @@ latest AS (
            PARTITION BY sninc_inc_num
            ORDER BY sninc_last_updt_dttm DESC NULLS LAST
          ) AS rn
-  FROM edoops.service_now_inc
+  FROM source_rows
 )
 SELECT
   u.sninc_inc_num,
@@ -560,6 +578,7 @@ FROM update_counts u
 JOIN latest l
   ON l.sninc_inc_num = u.sninc_inc_num
  AND l.rn = 1
+${hasPlatform ? 'WHERE l.sninc_applkp_pltf_nm = $1' : ''}
 ORDER BY u.update_count DESC
 LIMIT 10;
 `
@@ -609,7 +628,7 @@ ${hasPlatform ? '    AND l.sninc_applkp_pltf_nm = $1' : ''}
 SELECT
   -- KPI 1: Avg Time to Resolve
   ROUND(AVG(days_to_resolve) FILTER (
-    WHERE sninc_state IN ('Resolved','Closed')
+    WHERE sninc_state IN ('Resolved','Closed','Canceled')
     AND sninc_resolved_at >= sninc_opened_at
   )::NUMERIC, 1) AS avg_resolve_days_current,
 
@@ -624,7 +643,7 @@ SELECT
 
   -- KPI 3: Backlog Trend
   COUNT(*) FILTER (
-    WHERE sninc_state NOT IN ('Closed','Resolved')
+    WHERE sninc_state NOT IN ('Closed','Resolved', 'Canceled')
   ) AS backlog_now,
 
   0::BIGINT AS backlog_90d_ago,
@@ -698,13 +717,13 @@ ${hasPlatform ? '    AND l.sninc_applkp_pltf_nm = $1' : ''}
 SELECT
   -- KPI 1: Avg Time to Resolve
   ROUND(AVG(days_to_resolve) FILTER (
-    WHERE sninc_state IN ('Resolved','Closed')
+    WHERE sninc_state IN ('Resolved','Closed','Canceled')
     AND sninc_resolved_at >= NOW() - INTERVAL '${currentInterval}'
     AND sninc_resolved_at >= sninc_opened_at
   )::NUMERIC, 1) AS avg_resolve_days_current,
 
   ROUND(AVG(days_to_resolve) FILTER (
-    WHERE sninc_state IN ('Resolved','Closed')
+    WHERE sninc_state IN ('Resolved','Closed','Canceled')
     AND sninc_resolved_at >= NOW() - INTERVAL '${previousInterval}'
     AND sninc_resolved_at < NOW() - INTERVAL '${currentInterval}'
     AND sninc_resolved_at >= sninc_opened_at
