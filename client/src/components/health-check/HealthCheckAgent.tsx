@@ -252,16 +252,6 @@ export function HealthCheckAgent({ onClose }: HealthCheckAgentProps) {
     await submitStartWithPrompt('start', buildHealthCheckPrompt(selectedEnvironment, checkType))
   }
 
-  const handleLockedManualKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    event.preventDefault()
-    setError('Please choose the environment and health check type from the buttons first.')
-  }
-
-  const handleLockedManualPaste = (event: React.ClipboardEvent<HTMLDivElement>) => {
-    event.preventDefault()
-    setError('Please choose the environment and health check type from the buttons first.')
-  }
-
   const handleComposerKeyDown = async (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== 'Enter' || event.shiftKey) return
     event.preventDefault()
@@ -365,12 +355,12 @@ export function HealthCheckAgent({ onClose }: HealthCheckAgentProps) {
                       Start the Health Check conversation
                     </Typography>
                     <Typography sx={{ mt: 1, color: APP_COLORS.subtext, lineHeight: 1.7 }}>
-                      Select the environment and the health check type first. The agent will start with the combined context automatically.
+                      Choose the environment first. After that, the health check type buttons will appear and the workflow will start automatically.
                     </Typography>
 
                     <Box sx={{ mt: 2.5 }}>
                       <Typography sx={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: TRUIST.dusk }}>
-                        1. Which environment?
+                        Environment question
                       </Typography>
                       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mt: 1.25, flexWrap: 'wrap' }}>
                         {HEALTH_CHECK_ENVIRONMENT_OPTIONS.map((environment) => {
@@ -390,53 +380,39 @@ export function HealthCheckAgent({ onClose }: HealthCheckAgentProps) {
                       </Stack>
                     </Box>
 
-                    <Box sx={{ mt: 2.75, opacity: selectedEnvironment ? 1 : 0.55 }}>
-                      <Typography sx={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: TRUIST.dusk }}>
-                        2. What type of health check?
+                    {!selectedEnvironment ? (
+                      <Typography sx={{ mt: 1.25, fontSize: 12.5, color: APP_COLORS.subtext }}>
+                        Please select one environment option above. Typing is not accepted here until the button selections are complete.
                       </Typography>
-                      <Typography sx={{ mt: 0.6, fontSize: 12.5, color: APP_COLORS.subtext }}>
-                        {selectedEnvironment ? `Selected environment: ${selectedEnvironment}` : 'Choose an environment first.'}
-                      </Typography>
-                      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mt: 1.25, flexWrap: 'wrap' }}>
-                        {HEALTH_CHECK_TYPE_OPTIONS.map((checkType) => {
-                          const isSelected = selectedCheckType === checkType
-                          return (
-                            <Button
-                              key={checkType}
-                              variant={isSelected ? 'contained' : 'outlined'}
-                              onClick={() => void handleCheckTypeSelect(checkType)}
-                              disabled={isBusy || !selectedEnvironment}
-                              sx={{ minWidth: 160, justifyContent: 'center' }}
-                            >
-                              {checkType}
-                            </Button>
-                          )
-                        })}
-                      </Stack>
-                    </Box>
-
-                    <Box sx={{ mt: 2.75 }}>
-                      <TextField
-                        value=""
-                        onKeyDown={handleLockedManualKeyDown}
-                        onPaste={handleLockedManualPaste}
-                        placeholder="Manual typing is locked until you select the buttons above"
-                        label="Selection only"
-                        fullWidth
-                        multiline
-                        minRows={2}
-                        inputProps={{ readOnly: true }}
-                        sx={{
-                          '& .MuiOutlinedInput-root': {
-                            borderRadius: 3,
-                            backgroundColor: '#F8FAFB',
-                          },
-                        }}
-                      />
-                      <Typography sx={{ mt: 1, fontSize: 12, color: APP_COLORS.subtext }}>
-                        If you try to type instead of choosing a button, the agent will ask you to make a selection first.
-                      </Typography>
-                    </Box>
+                    ) : (
+                      <Box sx={{ mt: 2.75 }}>
+                        <Typography sx={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: TRUIST.dusk }}>
+                          Health check type
+                        </Typography>
+                        <Typography sx={{ mt: 0.6, fontSize: 12.5, color: APP_COLORS.subtext }}>
+                          Selected environment: {selectedEnvironment}
+                        </Typography>
+                        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mt: 1.25, flexWrap: 'wrap' }}>
+                          {HEALTH_CHECK_TYPE_OPTIONS.map((checkType) => {
+                            const isSelected = selectedCheckType === checkType
+                            return (
+                              <Button
+                                key={checkType}
+                                variant={isSelected ? 'contained' : 'outlined'}
+                                onClick={() => void handleCheckTypeSelect(checkType)}
+                                disabled={isBusy}
+                                sx={{ minWidth: 160, justifyContent: 'center' }}
+                              >
+                                {checkType}
+                              </Button>
+                            )
+                          })}
+                        </Stack>
+                        <Typography sx={{ mt: 1.25, fontSize: 12.5, color: APP_COLORS.subtext }}>
+                          If you try to type something else, the agent will keep asking you to use the buttons first.
+                        </Typography>
+                      </Box>
+                    )}
                   </Paper>
                 </Box>
               </Box>
