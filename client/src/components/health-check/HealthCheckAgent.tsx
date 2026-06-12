@@ -66,6 +66,26 @@ function messageTone(role: HealthCheckWorkflowMessage['role']) {
   return { align: 'flex-start', bg: TRUIST.white, color: TRUIST.ink }
 }
 
+const HEALTH_CHECK_ENVIRONMENT_OPTIONS = ['Production', 'Pre-Prod', 'Test', 'Development'] as const
+const HEALTH_CHECK_TYPE_OPTIONS = ['Network', 'Server Health', 'App URL Check', 'DB Connectivity', 'Check ALL'] as const
+
+function buildHealthCheckPrompt(environment: string, checkType: string) {
+  return `${environment}-${checkType}`
+}
+
+function parseHealthCheckPrompt(prompt: string): { environment: string; checkType: string } | null {
+  const normalized = prompt.trim().toLowerCase()
+  for (const environment of HEALTH_CHECK_ENVIRONMENT_OPTIONS) {
+    for (const checkType of HEALTH_CHECK_TYPE_OPTIONS) {
+      if (normalized === buildHealthCheckPrompt(environment, checkType).toLowerCase()) {
+        return { environment, checkType }
+      }
+    }
+  }
+
+  return null
+}
+
 interface HealthCheckAgentProps {
   onClose: () => void
 }
@@ -75,6 +95,8 @@ export function HealthCheckAgent({ onClose }: HealthCheckAgentProps) {
   const userId = getAuthenticatedUserId() ?? undefined
   const [workflowState, setWorkflowState] = useState<HealthCheckWorkflowState | null>(null)
   const [prompt, setPrompt] = useState('')
+  const [selectedEnvironment, setSelectedEnvironment] = useState<string | null>(null)
+  const [selectedCheckType, setSelectedCheckType] = useState<string | null>(null)
   const [feedback, setFeedback] = useState('')
   const [busyAction, setBusyAction] = useState<'load' | 'start' | 'approval' | 'feedback' | 'restart' | null>('load')
   const [error, setError] = useState<string | null>(null)
@@ -98,6 +120,11 @@ export function HealthCheckAgent({ onClose }: HealthCheckAgentProps) {
         setWorkflowState(response.state)
         if (response.state?.prompt) {
           setPrompt(response.state.prompt)
+          const parsedPrompt = parseHealthCheckPrompt(response.state.prompt)
+          if (parsedPrompt) {
+            setSelectedEnvironment(parsedPrompt.environment)
+            setSelectedCheckType(parsedPrompt.checkType)
+          }
         }
         if (response.state?.l1Feedback) {
           setFeedback(response.state.l1Feedback)
@@ -168,6 +195,7 @@ export function HealthCheckAgent({ onClose }: HealthCheckAgentProps) {
   }
 
   const stage = workflowState?.stage
+  const isWorkflowStarted = !!workflowState && stage !== 'idle'
   const showApproval = !!workflowState?.approvalPrompt && stage === 'approval'
   const showFeedback = stage === 'l1-feedback' || stage === 'completed'
   const isBusy = busyAction !== null
@@ -184,6 +212,54 @@ export function HealthCheckAgent({ onClose }: HealthCheckAgentProps) {
     }
 
     await submitStart(workflowState ? 'restart' : 'start')
+  }
+
+  const submitStartWithPrompt = async (mode: 'start' | 'restart', nextPrompt: string) => {
+    if (!nextPrompt.trim()) {
+      setError('Provide the health check context before starting the workflow.')
+      return
+    }
+
+    setPrompt(nextPrompt)
+    setBusyAction(mode)
+    try {
+      await syncResponse(
+        mode === 'restart'
+          ? healthCheckService.restartWorkflow({ sessionId, prompt: nextPrompt.trim(), browserSessionId: SESSION_ID, userId })
+          : healthCheckService.startWorkflow({ sessionId, prompt: nextPrompt.trim(), browserSessionId: SESSION_ID, userId }),
+      )
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : 'Failed to start workflow')
+    } finally {
+      setBusyAction(null)
+    }
+  }
+
+  const handleEnvironmentSelect = async (environment: string) => {
+    setError(null)
+    setSelectedEnvironment(environment)
+    setSelectedCheckType(null)
+  }
+
+  const handleCheckTypeSelect = async (checkType: string) => {
+    if (!selectedEnvironment) {
+      setError('Select an environment first, then choose the health check type from the buttons.')
+      return
+    }
+
+    setError(null)
+    setSelectedCheckType(checkType)
+    await submitStartWithPrompt('start', buildHealthCheckPrompt(selectedEnvironment, checkType))
+  }
+
+  const handleLockedManualKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    setError('Please choose the environment and health check type from the buttons first.')
+  }
+
+  const handleLockedManualPaste = (event: React.ClipboardEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    setError('Please choose the environment and health check type from the buttons first.')
   }
 
   const handleComposerKeyDown = async (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -281,15 +357,87 @@ export function HealthCheckAgent({ onClose }: HealthCheckAgentProps) {
           >
             {error && <Alert severity="error">{error}</Alert>}
 
-            {!workflowState?.messages?.length ? (
+            {!isWorkflowStarted ? (
               <Box sx={{ minHeight: '100%', display: 'grid', placeItems: 'center', px: 2 }}>
-                <Box sx={{ maxWidth: 720, textAlign: 'center' }}>
-                  <Typography variant="h5" sx={{ fontWeight: 800, color: APP_COLORS.text }}>
-                    Start the Health Check conversation
-                  </Typography>
-                  <Typography sx={{ mt: 1, color: APP_COLORS.subtext, lineHeight: 1.7 }}>
-                    Enter the incident context below. The agent will analyze it, ask for approval with Yes or No, and continue only after your input.
-                  </Typography>
+                <Box sx={{ width: '100%', maxWidth: 840 }}>
+                  <Paper elevation={0} sx={{ p: { xs: 2, md: 2.5 }, borderRadius: 4, border: `1px solid ${TRUIST.line}`, backgroundColor: '#FCFCFD' }}>
+                    <Typography variant="h5" sx={{ fontWeight: 800, color: APP_COLORS.text }}>
+                      Start the Health Check conversation
+                    </Typography>
+                    <Typography sx={{ mt: 1, color: APP_COLORS.subtext, lineHeight: 1.7 }}>
+                      Select the environment and the health check type first. The agent will start with the combined context automatically.
+                    </Typography>
+
+                    <Box sx={{ mt: 2.5 }}>
+                      <Typography sx={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: TRUIST.dusk }}>
+                        1. Which environment?
+                      </Typography>
+                      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mt: 1.25, flexWrap: 'wrap' }}>
+                        {HEALTH_CHECK_ENVIRONMENT_OPTIONS.map((environment) => {
+                          const isSelected = selectedEnvironment === environment
+                          return (
+                            <Button
+                              key={environment}
+                              variant={isSelected ? 'contained' : 'outlined'}
+                              onClick={() => void handleEnvironmentSelect(environment)}
+                              disabled={isBusy}
+                              sx={{ minWidth: 140, justifyContent: 'center' }}
+                            >
+                              {environment}
+                            </Button>
+                          )
+                        })}
+                      </Stack>
+                    </Box>
+
+                    <Box sx={{ mt: 2.75, opacity: selectedEnvironment ? 1 : 0.55 }}>
+                      <Typography sx={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: TRUIST.dusk }}>
+                        2. What type of health check?
+                      </Typography>
+                      <Typography sx={{ mt: 0.6, fontSize: 12.5, color: APP_COLORS.subtext }}>
+                        {selectedEnvironment ? `Selected environment: ${selectedEnvironment}` : 'Choose an environment first.'}
+                      </Typography>
+                      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mt: 1.25, flexWrap: 'wrap' }}>
+                        {HEALTH_CHECK_TYPE_OPTIONS.map((checkType) => {
+                          const isSelected = selectedCheckType === checkType
+                          return (
+                            <Button
+                              key={checkType}
+                              variant={isSelected ? 'contained' : 'outlined'}
+                              onClick={() => void handleCheckTypeSelect(checkType)}
+                              disabled={isBusy || !selectedEnvironment}
+                              sx={{ minWidth: 160, justifyContent: 'center' }}
+                            >
+                              {checkType}
+                            </Button>
+                          )
+                        })}
+                      </Stack>
+                    </Box>
+
+                    <Box sx={{ mt: 2.75 }}>
+                      <TextField
+                        value=""
+                        onKeyDown={handleLockedManualKeyDown}
+                        onPaste={handleLockedManualPaste}
+                        placeholder="Manual typing is locked until you select the buttons above"
+                        label="Selection only"
+                        fullWidth
+                        multiline
+                        minRows={2}
+                        inputProps={{ readOnly: true }}
+                        sx={{
+                          '& .MuiOutlinedInput-root': {
+                            borderRadius: 3,
+                            backgroundColor: '#F8FAFB',
+                          },
+                        }}
+                      />
+                      <Typography sx={{ mt: 1, fontSize: 12, color: APP_COLORS.subtext }}>
+                        If you try to type instead of choosing a button, the agent will ask you to make a selection first.
+                      </Typography>
+                    </Box>
+                  </Paper>
                 </Box>
               </Box>
             ) : workflowState.messages.map((message) => {
@@ -367,48 +515,52 @@ export function HealthCheckAgent({ onClose }: HealthCheckAgentProps) {
               </Typography>
             )}
 
-            <TextField
-              value={composerValue}
-              onChange={(event) => {
-                if (showFeedback) {
-                  setFeedback(event.target.value)
-                  return
-                }
-                setPrompt(event.target.value)
-              }}
-              onKeyDown={handleComposerKeyDown}
-              placeholder={composerPlaceholder}
-              label={composerLabel}
-              fullWidth
-              multiline
-              minRows={3}
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  borderRadius: 3,
-                  backgroundColor: TRUIST.white,
-                },
-              }}
-              disabled={isBusy || showApproval}
-            />
+            {isWorkflowStarted ? (
+              <>
+                <TextField
+                  value={composerValue}
+                  onChange={(event) => {
+                    if (showFeedback) {
+                      setFeedback(event.target.value)
+                      return
+                    }
+                    setPrompt(event.target.value)
+                  }}
+                  onKeyDown={handleComposerKeyDown}
+                  placeholder={composerPlaceholder}
+                  label={composerLabel}
+                  fullWidth
+                  multiline
+                  minRows={3}
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: 3,
+                      backgroundColor: TRUIST.white,
+                    },
+                  }}
+                  disabled={isBusy || showApproval}
+                />
 
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.25} sx={{ mt: 1.5 }} justifyContent="space-between" alignItems={{ xs: 'stretch', sm: 'center' }}>
-              <Typography sx={{ fontSize: 12, color: APP_COLORS.subtext }}>
-                {showFeedback
-                  ? 'Press Enter to log L1 feedback. Use Shift+Enter for a new line.'
-                  : 'Press Enter to send the incident context. Use Shift+Enter for a new line.'}
-              </Typography>
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.25}>
-                {isBusy && <CircularProgress size={22} sx={{ alignSelf: 'center' }} />}
-                <Button
-                  variant="contained"
-                  endIcon={<SendIcon />}
-                  onClick={handleComposerSubmit}
-                  disabled={isBusy || showApproval || !composerValue.trim()}
-                >
-                  Send
-                </Button>
-              </Stack>
-            </Stack>
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.25} sx={{ mt: 1.5 }} justifyContent="space-between" alignItems={{ xs: 'stretch', sm: 'center' }}>
+                  <Typography sx={{ fontSize: 12, color: APP_COLORS.subtext }}>
+                    {showFeedback
+                      ? 'Press Enter to log L1 feedback. Use Shift+Enter for a new line.'
+                      : 'Press Enter to send the incident context. Use Shift+Enter for a new line.'}
+                  </Typography>
+                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.25}>
+                    {isBusy && <CircularProgress size={22} sx={{ alignSelf: 'center' }} />}
+                    <Button
+                      variant="contained"
+                      endIcon={<SendIcon />}
+                      onClick={handleComposerSubmit}
+                      disabled={isBusy || showApproval || !composerValue.trim()}
+                    >
+                      Send
+                    </Button>
+                  </Stack>
+                </Stack>
+              </>
+            ) : null}
           </Box>
         </Paper>
       </Box>

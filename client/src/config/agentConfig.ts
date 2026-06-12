@@ -60,6 +60,21 @@ export type FullscreenAgentMenuId =
 // ─── Per-agent definitions ────────────────────────────────
 
 export const AGENTS: Record<string, AgentConfig> = {
+  'health-check': {
+    id: 'health-check',
+    name: 'Health Check Agent',
+    subtitle: '',
+    color: AGENT_BRAND.healthCheck,
+    icon: HEALTH_CHECK_ICON,
+    endpoint: '/api/health_check/chat',
+    streamEndpoint: '/api/health_check/chat',
+    placeholder: 'Select an environment and health check type to begin...',
+    welcomeMessage: 'Health Check Agent is ready. Choose an environment and health check type first, then the workflow will start automatically.',
+    quickActions: [
+     
+    ],
+  },
+
   knowledge: {
     id: 'knowledge',
     name: 'TDT DataOps Knowledge Assistant',
@@ -75,21 +90,6 @@ export const AGENTS: Record<string, AgentConfig> = {
       { label: '🔧 DMF Enrichment Standards', query: 'What are the DMF enrichment standards?' },
       { label: '⏱  ESP Scheduling Standards', query: 'What are the DMF ESP scheduling standards?' },
       { label: '📘 Talend Dev Guide',          query: 'Provide the Talend development guide and best practices.' },
-    ],
-  },
-
-  'health-check': {
-    id: 'health-check',
-    name: 'Health Check Agent',
-    subtitle: '',
-    color: AGENT_BRAND.healthCheck,
-    icon: HEALTH_CHECK_ICON,
-    endpoint: '/api/health_check/chat',
-    streamEndpoint: '/api/health_check/chat',
-    placeholder: 'Ask for a platform health check or enter the proposed command number to run...',
-    welcomeMessage: 'Health Check Agent is ready. Ask for a platform health check, then reply with the proposed command number to run it.',
-    quickActions: [
-     
     ],
   },
 
@@ -203,6 +203,7 @@ export const FULLSCREEN_AGENT_MENUS: Array<{
   label: string
   mockOnly?: boolean
 }> = [
+  { menuId: 'health-check',    agentId: 'health-check', label: 'Health Check Agent' },
   { menuId: 'chat',            agentId: 'knowledge',  label: 'TDT Knowledge Assist' },
   { menuId: 'servicenow-chat', agentId: 'servicenow', label: 'TDT ServiceNow Agent' },
   { menuId: 'talend-chat',     agentId: 'talend',     label: 'TDT Talend Agent' },
