@@ -94,7 +94,7 @@ interface Message {
   data?: any
   timestamp?: number
   suggestedActionPrompt?: string
-  selectionMode?: 'health-check-options' | 'confirmation'
+  selectionMode?: 'health-check-options' | 'health-check-environment' | 'health-check-type' | 'confirmation'
   suggestedActions?: Array<{
     label: string
     action: string
@@ -127,6 +127,91 @@ const FULLSCREEN_CHAT_STORAGE_PREFIX = 'dataops:fullscreen-chat:'
 const MAX_FULLSCREEN_SESSION_SUMMARIES = 8
 const HEALTH_CHECK_CONFIRM_YES = '__health_check_confirm_yes__'
 const HEALTH_CHECK_CONFIRM_NO = '__health_check_confirm_no__'
+const HEALTH_CHECK_ENVIRONMENT_OPTIONS = ['Production', 'Pre-Prod', 'Test', 'Development'] as const
+const HEALTH_CHECK_TYPE_OPTIONS = ['Network', 'Server Health', 'App URL Check', 'DB Connectivity', 'Check ALL'] as const
+const HEALTH_CHECK_SELECTION_REQUIRED_MESSAGE = 'Please make a selection using the provided buttons first.'
+
+function buildHealthCheckPrompt(environment: string, checkType: string) {
+  return `${environment}-${checkType}`
+}
+
+function parseHealthCheckPrompt(value: string): { environment: string; checkType: string } | null {
+  const normalized = value.trim().toLowerCase()
+  for (const environment of HEALTH_CHECK_ENVIRONMENT_OPTIONS) {
+    for (const checkType of HEALTH_CHECK_TYPE_OPTIONS) {
+      if (normalized === buildHealthCheckPrompt(environment, checkType).toLowerCase()) {
+        return { environment, checkType }
+      }
+    }
+  }
+
+  return null
+}
+
+function buildHealthCheckEnvironmentMessage(): Message {
+  return {
+    role: 'agent',
+    content: 'Environment question',
+    type: 'info',
+    timestamp: Date.now(),
+    selectionMode: 'health-check-environment',
+    suggestedActions: HEALTH_CHECK_ENVIRONMENT_OPTIONS.map((environment) => ({
+      label: environment,
+      action: environment,
+    })),
+  }
+}
+
+function buildHealthCheckTypeMessage(environment: string): Message {
+  return {
+    role: 'agent',
+    content: `What type of health check?\nSelected environment: ${environment}`,
+    type: 'info',
+    timestamp: Date.now(),
+    selectionMode: 'health-check-type',
+    suggestedActions: HEALTH_CHECK_TYPE_OPTIONS.map((checkType) => ({
+      label: checkType,
+      action: checkType,
+    })),
+  }
+}
+
+function isHealthCheckBootstrapMessage(message: Message): boolean {
+  return message.selectionMode === 'health-check-environment' || message.selectionMode === 'health-check-type'
+}
+
+function extractEnvironmentFromHealthCheckTypeMessage(message: Message): string | null {
+  if (message.selectionMode !== 'health-check-type') return null
+  const match = message.content.match(/Selected environment:\s*(.+)$/m)
+  return match?.[1]?.trim() || null
+}
+
+function getHealthCheckBootstrapState(messages: Message[]): { environment: string | null; complete: boolean } {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]
+    if (message.role === 'user') {
+      const parsedPrompt = parseHealthCheckPrompt(message.content)
+      if (parsedPrompt) {
+        return { environment: parsedPrompt.environment, complete: true }
+      }
+    }
+
+    const selectedEnvironment = extractEnvironmentFromHealthCheckTypeMessage(message)
+    if (selectedEnvironment) {
+      return { environment: selectedEnvironment, complete: false }
+    }
+  }
+
+  return { environment: null, complete: false }
+}
+
+function ensureHealthCheckStarterMessages(messages: Message[]): Message[] {
+  const hasBootstrapMessage = messages.some((message) => isHealthCheckBootstrapMessage(message))
+  const bootstrapState = getHealthCheckBootstrapState(messages)
+  if (bootstrapState.complete || hasBootstrapMessage) return messages
+
+  return [...messages, buildHealthCheckEnvironmentMessage()]
+}
 
 function findLatestHealthCheckSelectionMessage(messages: Message[]): Message | null {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
@@ -183,6 +268,15 @@ function isStaleHealthCheckSelectionMessage(
   hasPendingSelection: boolean,
   consumedSelectionTimestamp: number | null,
 ): boolean {
+  if (message.selectionMode === 'health-check-environment') {
+    return messages.some((item) => item.selectionMode === 'health-check-type')
+      || messages.some((item) => item.role === 'user' && parseHealthCheckPrompt(item.content) !== null)
+  }
+
+  if (message.selectionMode === 'health-check-type') {
+    return messages.some((item) => item.role === 'user' && parseHealthCheckPrompt(item.content) !== null)
+  }
+
   if (message.selectionMode !== 'health-check-options') return false
   if (consumedSelectionTimestamp != null && message.timestamp === consumedSelectionTimestamp) return true
   if (hasPendingSelection) return true
@@ -324,6 +418,12 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, popupMode = 'de
     content: welcomeMessageText,
     type: 'info',
   }), [welcomeMessageText])
+  const buildStarterMessages = useCallback(() => {
+    const starterMessages = [WELCOME_MESSAGE]
+    return agent.id === 'health-check'
+      ? ensureHealthCheckStarterMessages(starterMessages)
+      : starterMessages
+  }, [WELCOME_MESSAGE, agent.id])
 
   const [chatSessions, setChatSessions] = useState<ChatSessionSummary[]>([])
   const [activeSessionId, setActiveSessionId] = useState('')
@@ -333,18 +433,21 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, popupMode = 'de
 
   // ── Session state ────────────────────────────────────────────────────────
   const [messages, setMessages] = useState<Message[]>(() => {
-    return [WELCOME_MESSAGE]
+    return buildStarterMessages()
   })
   const [sessionLoading, setSessionLoading] = useState(false)
 
   const applySessionMessages = useCallback((sessionId: string, nextMessages: Message[]) => {
+    const normalizedMessages = agent.id === 'health-check'
+      ? ensureHealthCheckStarterMessages(nextMessages)
+      : nextMessages
     displayedSessionIdRef.current = sessionId
-    sessionMessagesRef.current[sessionId] = nextMessages
-    setMessages(nextMessages)
-  }, [])
+    sessionMessagesRef.current[sessionId] = normalizedMessages
+    setMessages(normalizedMessages)
+  }, [agent.id])
 
   useEffect(() => {
-    const starterMessages = [WELCOME_MESSAGE]
+    const starterMessages = buildStarterMessages()
     const persistedFullScreenSessionId = fullScreen
       ? readPersistedFullScreenSessionId(fullScreenStorageKey)
       : null
@@ -435,17 +538,17 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, popupMode = 'de
     return () => {
       cancelled = true
     }
-  }, [WELCOME_MESSAGE, agent.id, authenticatedUserId, applySessionMessages, browserSessionId, fixedSessionId, fullScreen, fullScreenStorageKey, sessionIdScope])
+  }, [WELCOME_MESSAGE, agent.id, authenticatedUserId, applySessionMessages, browserSessionId, buildStarterMessages, fixedSessionId, fullScreen, fullScreenStorageKey, sessionIdScope])
 
   useEffect(() => {
     if (!activeSessionId) return
     const sessionEntry = sessionMessagesRef.current[activeSessionId]
     if (!sessionEntry && authenticatedUserId) return
-    const nextMessages = sessionEntry ?? [WELCOME_MESSAGE]
+    const nextMessages = sessionEntry ?? buildStarterMessages()
     displayedSessionIdRef.current = activeSessionId
     setMessages(prev => (prev === nextMessages ? prev : nextMessages))
     setSessionLoading(false)
-  }, [activeSessionId, WELCOME_MESSAGE, authenticatedUserId])
+  }, [activeSessionId, WELCOME_MESSAGE, authenticatedUserId, buildStarterMessages])
 
   const [loading, setLoading] = useState(false)
   const [loadingSessionId, setLoadingSessionId] = useState<string | null>(null)
@@ -458,6 +561,17 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, popupMode = 'de
   const [isSessionSidebarCollapsed, setIsSessionSidebarCollapsed] = useState(false)
   const [showAllSessions, setShowAllSessions] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const [selectedHealthCheckEnvironment, setSelectedHealthCheckEnvironment] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (agent.id !== 'health-check') {
+      setSelectedHealthCheckEnvironment(null)
+      return
+    }
+
+    const bootstrapState = getHealthCheckBootstrapState(messages)
+    setSelectedHealthCheckEnvironment(bootstrapState.environment)
+  }, [agent.id, messages])
   const sessionsListRef = useRef<HTMLDivElement>(null)
   const [panelSize, setPanelSize] = useState(() => {
     const fallback = { width: 440, height: 780 }
@@ -704,8 +818,36 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, popupMode = 'de
     const requestSessionId = activeSessionId
     const textToSend = messageText || input
     if (!textToSend.trim()) return
+    const normalizedBaseMessages = agent.id === 'health-check'
+      ? ensureHealthCheckStarterMessages(baseMessages)
+      : baseMessages
+    const healthCheckBootstrapState = agent.id === 'health-check'
+      ? getHealthCheckBootstrapState(normalizedBaseMessages)
+      : { environment: null, complete: true }
+
+    if (agent.id === 'health-check' && !healthCheckBootstrapState.complete) {
+      setMessages((prev) => {
+        const lastMessage = prev[prev.length - 1]
+        if (lastMessage?.role === 'agent' && lastMessage.type === 'info' && lastMessage.content === HEALTH_CHECK_SELECTION_REQUIRED_MESSAGE) {
+          return prev
+        }
+
+        return [
+          ...prev,
+          {
+            role: 'agent',
+            content: HEALTH_CHECK_SELECTION_REQUIRED_MESSAGE,
+            type: 'info',
+            timestamp: Date.now(),
+          },
+        ]
+      })
+      setInput('')
+      return
+    }
+
     const conversationHistory = agent.id === 'health-check'
-      ? buildConversationHistory(baseMessages)
+      ? buildConversationHistory(normalizedBaseMessages)
       : undefined
 
     const isHealthCheck = textToSend === HEALTH_CHECK_QUERY
@@ -826,6 +968,36 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, popupMode = 'de
   }, [])
 
   const handleSuggestedActionClick = useCallback((message: Message, action: NonNullable<Message['suggestedActions']>[number]) => {
+    if (agent.id === 'health-check' && message.selectionMode === 'health-check-environment') {
+      setSelectedHealthCheckEnvironment(action.action)
+      setInput('')
+      setHistoryIdx(-1)
+      setMessages((prev) => {
+        const nextMessages = prev.filter((item) => !isHealthCheckBootstrapMessage(item) && item.selectionMode !== 'confirmation')
+        return [...nextMessages, buildHealthCheckTypeMessage(action.action)]
+      })
+      return
+    }
+
+    if (agent.id === 'health-check' && message.selectionMode === 'health-check-type') {
+      if (!selectedHealthCheckEnvironment) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: 'agent',
+            content: HEALTH_CHECK_SELECTION_REQUIRED_MESSAGE,
+            type: 'info',
+            timestamp: Date.now(),
+          },
+        ])
+        return
+      }
+
+      const nextMessages = messages.filter((item) => !isHealthCheckBootstrapMessage(item) && item.selectionMode !== 'confirmation')
+      void sendMessage(buildHealthCheckPrompt(selectedHealthCheckEnvironment, action.action), nextMessages)
+      return
+    }
+
     if (action.action === 'restart_service') {
       void sendMessage('Restart the DataOps service')
       return
@@ -866,6 +1038,11 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, popupMode = 'de
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
+      if (agent.id === 'health-check' && !getHealthCheckBootstrapState(messages).complete) {
+        void sendMessage(input)
+        return
+      }
+
       const latestHealthCheckSelectionMessage = agent.id === 'health-check'
         ? findLatestHealthCheckSelectionMessage(messages)
         : null
@@ -898,7 +1075,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, popupMode = 'de
 
   const resetToMainMenu = () => {
     if (!activeSessionId) return
-    const resetMessages = [WELCOME_MESSAGE]
+    const resetMessages = buildStarterMessages()
     applySessionMessages(activeSessionId, resetMessages)
     setInput('')
     if (authenticatedUserId) {
@@ -911,7 +1088,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, popupMode = 'de
 
   const createNewChat = useCallback(() => {
     const nextSessionId = createSessionId(sessionIdScope)
-    const nextMessages = [WELCOME_MESSAGE]
+    const nextMessages = buildStarterMessages()
     const nextSummary = buildSessionSummary(nextSessionId, nextMessages)
     sessionMessagesRef.current[nextSessionId] = nextMessages
     setChatSessions(prev => {
@@ -922,7 +1099,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, popupMode = 'de
     setInput('')
     setLoading(false)
     setLoadingSessionId(null)
-  }, [WELCOME_MESSAGE, applySessionMessages, sessionIdScope])
+  }, [applySessionMessages, buildStarterMessages, sessionIdScope])
 
   const switchToSession = useCallback((sessionId: string) => {
     const nextMessages = sessionMessagesRef.current[sessionId]
