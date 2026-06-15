@@ -93,6 +93,8 @@ interface Message {
   type?: 'status' | 'error' | 'success' | 'info' | 'table'
   data?: any
   timestamp?: number
+  selectedEnvironment?: string
+  selectedHealthCheckType?: string
   suggestedActionPrompt?: string
   selectionMode?: 'health-check-options' | 'health-check-environment' | 'health-check-type' | 'confirmation'
   suggestedActions?: Array<{
@@ -127,20 +129,32 @@ const FULLSCREEN_CHAT_STORAGE_PREFIX = 'dataops:fullscreen-chat:'
 const MAX_FULLSCREEN_SESSION_SUMMARIES = 8
 const HEALTH_CHECK_CONFIRM_YES = '__health_check_confirm_yes__'
 const HEALTH_CHECK_CONFIRM_NO = '__health_check_confirm_no__'
-const HEALTH_CHECK_ENVIRONMENT_OPTIONS = ['Production', 'Pre-Prod', 'Test', 'Development'] as const
-const HEALTH_CHECK_TYPE_OPTIONS = ['Network', 'Server Health', 'App URL Check', 'DB Connectivity', 'Check ALL'] as const
+const HEALTH_CHECK_GO_BACK_YES = '__health_check_go_back_yes__'
+const HEALTH_CHECK_GO_BACK_NO = '__health_check_go_back_no__'
+const HEALTH_CHECK_ENVIRONMENT_OPTIONS = [
+  { label: 'Production', value: 'PROD' },
+  { label: 'Pre-Prod', value: 'PRE-PROD' },
+  { label: 'Test', value: 'TEST' },
+  { label: 'Development', value: 'DEV' },
+] as const
+const HEALTH_CHECK_TYPE_OPTIONS = [
+  { label: 'Network', value: 'Network' },
+  { label: 'Server Health', value: 'Process/CPU/Filesystem' },
+  { label: 'Application URL', value: 'Application URL' },
+  { label: 'Check ALL', value: 'All' },
+] as const
 const HEALTH_CHECK_SELECTION_REQUIRED_MESSAGE = 'Please make a selection using the provided buttons first.'
 
 function buildHealthCheckPrompt(environment: string, checkType: string) {
-  return `${environment}-${checkType}`
+  return `${checkType} health check for ${environment} environment`
 }
 
 function parseHealthCheckPrompt(value: string): { environment: string; checkType: string } | null {
   const normalized = value.trim().toLowerCase()
   for (const environment of HEALTH_CHECK_ENVIRONMENT_OPTIONS) {
     for (const checkType of HEALTH_CHECK_TYPE_OPTIONS) {
-      if (normalized === buildHealthCheckPrompt(environment, checkType).toLowerCase()) {
-        return { environment, checkType }
+      if (normalized === buildHealthCheckPrompt(environment.value, checkType.value).toLowerCase()) {
+        return { environment: environment.value, checkType: checkType.value }
       }
     }
   }
@@ -151,13 +165,13 @@ function parseHealthCheckPrompt(value: string): { environment: string; checkType
 function buildHealthCheckEnvironmentMessage(): Message {
   return {
     role: 'agent',
-    content: 'Environment question',
+    content: 'Which environment would you like to perform a health check on today?',
     type: 'info',
     timestamp: Date.now(),
     selectionMode: 'health-check-environment',
     suggestedActions: HEALTH_CHECK_ENVIRONMENT_OPTIONS.map((environment) => ({
-      label: environment,
-      action: environment,
+      label: environment.label,
+      action: environment.value,
     })),
   }
 }
@@ -165,13 +179,13 @@ function buildHealthCheckEnvironmentMessage(): Message {
 function buildHealthCheckTypeMessage(environment: string): Message {
   return {
     role: 'agent',
-    content: `What type of health check?\nSelected environment: ${environment}`,
+    content: `What type of health check would you like to perform?\nSelected environment: ${environment}`,
     type: 'info',
     timestamp: Date.now(),
     selectionMode: 'health-check-type',
     suggestedActions: HEALTH_CHECK_TYPE_OPTIONS.map((checkType) => ({
-      label: checkType,
-      action: checkType,
+      label: checkType.label,
+      action: checkType.value,
     })),
   }
 }
@@ -252,6 +266,19 @@ function buildHealthCheckConfirmationMessage(display: string): Message {
     suggestedActions: [
       { label: 'Yes', action: HEALTH_CHECK_CONFIRM_YES },
       { label: 'No', action: HEALTH_CHECK_CONFIRM_NO },
+    ],
+  }
+}
+
+function buildHealthCheckGoBackConfirmationMessage(): Message {
+  return {
+    role: 'agent',
+    content: 'Are you sure you want to go back? This will abort the current session and start a new one.',
+    timestamp: Date.now(),
+    selectionMode: 'confirmation',
+    suggestedActions: [
+      { label: 'Yes, Go Back', action: HEALTH_CHECK_GO_BACK_YES },
+      { label: 'No, Stay Here', action: HEALTH_CHECK_GO_BACK_NO },
     ],
   }
 }
@@ -378,7 +405,8 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, popupMode = 'de
   const headerActionHover = useDarkHeaderText ? 'rgba(52,52,59,0.08)' : 'rgba(255,255,255,0.15)'
   const authenticatedUserId = getAuthenticatedUserId() ?? undefined
   const browserSessionId = SESSION_ID
-  const fixedSessionId = agent.id === 'health-check' ? browserSessionId : null
+  const [healthCheckSessionId, setHealthCheckSessionId] = useState<string | null>(agent.id === 'health-check' ? browserSessionId : null)
+  const fixedSessionId = agent.id === 'health-check' ? healthCheckSessionId : null
   const userBubbleColor = APP_COLORS.primary
   const userBubbleTextColor = TRUIST.white
   const renderAgentIcon = (size: number) => {
@@ -557,6 +585,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, popupMode = 'de
   const [inputHistory, setInputHistory] = useState<string[]>([])
   const [historyIdx, setHistoryIdx] = useState(-1)
   const [pendingHealthCheckSelection, setPendingHealthCheckSelection] = useState<{ value: string; display: string; sourceTimestamp: number | null } | null>(null)
+  const [, setPendingGoBackConfirmation] = useState(false)
   const [consumedHealthCheckSelectionTimestamp, setConsumedHealthCheckSelectionTimestamp] = useState<number | null>(null)
   const [isSessionSidebarCollapsed, setIsSessionSidebarCollapsed] = useState(false)
   const [showAllSessions, setShowAllSessions] = useState(false)
@@ -564,8 +593,18 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, popupMode = 'de
   const [selectedHealthCheckEnvironment, setSelectedHealthCheckEnvironment] = useState<string | null>(null)
 
   useEffect(() => {
+    if (agent.id === 'health-check') {
+      setHealthCheckSessionId((currentSessionId) => currentSessionId ?? browserSessionId)
+      return
+    }
+
+    setHealthCheckSessionId(null)
+  }, [agent.id, browserSessionId])
+
+  useEffect(() => {
     if (agent.id !== 'health-check') {
       setSelectedHealthCheckEnvironment(null)
+      setPendingGoBackConfirmation(false)
       return
     }
 
@@ -801,6 +840,10 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, popupMode = 'de
   const showPopupQuickActions = agent.id !== 'health-check'
   const isSessionLoading = loading && loadingSessionId === activeSessionId
   const hasConversationStarted = messages.some((msg) => msg.role === 'user') || messages.length > 1
+  const hasHealthCheckProgress = agent.id === 'health-check'
+    && (selectedHealthCheckEnvironment !== null
+      || messages.some((message) => message.role === 'user' || message.selectionMode === 'health-check-options'))
+  const showFloatingGoBack = agent.id === 'health-check' && hasHealthCheckProgress
   const visibleChatSessions = fullScreen && !showAllSessions
     ? chatSessions.slice(0, MAX_FULLSCREEN_SESSION_SUMMARIES)
     : chatSessions
@@ -818,11 +861,16 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, popupMode = 'de
     const requestSessionId = activeSessionId
     const textToSend = messageText || input
     if (!textToSend.trim()) return
+    const parsedHealthCheckPrompt = agent.id === 'health-check'
+      ? parseHealthCheckPrompt(textToSend)
+      : null
     const normalizedBaseMessages = agent.id === 'health-check'
       ? ensureHealthCheckStarterMessages(baseMessages)
       : baseMessages
     const healthCheckBootstrapState = agent.id === 'health-check'
-      ? getHealthCheckBootstrapState(normalizedBaseMessages)
+      ? (parsedHealthCheckPrompt
+        ? { environment: parsedHealthCheckPrompt.environment, complete: true }
+        : getHealthCheckBootstrapState(normalizedBaseMessages))
       : { environment: null, complete: true }
 
     if (agent.id === 'health-check' && !healthCheckBootstrapState.complete) {
@@ -855,7 +903,17 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, popupMode = 'de
       setInputHistory(prev => [textToSend, ...prev.slice(0, 19)])
     }
     setHistoryIdx(-1)
-    const userMessage: Message = { role: 'user', content: isHealthCheck ? '🩺 Agent Health Check' : textToSend, timestamp: Date.now() }
+    const userMessage: Message = {
+      role: 'user',
+      content: isHealthCheck ? '🩺 Agent Health Check' : textToSend,
+      timestamp: Date.now(),
+      ...(parsedHealthCheckPrompt
+        ? {
+            selectedEnvironment: parsedHealthCheckPrompt.environment,
+            selectedHealthCheckType: parsedHealthCheckPrompt.checkType,
+          }
+        : {}),
+    }
     setMessages(prev => [...prev, userMessage])
     setInput('')
     setLoading(true)
@@ -897,6 +955,12 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, popupMode = 'de
           authenticatedUserId,
           browserSessionId,
           conversationHistory,
+          parsedHealthCheckPrompt
+            ? {
+                selectedEnvironment: parsedHealthCheckPrompt.environment,
+                selectedHealthCheckType: parsedHealthCheckPrompt.checkType,
+              }
+            : undefined,
         )
         // sessionStore.setChat({ lastAgentId: agent.id })
         const agentResponse: Message = {
@@ -967,6 +1031,50 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, popupMode = 'de
     ])
   }, [])
 
+  const requestHealthCheckGoBackConfirmation = useCallback(() => {
+    setPendingHealthCheckSelection(null)
+    setConsumedHealthCheckSelectionTimestamp(null)
+    setPendingGoBackConfirmation(true)
+    setInput('')
+    setHistoryIdx(-1)
+    setMessages((prev) => [
+      ...prev.filter((message) => message.selectionMode !== 'confirmation'),
+      buildHealthCheckGoBackConfirmationMessage(),
+    ])
+  }, [])
+
+  const cancelHealthCheckGoBack = useCallback(() => {
+    setPendingGoBackConfirmation(false)
+    setMessages((prev) => prev.filter((message) => message.selectionMode !== 'confirmation'))
+  }, [])
+
+  const confirmHealthCheckGoBack = useCallback(() => {
+    if (agent.id !== 'health-check') return
+
+    const nextSessionId = createSessionId(sessionIdScope)
+    const nextMessages = buildStarterMessages()
+    const nextSummary = buildSessionSummary(nextSessionId, nextMessages)
+
+    if (authenticatedUserId && activeSessionId) {
+      chatService.clearSession(agent.id, activeSessionId, authenticatedUserId)
+    }
+
+    setPendingGoBackConfirmation(false)
+    setPendingHealthCheckSelection(null)
+    setConsumedHealthCheckSelectionTimestamp(null)
+    setSelectedHealthCheckEnvironment(null)
+    setInput('')
+    setLoading(false)
+    setLoadingSessionId(null)
+    setSessionLoading(false)
+    displayedSessionIdRef.current = nextSessionId
+    sessionMessagesRef.current = { [nextSessionId]: nextMessages }
+    setChatSessions([nextSummary])
+    setActiveSessionId(nextSessionId)
+    setMessages(nextMessages)
+    setHealthCheckSessionId(nextSessionId)
+  }, [activeSessionId, agent.id, authenticatedUserId, buildStarterMessages, sessionIdScope])
+
   const handleSuggestedActionClick = useCallback((message: Message, action: NonNullable<Message['suggestedActions']>[number]) => {
     if (agent.id === 'health-check' && message.selectionMode === 'health-check-environment') {
       setSelectedHealthCheckEnvironment(action.action)
@@ -1027,13 +1135,23 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, popupMode = 'de
       return
     }
 
+    if (action.action === HEALTH_CHECK_GO_BACK_YES) {
+      confirmHealthCheckGoBack()
+      return
+    }
+
+    if (action.action === HEALTH_CHECK_GO_BACK_NO) {
+      cancelHealthCheckGoBack()
+      return
+    }
+
     if (agent.id === 'health-check' && message.selectionMode === 'health-check-options') {
       requestHealthCheckConfirmation(action.action, action.label, message.timestamp ?? null)
       return
     }
 
     void sendMessage(action.action)
-  }, [agent.id, cancelHealthCheckSelection, confirmHealthCheckSelection, requestHealthCheckConfirmation])
+  }, [agent.id, cancelHealthCheckGoBack, cancelHealthCheckSelection, confirmHealthCheckGoBack, confirmHealthCheckSelection, requestHealthCheckConfirmation])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -1075,7 +1193,11 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, popupMode = 'de
 
   const resetToMainMenu = () => {
     if (!activeSessionId) return
+
     const resetMessages = buildStarterMessages()
+    setPendingHealthCheckSelection(null)
+    setConsumedHealthCheckSelectionTimestamp(null)
+    setSelectedHealthCheckEnvironment(null)
     applySessionMessages(activeSessionId, resetMessages)
     setInput('')
     if (authenticatedUserId) {
@@ -1412,7 +1534,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, popupMode = 'de
               </Box>
             </Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              {messages.length > 1 && (
+              {(messages.length > 1 || hasHealthCheckProgress) && (
                 <Button
                   size="small"
                   onClick={resetToMainMenu}
@@ -1458,6 +1580,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, popupMode = 'de
                   display: 'flex',
                   flexDirection: 'column',
                   gap: 2,
+                  position: 'relative',
                 }}
               >
                 {/* Session loading from DynamoDB */}
@@ -1580,47 +1703,84 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, popupMode = 'de
                 )}
 
                 <div ref={messagesEndRef} />
-              </Box>
 
-              {/* Quick Actions Strip */}
-              <Box sx={{ borderTop: '1px solid #f0f0f0', flexShrink: 0, backgroundColor: '#fff' }}>
-                <Box
-                  onClick={() => setShowQuickActions(v => !v)}
-                  sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2.5, py: 0.6, cursor: 'pointer', '&:hover': { backgroundColor: '#f9f9f9' } }}
-                >
-                  <Typography sx={{ color: '#78909c', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px' }}>
-                    Quick Actions
-                  </Typography>
-                  {showQuickActions
-                    ? <ExpandLessIcon sx={{ fontSize: 15, color: '#90a4ae' }} />
-                    : <ExpandMoreIcon sx={{ fontSize: 15, color: '#90a4ae' }} />
-                  }
-                </Box>
-                {showQuickActions && (
-                  <Box sx={{ px: 2.5, pb: 0.75, display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
-                    {quickActions.map((action, idx) => (
-                      <Chip
-                        key={idx}
-                        label={action.label}
-                        size="small"
-                        onClick={() => sendMessage(action.query)}
-                        disabled={isSessionLoading}
-                        sx={{
-                          fontSize: '11px',
-                          height: 28,
-                          cursor: 'pointer',
-                          backgroundColor: TRUIST.mist,
-                          color: APP_COLORS.primary,
-                          border: `1px solid ${TRUIST.sky}`,
-                          fontWeight: 500,
-                          '&:hover': { backgroundColor: '#bbdefb' },
-                          '& .MuiChip-label': { px: 1.2 },
-                        }}
-                      />
-                    ))}
-                  </Box>
+                {showFloatingGoBack && (
+                  <Button
+                    variant="contained"
+                    startIcon={<ArrowBackIcon sx={{ fontSize: 18 }} />}
+                    onClick={requestHealthCheckGoBackConfirmation}
+                    disabled={isSessionLoading}
+                    sx={{
+                      position: 'sticky',
+                      alignSelf: 'flex-end',
+                      bottom: 18,
+                      right: 0,
+                      mr: 0.5,
+                      mt: 'auto',
+                      px: 2,
+                      py: 1,
+                      borderRadius: 999,
+                      textTransform: 'none',
+                      fontWeight: 700,
+                      fontSize: '13px',
+                      background: `linear-gradient(135deg, ${TRUIST.dusk} 0%, ${APP_COLORS.primary} 100%)`,
+                      color: TRUIST.white,
+                      boxShadow: '0 14px 28px rgba(21, 53, 94, 0.28)',
+                      zIndex: 2,
+                      '&:hover': {
+                        background: `linear-gradient(135deg, ${TRUIST.darkGray} 0%, ${TRUIST.dusk} 100%)`,
+                        boxShadow: '0 18px 30px rgba(21, 53, 94, 0.34)',
+                      },
+                    }}
+                  >
+                    Go Back
+                  </Button>
                 )}
               </Box>
+
+              {showPopupQuickActions && (
+                <>
+                  {/* Quick Actions Strip */}
+                  <Box sx={{ borderTop: '1px solid #f0f0f0', flexShrink: 0, backgroundColor: '#fff' }}>
+                    <Box
+                      onClick={() => setShowQuickActions(v => !v)}
+                      sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2.5, py: 0.6, cursor: 'pointer', '&:hover': { backgroundColor: '#f9f9f9' } }}
+                    >
+                      <Typography sx={{ color: '#78909c', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+                        Quick Actions
+                      </Typography>
+                      {showQuickActions
+                        ? <ExpandLessIcon sx={{ fontSize: 15, color: '#90a4ae' }} />
+                        : <ExpandMoreIcon sx={{ fontSize: 15, color: '#90a4ae' }} />
+                      }
+                    </Box>
+                    {showQuickActions && (
+                      <Box sx={{ px: 2.5, pb: 0.75, display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+                        {quickActions.map((action, idx) => (
+                          <Chip
+                            key={idx}
+                            label={action.label}
+                            size="small"
+                            onClick={() => sendMessage(action.query)}
+                            disabled={isSessionLoading}
+                            sx={{
+                              fontSize: '11px',
+                              height: 28,
+                              cursor: 'pointer',
+                              backgroundColor: TRUIST.mist,
+                              color: APP_COLORS.primary,
+                              border: `1px solid ${TRUIST.sky}`,
+                              fontWeight: 500,
+                              '&:hover': { backgroundColor: '#bbdefb' },
+                              '& .MuiChip-label': { px: 1.2 },
+                            }}
+                          />
+                        ))}
+                      </Box>
+                    )}
+                  </Box>
+                </>
+              )}
 
               {/* Divider */}
               <Divider />
@@ -1792,7 +1952,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, popupMode = 'de
           </Box>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0 }}>
-          {messages.length > 1 && (
+          {(messages.length > 1 || hasHealthCheckProgress) && (
             <Button
               size="small"
               onClick={resetToMainMenu}
@@ -1831,6 +1991,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, popupMode = 'de
           display: 'flex',
           flexDirection: 'column',
           gap: 1.5,
+          position: 'relative',
         }}
       >
         {/* Session loading from DynamoDB */}
@@ -1993,6 +2154,39 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, popupMode = 'de
         )}
 
         <div ref={messagesEndRef} />
+
+        {showFloatingGoBack && (
+          <Button
+            variant="contained"
+            startIcon={<ArrowBackIcon sx={{ fontSize: 17 }} />}
+            onClick={requestHealthCheckGoBackConfirmation}
+            disabled={isSessionLoading}
+            sx={{
+              position: 'sticky',
+              alignSelf: 'flex-end',
+              bottom: 14,
+              right: 0,
+              mr: 0.25,
+              mt: 'auto',
+              px: 1.8,
+              py: 0.85,
+              borderRadius: 999,
+              textTransform: 'none',
+              fontWeight: 700,
+              fontSize: '12px',
+              background: `linear-gradient(135deg, ${TRUIST.dusk} 0%, ${APP_COLORS.primary} 100%)`,
+              color: TRUIST.white,
+              boxShadow: '0 12px 24px rgba(21, 53, 94, 0.28)',
+              zIndex: 2,
+              '&:hover': {
+                background: `linear-gradient(135deg, ${TRUIST.darkGray} 0%, ${TRUIST.dusk} 100%)`,
+                boxShadow: '0 16px 26px rgba(21, 53, 94, 0.34)',
+              },
+            }}
+          >
+            Go Back
+          </Button>
+        )}
       </Box>
 
       {/* Collapsible Quick Actions */}

@@ -46,6 +46,11 @@ export interface ConversationHistoryEntry {
   content: string
 }
 
+interface HealthCheckSelectionPayload {
+  selectedEnvironment: string
+  selectedHealthCheckType: string
+}
+
 interface HealthCheckActionAuditPayload {
   sessionId: string
   browserSessionId?: string
@@ -163,6 +168,7 @@ export const chatService = {
     userId?: string,
     browserSessionId = SESSION_ID,
     conversationHistory?: ConversationHistoryEntry[],
+    healthCheckSelection?: HealthCheckSelectionPayload,
   ) => {
     const raw = await chatRequest<ChatApiResponse>(endpoint, {
       session_id: sessionId,
@@ -171,6 +177,12 @@ export const chatService = {
       ...(userId ? { user_id: userId } : {}),
       message,
       ...(conversationHistory ? { conversation_history: conversationHistory } : {}),
+      ...(healthCheckSelection
+        ? {
+            selected_environment: healthCheckSelection.selectedEnvironment,
+            selected_hc_type: healthCheckSelection.selectedHealthCheckType,
+          }
+        : {}),
     })
     return normaliseResponse(raw)
   },
