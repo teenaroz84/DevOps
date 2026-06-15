@@ -219,6 +219,27 @@ function getHealthCheckBootstrapState(messages: Message[]): { environment: strin
   return { environment: null, complete: false }
 }
 
+function getHealthCheckSessionSelection(messages: Message[]): { environment: string; checkType: string } | null {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]
+    if (message.role !== 'user') continue
+
+    if (message.selectedEnvironment && message.selectedHealthCheckType) {
+      return {
+        environment: message.selectedEnvironment,
+        checkType: message.selectedHealthCheckType,
+      }
+    }
+
+    const parsedPrompt = parseHealthCheckPrompt(message.content)
+    if (parsedPrompt) {
+      return parsedPrompt
+    }
+  }
+
+  return null
+}
+
 function ensureHealthCheckStarterMessages(messages: Message[]): Message[] {
   const hasBootstrapMessage = messages.some((message) => isHealthCheckBootstrapMessage(message))
   const bootstrapState = getHealthCheckBootstrapState(messages)
@@ -867,9 +888,12 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, popupMode = 'de
     const normalizedBaseMessages = agent.id === 'health-check'
       ? ensureHealthCheckStarterMessages(baseMessages)
       : baseMessages
+    const resolvedHealthCheckSelection = agent.id === 'health-check'
+      ? (parsedHealthCheckPrompt ?? getHealthCheckSessionSelection(normalizedBaseMessages))
+      : null
     const healthCheckBootstrapState = agent.id === 'health-check'
-      ? (parsedHealthCheckPrompt
-        ? { environment: parsedHealthCheckPrompt.environment, complete: true }
+      ? (resolvedHealthCheckSelection
+        ? { environment: resolvedHealthCheckSelection.environment, complete: true }
         : getHealthCheckBootstrapState(normalizedBaseMessages))
       : { environment: null, complete: true }
 
@@ -907,10 +931,10 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, popupMode = 'de
       role: 'user',
       content: isHealthCheck ? '🩺 Agent Health Check' : textToSend,
       timestamp: Date.now(),
-      ...(parsedHealthCheckPrompt
+      ...(resolvedHealthCheckSelection
         ? {
-            selectedEnvironment: parsedHealthCheckPrompt.environment,
-            selectedHealthCheckType: parsedHealthCheckPrompt.checkType,
+            selectedEnvironment: resolvedHealthCheckSelection.environment,
+            selectedHealthCheckType: resolvedHealthCheckSelection.checkType,
           }
         : {}),
     }
@@ -955,10 +979,10 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, popupMode = 'de
           authenticatedUserId,
           browserSessionId,
           conversationHistory,
-          parsedHealthCheckPrompt
+          resolvedHealthCheckSelection
             ? {
-                selectedEnvironment: parsedHealthCheckPrompt.environment,
-                selectedHealthCheckType: parsedHealthCheckPrompt.checkType,
+                selectedEnvironment: resolvedHealthCheckSelection.environment,
+                selectedHealthCheckType: resolvedHealthCheckSelection.checkType,
               }
             : undefined,
         )
