@@ -101,6 +101,7 @@ interface Message {
     label: string
     action: string
     icon?: string
+    disabled?: boolean
   }>
 }
 
@@ -141,6 +142,7 @@ const HEALTH_CHECK_TYPE_OPTIONS = [
   { label: 'Network', value: 'Network' },
   { label: 'Server Health', value: 'Process/CPU/Filesystem' },
   { label: 'Application URL', value: 'Application URL' },
+  { label: 'DB Connectivity', value: 'DB Connectivity', disabled: true },
   { label: 'Check ALL', value: 'All' },
 ] as const
 const HEALTH_CHECK_SELECTION_REQUIRED_MESSAGE = 'Please make a selection using the provided buttons first.'
@@ -186,6 +188,7 @@ function buildHealthCheckTypeMessage(environment: string): Message {
     suggestedActions: HEALTH_CHECK_TYPE_OPTIONS.map((checkType) => ({
       label: checkType.label,
       action: checkType.value,
+      disabled: 'disabled' in checkType ? checkType.disabled : false,
     })),
   }
 }
@@ -1679,7 +1682,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, popupMode = 'de
                               onClick={() => {
                                 handleSuggestedActionClick(msg, action)
                               }}
-                              disabled={isSessionLoading || isStaleHealthCheckSelectionMessage(msg, messages, !!pendingHealthCheckSelection, consumedHealthCheckSelectionTimestamp)}
+                              disabled={action.disabled || isSessionLoading || isStaleHealthCheckSelectionMessage(msg, messages, !!pendingHealthCheckSelection, consumedHealthCheckSelectionTimestamp)}
                               sx={{
                                 fontSize: '12px',
                                 fontWeight: 500,
@@ -2127,7 +2130,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, popupMode = 'de
                       onClick={() => {
                         handleSuggestedActionClick(msg, action)
                       }}
-                      disabled={isSessionLoading || isStaleHealthCheckSelectionMessage(msg, messages, !!pendingHealthCheckSelection, consumedHealthCheckSelectionTimestamp)}
+                      disabled={action.disabled || isSessionLoading || isStaleHealthCheckSelectionMessage(msg, messages, !!pendingHealthCheckSelection, consumedHealthCheckSelectionTimestamp)}
                       sx={{
                         fontSize: '11px',
                         fontWeight: 500,
