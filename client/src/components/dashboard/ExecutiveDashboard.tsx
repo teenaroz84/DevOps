@@ -552,7 +552,7 @@ const OverviewLanding: React.FC<{ onSourceSelect: (s: SourceKey) => void }> = ({
             titleIcon={<DashboardIcon sx={{ color: '#1976d2', fontSize: 18 }} />}
           >
             <Box sx={{ p: 1.5 }}>
-              <StatCardGrid items={globalKpis} columns={4} withDialog />
+              <StatCardGrid items={globalKpis} columns={4} variant="servicenow" withDialog />
             </Box>
           </WidgetShell>
         </Paper>

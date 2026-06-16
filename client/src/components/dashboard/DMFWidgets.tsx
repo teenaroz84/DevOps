@@ -684,6 +684,7 @@ const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void
                 ]}
                 columns={4}
                 compact
+                variant="servicenow"
               />
 
               {/* ── 3. Sub-filters (only when source selected) ─────────────── */}
@@ -1010,6 +1011,7 @@ const DMFPipelineWidgetInner: React.FC<{ onOpenAgent?: (agentId: string) => void
               })()}
               columns={6}
               compact
+                variant="servicenow"
             />
 
             {/* Status Donut + Source Type (bar) + Target Type (bar) + Step Failures (bar) */}

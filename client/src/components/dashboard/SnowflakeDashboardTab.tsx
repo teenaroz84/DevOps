@@ -261,7 +261,7 @@ const CostEfficiencyScreen: React.FC<{ data: CostData; costDayLabel: string }> =
       //  { label: 'Remaining Balance',    value: fmtCompactUsd(s.remaining_balance),                   color: '#2e7d32', bg: '#e8f5e9' },
       //  { label: 'Days Remaining',       value: s.days_remaining != null ? String(s.days_remaining) : '—', color: '#e65100', bg: '#fff3e0' },
         { label:  'Savings Opp (7d)' , value: fmtKpiDollar(s.optimization_opportunity_currency_7d), color: '#c62828', bg: '#fce4ec' },
-      ]} />
+      ]} variant="servicenow" />
 
       {/* Row 1: Cost by Service Type + Daily Cost Trend */}
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' }, gap: 2, alignItems: 'stretch', '& > *': { minWidth: 0 } }}>
@@ -489,7 +489,7 @@ const PlatformIntelligenceScreen: React.FC<{ data: PlatformData; queriesDayLabel
         { label: 'Credits Used',    value: (s.warehouse_credits_used ?? 0).toLocaleString(),   color: '#6a1b9a', bg: '#f3e5f5' },
         { label: 'Failed Tasks',    value: s.task_failures,                                    color: '#e65100', bg: '#fff3e0' },
         { label: 'Failed Logins',   value: s.failed_logins ?? 0,                               color: '#c62828', bg: '#fce4ec' },
-      ]} />
+      ]} variant="servicenow" />
 
       {/* Row 1: Warehouse Heatmap + Query Volume & Performance */}
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '2fr 1fr' }, gap: 2, alignItems: 'stretch', '& > *': { minWidth: 0 } }}>

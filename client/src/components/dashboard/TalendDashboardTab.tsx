@@ -677,7 +677,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
               error={summaryError ?? serviceNowKpisError ?? undefined}
             >
               <Box sx={{ px: 1.5, py: 1 }}>
-                <StatCardGrid items={statCards} columns={6} compact />
+                <StatCardGrid items={statCards} columns={6} compact variant="servicenow" />
               </Box>
             </WidgetShell>
           </Paper>

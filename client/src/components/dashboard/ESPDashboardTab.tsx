@@ -1045,6 +1045,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                     // { label: 'User Jobs',      value: data.user_jobs.length, color: '#00838f', bg: '#e0f7fa' },
                   ]}
                   columns={5}
+                  variant="servicenow"
                 />
               </Box>
             </WidgetShell>
