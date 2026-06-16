@@ -12,6 +12,15 @@
  */
 import { Router, Request, Response } from 'express';
 import { getPgPool } from '../db/postgres';
+import {
+  buildEspFailedJobsOverviewQuery,
+  buildEspFailedJobsTrendOverviewQuery,
+  buildEspIdleJobsOverviewQuery,
+  buildEspIdleJobsTrendOverviewQuery,
+  buildEspTotalJobsOverviewQuery,
+  buildEspTotalJobsTrendOverviewQuery,
+  type EspOverviewIntervalDays,
+} from './queries/espExecutiveDashboardQueries';
 
 const router = Router();
 
@@ -30,6 +39,15 @@ function parseLimit(query: any, fallback: number, max: number): number {
   const n = parseInt(String(query.limit ?? fallback), 10);
   if (isNaN(n)) return fallback;
   return Math.min(Math.max(n, 1), max);
+}
+
+function parseOverviewInterval(query: any): EspOverviewIntervalDays {
+  const raw = String(query.interval ?? query.days ?? ESP_DEFAULT_DAYS).trim().toLowerCase();
+  if (raw === 'all') return null;
+
+  const n = parseInt(raw, 10);
+  if (isNaN(n)) return ESP_DEFAULT_DAYS;
+  return Math.min(Math.max(n, 1), ESP_MAX_DAYS);
 }
 
 function mapSlaMissedRow(row: any) {
@@ -70,6 +88,89 @@ async function getPlatformRow(platformId: string): Promise<{ platform_id: string
 
 // SLA routes still filter by the platform name carried in job_sla_missed.
 const pltKeysSubquery = `(SELECT DISTINCT pltf_name FROM edoops.esp_job_config WHERE pltf_name = $1)`;
+
+router.get('/overview-kpis', async (req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const platformId = typeof req.query.platformId === 'string' ? decodeURIComponent(req.query.platformId) : '';
+    const applName = typeof req.query.applName === 'string' ? req.query.applName.trim() : '';
+    const intervalDays = parseOverviewInterval(req.query);
+
+    let platformName: string | null = null;
+    if (platformId) {
+      const plt = await getPlatformRow(platformId);
+      if (!plt) return res.status(404).json({ error: 'Unknown platform' });
+      platformName = plt.platform_name;
+    }
+
+    const queryOptions = {
+      platformName,
+      applName: applName || null,
+      intervalDays,
+    };
+
+    const [
+      totalJobs,
+      totalJobsTrend,
+      idleJobs,
+      idleJobsTrend,
+      failedJobs,
+      failedJobsTrend,
+    ] = await Promise.all([
+      pool.query(buildEspTotalJobsOverviewQuery(queryOptions)),
+      pool.query(buildEspTotalJobsTrendOverviewQuery(queryOptions)),
+      pool.query(buildEspIdleJobsOverviewQuery(queryOptions)),
+      pool.query(buildEspIdleJobsTrendOverviewQuery(queryOptions)),
+      pool.query(buildEspFailedJobsOverviewQuery(queryOptions)),
+      pool.query(buildEspFailedJobsTrendOverviewQuery(queryOptions)),
+    ]);
+
+    const mapTrend = (rows: any[], valueKey: string) => rows
+      .filter((row) => row.trend_date != null)
+      .map((row) => ({
+        day: String(row.trend_date).split('T')[0],
+        value: parseInt(row[valueKey] ?? '0', 10),
+      }));
+
+    res.json({
+      platform: platformName,
+      applName: applName || null,
+      interval: intervalDays === null ? 'all' : intervalDays,
+      cards: [
+        {
+          key: 'totalJobs',
+          title: 'Total Jobs',
+          description: 'Count of all scheduled jobs across the active ESP scope.',
+          value: parseInt(totalJobs.rows[0]?.total_jobs ?? '0', 10),
+          accent: '#2563eb',
+          background: '#f7fbff',
+          trend: mapTrend(totalJobsTrend.rows, 'total_jobs'),
+        },
+        {
+          key: 'idleJobs',
+          title: 'Idle Jobs',
+          description: 'Jobs with no recent execution activity in the selected scope.',
+          value: parseInt(idleJobs.rows[0]?.idle_jobs ?? '0', 10),
+          accent: '#d97706',
+          background: '#fff8f1',
+          trend: mapTrend(idleJobsTrend.rows, 'idle_jobs'),
+        },
+        {
+          key: 'failedJobs',
+          title: 'Failed Jobs',
+          description: 'Jobs ending with a failure signal in recent execution history.',
+          value: parseInt(failedJobs.rows[0]?.failed_jobs ?? '0', 10),
+          accent: '#dc2626',
+          background: '#fff7f7',
+          trend: mapTrend(failedJobsTrend.rows, 'failed_jobs'),
+        },
+      ],
+    });
+  } catch (err: any) {
+    console.error('ESP overview-kpis error:', err.message);
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
 
 // GET /api/esp/platform-summary
 // Streams NDJSON — one JSON line per platform.

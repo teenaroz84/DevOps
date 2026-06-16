@@ -10,14 +10,14 @@ import AppsIcon from '@mui/icons-material/Apps'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 
 import {
-  WidgetShell, StatCardGrid, MetricBarList, DataTable, TrendLineChart, DonutChart,
+  WidgetShell, MetricBarList, DataTable, TrendLineChart, DonutChart,
 } from '../widgets'
 import type { ColumnDef } from '../widgets'
 import { espService } from '../../services'
 import { useMockData } from '../../context/MockDataContext'
 import { MOCK_ESP_PLATFORM_SUMMARY, getMockAppData, getMockPlatformData, getMockPlatformApplications } from '../../services/espMockData'
-import { APP_COLORS, TRUIST } from '../../theme/truistPalette'
 import { ESPSlaMissedJobsTab } from './ESPSlaMissedJobsTab'
+import ESPExecutiveOverview, { type EspOverviewCard, type EspOverviewIntervalOption } from './ESPExecutiveOverview'
 
 // ─── Types ────────────────────────────────────────────────
 interface NameCount { name: string; count: number }
@@ -38,6 +38,13 @@ interface AppData {
   metadata: Array<{ jobname: string; command: string | null; argument: string | null }>
   metadata_detail: Array<{ jobname: string; command: string | null; argument: string | null; agent: string | null; job_type: string | null; comp_code: string | null; runs: number | null; user_job: string | null }>
   job_run_table: Array<{ job_longname: string; command: string | null; argument: string | null; runs: number | null; start_date: string | null; start_time: string | null; end_date: string | null; end_time: string | null; exec_qtime: string | null; ccfail: string | null; comp_code: string | null }>
+}
+
+interface EspOverviewResponse {
+  platform: string | null
+  applName: string | null
+  interval: number | 'all'
+  cards: EspOverviewCard[]
 }
 
 const TREND_RUN_COLORS  = ['#1565c0', '#2e7d32', '#6a1b9a', '#00838f']
@@ -69,7 +76,7 @@ const normalizeJobTypeLabel = (value?: string | null) => {
 
 
 // ─── Main Component ───────────────────────────────────────
-export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void }> = ({ onOpenAgent }) => {
+export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void }> = () => {
   const { useMock } = useMockData()
   const SHOW_SLA_MISSED_JOBS_TAB = false
   const didAutoSelectPlatform = React.useRef(false)
@@ -109,9 +116,105 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   const [jobListHasMore, setJobListHasMore] = React.useState(false)
 
   const [days, setDays] = React.useState(30)
+  const [overviewInterval, setOverviewInterval] = React.useState<EspOverviewIntervalOption>(30)
+  const [overviewCards, setOverviewCards] = React.useState<EspOverviewCard[]>([])
+  const [overviewScopeLabel, setOverviewScopeLabel] = React.useState('All platforms')
+  const [overviewLoading, setOverviewLoading] = React.useState(false)
+  const [overviewError, setOverviewError] = React.useState<string | null>(null)
 
   // Reset job filter + drill-down when application or platform changes
   React.useEffect(() => { setSelectedJobs([]); setDrillJob(null); setWidgetFilter(null); setStatusFilter('All') }, [selected, selectedPlatform])
+
+  const buildMockOverviewCards = React.useCallback((): EspOverviewCard[] => {
+    const selectedSummary = selectedPlatform
+      ? platformSummary.find((platform) => platform.platform === selectedPlatform) ?? null
+      : null
+    const totalJobs = selected
+      ? data?.job_count ?? 0
+      : selectedSummary
+        ? selectedSummary.total
+        : platformSummary.reduce((sum, row) => sum + row.total, 0)
+    const idleJobs = selected
+      ? data?.idle_job_count ?? 0
+      : selectedSummary
+        ? selectedSummary.idle
+        : platformSummary.reduce((sum, row) => sum + row.idle, 0)
+    const failedJobs = (data?.job_list ?? []).filter((job) => normalizeRunStatusLabel(job.run_status) === 'FAILED').length
+
+    const makeSparkline = (seed: number) => Array.from({ length: 8 }, (_, index) => ({
+      day: `P${index + 1}`,
+      value: Math.max(0, Math.round(seed * (0.88 + ((index % 4) * 0.05) - (index % 3 === 0 ? 0.03 : 0)))),
+    }))
+
+    return [
+      {
+        key: 'totalJobs',
+        title: 'Total Jobs',
+        description: '',
+        value: totalJobs,
+        accent: '#2563eb',
+        background: '#f7fbff',
+        trend: makeSparkline(totalJobs || 1),
+      },
+      {
+        key: 'idleJobs',
+        title: 'Idle Jobs',
+        description: '',
+        value: idleJobs,
+        accent: '#d97706',
+        background: '#fff8f1',
+        trend: makeSparkline(idleJobs || 1),
+      },
+      {
+        key: 'failedJobs',
+        title: 'Failed Jobs',
+        description: '',
+        value: failedJobs,
+        accent: '#dc2626',
+        background: '#fff7f7',
+        trend: makeSparkline(failedJobs || 1),
+      },
+    ]
+  }, [data, platformSummary, selected, selectedPlatform])
+
+  React.useEffect(() => {
+    if (dashboardView !== 'operations') return
+
+    if (useMock) {
+      setOverviewCards(buildMockOverviewCards())
+      setOverviewScopeLabel(selected ? `${selected}${selectedPlatform ? ` · ${selectedPlatform}` : ''}` : selectedPlatform ?? 'All platforms')
+      setOverviewError(null)
+      setOverviewLoading(false)
+      return
+    }
+
+    let cancelled = false
+    setOverviewLoading(true)
+    setOverviewError(null)
+
+    espService.getOverviewKpis(selectedPlatform ?? '', selected, overviewInterval)
+      .then((response: EspOverviewResponse) => {
+        if (cancelled) return
+        setOverviewCards(Array.isArray(response?.cards) ? response.cards : [])
+        setOverviewScopeLabel(
+          response?.applName
+            ? `${response.applName}${response.platform ? ` · ${response.platform}` : ''}`
+            : response?.platform ?? 'All platforms',
+        )
+      })
+      .catch((error: Error) => {
+        if (cancelled) return
+        setOverviewCards([])
+        setOverviewError(error.message || 'Failed to load ESP overview KPIs')
+      })
+      .finally(() => {
+        if (!cancelled) setOverviewLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [buildMockOverviewCards, dashboardView, overviewInterval, selected, selectedPlatform, useMock])
 
   // Load platform summary once on mount (and when mock changes).
   // Only auto-select the first platform on initial load so applib picks are not overridden.
@@ -659,7 +762,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
           )}
           <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1.5 }}>
             {/* ── Date range slider ── */}
-            {dashboardView === 'operations' && (
+            {/* {dashboardView === 'operations' && (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 220 }}>
                 <Typography sx={{ fontSize: '11px', color: '#777', whiteSpace: 'nowrap' }}>Run Trend: Last {days}d</Typography>
                 <Slider
@@ -678,8 +781,8 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                 />
                 <Typography sx={{ fontSize: '10px', color: '#bbb', whiteSpace: 'nowrap' }}>90d</Typography>
               </Box>
-            )} 
-            {dashboardView === 'operations' && (
+            )}  */}
+            {/* {dashboardView === 'operations' && (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
                 {ESP_DAY_PRESETS.map((presetDays) => {
                   const isActive = days === presetDays
@@ -703,7 +806,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                   )
                 })}
               </Box>
-            )}
+            )} */}
           </Box>
         </Box>
 
@@ -720,7 +823,6 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                     value={selectedPlatform ?? selectedApplibPlatform ?? ''}
                     onChange={(e) => {
                       const val = (e.target.value as string) || null
-                      if (!val) return
                       setSelected('')
                       setApplibSearch('')
                       setPlatformApplications([])
@@ -748,6 +850,9 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                       '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
                     }}
                   >
+                    <MenuItem value="" sx={{ fontSize: '12px' }}>
+                      All Platforms
+                    </MenuItem>
                     {platformSummary.filter(p => p.platform).map(p => (
                       <MenuItem key={p.platform} value={p.platform} sx={{ fontSize: '12px', p: 0 }}>
                         <Tooltip title={p.platform_name ?? p.platform} placement="right" arrow>
@@ -845,7 +950,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
           */}
 
           {/* Job selector */}
-          {dashboardView === 'operations' && (
+          {/* {dashboardView === 'operations' && (
             <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'stretch', sm: 'center' }, gap: 0.75, flex: '1 1 320px', minWidth: { xs: '100%', lg: 320 } }}>
               <Typography sx={{ fontSize: '11px', color: '#666', fontWeight: 500, whiteSpace: 'nowrap' }}>Job:</Typography>
               <Autocomplete
@@ -914,7 +1019,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
                 )}
               />
             </Box>
-          )}
+          )} */}
 
           {/* Clear Filters */}
           {((dashboardView === 'operations' && (selectedJobs.length > 0 || statusFilter !== 'All')) || selected || (selectedPlatform && platformSummary.length > 0 && selectedPlatform !== platformSummary[0].platform)) && (
@@ -946,6 +1051,17 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
           )}
         </Box>
       </Paper>
+
+      {dashboardView === 'operations' && (
+        <ESPExecutiveOverview
+          cards={overviewCards}
+          loading={overviewLoading}
+          error={overviewError}
+          interval={overviewInterval}
+          onIntervalChange={setOverviewInterval}
+          scopeLabel={overviewScopeLabel}
+        />
+      )}
 
       {/* ── Loading ── */}
       {dashboardView === 'operations' && loading && (
@@ -1027,32 +1143,6 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
 
       {dashboardView === 'operations' && !loading && data && (
         <>
-          {/* ── Row 1: KPI stat cards ── */}
-          <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #e8ecf1', borderTop: '3px solid #2e7d32', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-            <WidgetShell
-              title={data.appl_name}
-              source="ESP · Enterprise Scheduler"
-              titleIcon={<AppsIcon sx={{ color: '#2e7d32', fontSize: 18 }} />}
-            >
-              <Box sx={{ p: 1.5 }}>
-                <StatCardGrid
-                  items={[
-                    { label: 'Total Jobs',     value: data.job_count,        color: '#1976d2', bg: '#e3f2fd' },
-                    { label: 'Idle Jobs',      value: data.idle_job_count,   color: '#f57c00', bg: '#fff3e0' },
-                    { label: 'Special Jobs',   value: data.spl_job_count,    color: '#c62828', bg: '#fce4ec' },
-                    { label: 'Agents',         value: data.agents.length,    color: '#2e7d32', bg: '#e8f5e9' },
-                    { label: 'Job Types',      value: data.job_types.length, color: '#6a1b9a', bg: '#f3e5f5' },
-                    // { label: 'User Jobs',      value: data.user_jobs.length, color: '#00838f', bg: '#e0f7fa' },
-                  ]}
-                  columns={5}
-                  variant="servicenow"
-                />
-              </Box>
-            </WidgetShell>
-          </Paper>
-
-
-
           {/* ── Row 2: Job Execution Status (single row) ── */}
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr', gap: 2 }}>
 

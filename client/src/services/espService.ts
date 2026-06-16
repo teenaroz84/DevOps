@@ -94,6 +94,14 @@ export const espService = {
     return apiClient.get(`/api/esp/sla-missed-dashboard?${params}`)
   },
 
+  /** Returns the executive overview KPI cards and sparklines for ESP */
+  getOverviewKpis: (platformId = '', applName = '', interval: number | 'all' = 30) => {
+    const params = new URLSearchParams({ interval: String(interval) })
+    if (platformId) params.set('platformId', platformId)
+    if (applName) params.set('applName', applName)
+    return apiClient.get(`/api/esp/overview-kpis?${params}`)
+  },
+
   /** Returns drilldown rows for one SLA-missed ESP job */
   getSlaMissedJobDetail: (platformId = '', jobName: string, applName = '', limit = 100) => {
     const params = new URLSearchParams({ jobName, limit: String(limit) })
