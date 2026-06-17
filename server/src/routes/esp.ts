@@ -19,6 +19,13 @@ import {
   buildEspIdleJobsTrendOverviewQuery,
   buildEspTotalJobsOverviewQuery,
   buildEspTotalJobsTrendOverviewQuery,
+  buildEspSlaBreachesOverviewQuery,
+  buildEspSlaBreachesTrendOverviewQuery,
+  buildEspActiveAgentsOverviewQuery,
+  buildEspActiveAgentsTrendOverviewQuery,
+  buildEspJobRunTrendOverviewQuery,
+  buildEspJobRunAgentsOverviewQuery,
+  buildEspJobTypeDistributionOverviewQuery,
   type EspOverviewIntervalDays,
 } from './queries/espExecutiveDashboardQueries';
 
@@ -116,6 +123,13 @@ router.get('/overview-kpis', async (req: Request, res: Response) => {
       idleJobsTrend,
       failedJobs,
       failedJobsTrend,
+      slaBreaches,
+      slaBreachesTrend,
+      activeAgents,
+      activeAgentsTrend,
+      jobRunTrend,
+      jobRunAgents,
+      jobTypeDistribution,
     ] = await Promise.all([
       pool.query(buildEspTotalJobsOverviewQuery(queryOptions)),
       pool.query(buildEspTotalJobsTrendOverviewQuery(queryOptions)),
@@ -123,6 +137,13 @@ router.get('/overview-kpis', async (req: Request, res: Response) => {
       pool.query(buildEspIdleJobsTrendOverviewQuery(queryOptions)),
       pool.query(buildEspFailedJobsOverviewQuery(queryOptions)),
       pool.query(buildEspFailedJobsTrendOverviewQuery(queryOptions)),
+      pool.query(buildEspSlaBreachesOverviewQuery(queryOptions)),
+      pool.query(buildEspSlaBreachesTrendOverviewQuery(queryOptions)),
+      pool.query(buildEspActiveAgentsOverviewQuery(queryOptions)),
+      pool.query(buildEspActiveAgentsTrendOverviewQuery(queryOptions)),
+      pool.query(buildEspJobRunTrendOverviewQuery(queryOptions)),
+      pool.query(buildEspJobRunAgentsOverviewQuery(queryOptions)),
+      pool.query(buildEspJobTypeDistributionOverviewQuery(queryOptions)),
     ]);
 
     const mapTrend = (rows: any[], valueKey: string) => rows
@@ -140,7 +161,7 @@ router.get('/overview-kpis', async (req: Request, res: Response) => {
         {
           key: 'totalJobs',
           title: 'Total Jobs',
-          description: 'Count of all scheduled jobs across the active ESP scope.',
+          description: '',
           value: parseInt(totalJobs.rows[0]?.total_jobs ?? '0', 10),
           accent: '#2563eb',
           background: '#f7fbff',
@@ -149,7 +170,7 @@ router.get('/overview-kpis', async (req: Request, res: Response) => {
         {
           key: 'idleJobs',
           title: 'Idle Jobs',
-          description: 'Jobs with no recent execution activity in the selected scope.',
+          description: '',
           value: parseInt(idleJobs.rows[0]?.idle_jobs ?? '0', 10),
           accent: '#d97706',
           background: '#fff8f1',
@@ -158,13 +179,49 @@ router.get('/overview-kpis', async (req: Request, res: Response) => {
         {
           key: 'failedJobs',
           title: 'Failed Jobs',
-          description: 'Jobs ending with a failure signal in recent execution history.',
+          description: '',
           value: parseInt(failedJobs.rows[0]?.failed_jobs ?? '0', 10),
           accent: '#dc2626',
           background: '#fff7f7',
           trend: mapTrend(failedJobsTrend.rows, 'failed_jobs'),
         },
       ],
+      kpis: [
+        {
+          key: 'slaBreaches',
+          title: 'SLA Breaches',
+          description: '',
+          value: parseInt(slaBreaches.rows[0]?.sla_breaches ?? '0', 10),
+          accent: '#d97706',
+          background: '#fffbf0',
+          trend: mapTrend(slaBreachesTrend.rows, 'sla_breaches'),
+        },
+        {
+          key: 'activeAgents',
+          title: 'Active Agents',
+          description: '',
+          value: parseInt(activeAgents.rows[0]?.active_agents ?? '0', 10),
+          accent: '#059669',
+          background: '#f0fdf4',
+          trend: mapTrend(activeAgentsTrend.rows, 'active_agents'),
+        },
+      ],
+      widgets: {
+        jobRunTrend: jobRunTrend.rows.map((r: any) => ({
+          day: String(r.trend_date).split('T')[0],
+          runs: parseInt(r.total_runs ?? '0', 10),
+          fails: parseInt(r.total_fails ?? '0', 10),
+        })),
+        jobRunAgents: jobRunAgents.rows.map((r: any) => ({
+          agent: r.agent ?? 'Unknown',
+          runCount: parseInt(r.run_count ?? '0', 10),
+        })),
+        jobTypeDistribution: jobTypeDistribution.rows.map((r: any) => ({
+          jobType: r.job_type ?? 'Unknown',
+          jobCount: parseInt(r.job_count ?? '0', 10),
+          pct: parseFloat(r.pct ?? '0'),
+        })),
+      },
     });
   } catch (err: any) {
     console.error('ESP overview-kpis error:', err.message);

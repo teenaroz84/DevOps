@@ -17,7 +17,13 @@ import { espService } from '../../services'
 import { useMockData } from '../../context/MockDataContext'
 import { MOCK_ESP_PLATFORM_SUMMARY, getMockAppData, getMockPlatformData, getMockPlatformApplications } from '../../services/espMockData'
 import { ESPSlaMissedJobsTab } from './ESPSlaMissedJobsTab'
-import ESPExecutiveOverview, { type EspOverviewCard, type EspOverviewIntervalOption } from './ESPExecutiveOverview'
+import ESPExecutiveOverview, { 
+  type EspOverviewCard, 
+  type EspOverviewIntervalOption,
+  type EspJobRunTrendPoint,
+  type EspJobRunAgent,
+  type EspJobType,
+} from './ESPExecutiveOverview'
 
 // ─── Types ────────────────────────────────────────────────
 interface NameCount { name: string; count: number }
@@ -45,6 +51,12 @@ interface EspOverviewResponse {
   applName: string | null
   interval: number | 'all'
   cards: EspOverviewCard[]
+  kpis?: EspOverviewCard[]
+  widgets?: {
+    jobRunTrend?: EspJobRunTrendPoint[]
+    jobRunAgents?: EspJobRunAgent[]
+    jobTypeDistribution?: EspJobType[]
+  }
 }
 
 const TREND_RUN_COLORS  = ['#1565c0', '#2e7d32', '#6a1b9a', '#00838f']
@@ -118,6 +130,12 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   const [days, setDays] = React.useState(30)
   const [overviewInterval, setOverviewInterval] = React.useState<EspOverviewIntervalOption>(30)
   const [overviewCards, setOverviewCards] = React.useState<EspOverviewCard[]>([])
+  const [overviewKpis, setOverviewKpis] = React.useState<EspOverviewCard[]>([])
+  const [overviewWidgets, setOverviewWidgets] = React.useState<{
+    jobRunTrend?: EspJobRunTrendPoint[]
+    jobRunAgents?: EspJobRunAgent[]
+    jobTypeDistribution?: EspJobType[]
+  }>({})
   const [overviewScopeLabel, setOverviewScopeLabel] = React.useState('All platforms')
   const [overviewLoading, setOverviewLoading] = React.useState(false)
   const [overviewError, setOverviewError] = React.useState<string | null>(null)
@@ -125,7 +143,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   // Reset job filter + drill-down when application or platform changes
   React.useEffect(() => { setSelectedJobs([]); setDrillJob(null); setWidgetFilter(null); setStatusFilter('All') }, [selected, selectedPlatform])
 
-  const buildMockOverviewCards = React.useCallback((): EspOverviewCard[] => {
+  const buildMockOverviewData = React.useCallback(() => {
     const selectedSummary = selectedPlatform
       ? platformSummary.find((platform) => platform.platform === selectedPlatform) ?? null
       : null
@@ -146,7 +164,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       value: Math.max(0, Math.round(seed * (0.88 + ((index % 4) * 0.05) - (index % 3 === 0 ? 0.03 : 0)))),
     }))
 
-    return [
+    const cards = [
       {
         key: 'totalJobs',
         title: 'Total Jobs',
@@ -175,13 +193,64 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
         trend: makeSparkline(failedJobs || 1),
       },
     ]
+
+    const kpis = [
+      {
+        key: 'slaBreaches',
+        title: 'SLA Breaches',
+        description: '',
+        value: Math.floor(Math.random() * 10),
+        accent: '#d97706',
+        background: '#fffbf0',
+        trend: makeSparkline(3),
+      },
+      {
+        key: 'activeAgents',
+        title: 'Active Agents',
+        description: '',
+        value: Math.floor(Math.random() * 20) + 5,
+        accent: '#059669',
+        background: '#f0fdf4',
+        trend: makeSparkline(12),
+      },
+    ]
+
+    const jobRunTrend = Array.from({ length: 7 }, (_, i) => ({
+      day: `Day ${i + 1}`,
+      runs: Math.floor(Math.random() * 100) + 50,
+      fails: Math.floor(Math.random() * 20),
+    }))
+
+    const jobRunAgents = [
+      { agent: 'AGENT-01', runCount: Math.floor(Math.random() * 100) + 50 },
+      { agent: 'AGENT-02', runCount: Math.floor(Math.random() * 100) + 40 },
+      { agent: 'AGENT-03', runCount: Math.floor(Math.random() * 100) + 30 },
+      { agent: 'AGENT-04', runCount: Math.floor(Math.random() * 100) + 20 },
+      { agent: 'AGENT-05', runCount: Math.floor(Math.random() * 100) + 10 },
+    ]
+
+    const jobTypeDistribution = [
+      { jobType: 'UNIX', jobCount: 45, pct: 45.5 },
+      { jobType: 'FILE_TRIGGER', jobCount: 30, pct: 30.3 },
+      { jobType: 'MAINFRAME', jobCount: 15, pct: 15.2 },
+      { jobType: 'NT', jobCount: 9, pct: 9.0 },
+    ]
+
+    return { cards, kpis, jobRunTrend, jobRunAgents, jobTypeDistribution }
   }, [data, platformSummary, selected, selectedPlatform])
 
   React.useEffect(() => {
     if (dashboardView !== 'operations') return
 
     if (useMock) {
-      setOverviewCards(buildMockOverviewCards())
+      const mockData = buildMockOverviewData()
+      setOverviewCards(mockData.cards)
+      setOverviewKpis(mockData.kpis)
+      setOverviewWidgets({
+        jobRunTrend: mockData.jobRunTrend,
+        jobRunAgents: mockData.jobRunAgents,
+        jobTypeDistribution: mockData.jobTypeDistribution,
+      })
       setOverviewScopeLabel(selected ? `${selected}${selectedPlatform ? ` · ${selectedPlatform}` : ''}` : selectedPlatform ?? 'All platforms')
       setOverviewError(null)
       setOverviewLoading(false)
@@ -196,6 +265,8 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       .then((response: EspOverviewResponse) => {
         if (cancelled) return
         setOverviewCards(Array.isArray(response?.cards) ? response.cards : [])
+        setOverviewKpis(Array.isArray(response?.kpis) ? response.kpis : [])
+        setOverviewWidgets(response?.widgets ?? {})
         setOverviewScopeLabel(
           response?.applName
             ? `${response.applName}${response.platform ? ` · ${response.platform}` : ''}`
@@ -205,6 +276,8 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       .catch((error: Error) => {
         if (cancelled) return
         setOverviewCards([])
+        setOverviewKpis([])
+        setOverviewWidgets({})
         setOverviewError(error.message || 'Failed to load ESP overview KPIs')
       })
       .finally(() => {
@@ -214,7 +287,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
     return () => {
       cancelled = true
     }
-  }, [buildMockOverviewCards, dashboardView, overviewInterval, selected, selectedPlatform, useMock])
+  }, [buildMockOverviewData, dashboardView, overviewInterval, selected, selectedPlatform, useMock])
 
   // Load platform summary once on mount (and when mock changes).
   // Only auto-select the first platform on initial load so applib picks are not overridden.
@@ -1055,6 +1128,8 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       {dashboardView === 'operations' && (
         <ESPExecutiveOverview
           cards={overviewCards}
+          kpis={overviewKpis}
+          widgets={overviewWidgets}
           loading={overviewLoading}
           error={overviewError}
           interval={overviewInterval}
