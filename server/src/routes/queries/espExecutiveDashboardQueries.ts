@@ -30,7 +30,7 @@ function buildScopedConfigCte(platformName?: string | null, applName?: string | 
   return {
     values,
     text: `WITH scoped_config AS MATERIALIZED (
-  SELECT DISTINCT cfg.appl_name, cfg.jobname, cfg.pltf_name, cfg.last_updt_dttm
+  SELECT DISTINCT cfg.appl_name, cfg.jobname, cfg.pltf_name, cfg.jobtype, cfg.last_updt_dttm
   FROM edoops.esp_job_config cfg
   WHERE cfg.appl_name IS NOT NULL
     AND cfg.jobname IS NOT NULL${filterSql}
@@ -168,12 +168,13 @@ export function buildEspSlaBreachesOverviewQuery(options: EspOverviewQueryOption
   return {
     text: `${scope.text}
 SELECT COUNT(*) AS sla_breaches
-FROM edoops.job_sla_status jss
+FROM edoops.job_sla_missed s
 JOIN scoped_config cfg
-  ON cfg.appl_name = jss.jobsla_appl_nm
- AND cfg.jobname = jss.jobsla_job_nm
-WHERE jss.jobsla_batch_dt = CURRENT_DATE
-  AND UPPER(TRIM(jss.jobsla_sla_status)) IN ('MISSED', 'LATE', 'BREACH')`,
+  ON cfg.pltf_name = s.jslmis_pltf_nm
+ AND cfg.appl_name = s.jslmis_appl_lib
+ AND cfg.jobname = s.jslmis_job_nm
+WHERE s.jslmis_batch_dt = CURRENT_DATE
+  AND UPPER(TRIM(s.jslmis_sla_status)) IN ('MISSED', 'LATE', 'BREACH')`,
     values,
   }
 }
@@ -181,17 +182,18 @@ WHERE jss.jobsla_batch_dt = CURRENT_DATE
 export function buildEspSlaBreachesTrendOverviewQuery(options: EspOverviewQueryOptions): EspOverviewQuerySpec {
   const scope = buildScopedConfigCte(options.platformName, options.applName)
   const values = [...scope.values]
-  const intervalClause = buildTimestampIntervalClause(values, 'jss.jobsla_batch_dt', options.intervalDays)
+  const intervalClause = buildTimestampIntervalClause(values, 's.jslmis_batch_dt', options.intervalDays)
 
   return {
     text: `${scope.text}
-SELECT DATE_TRUNC('day', jss.jobsla_batch_dt) AS trend_date,
+SELECT DATE_TRUNC('day', s.jslmis_batch_dt) AS trend_date,
        COUNT(*) AS sla_breaches
-FROM edoops.job_sla_status jss
+FROM edoops.job_sla_missed s
 JOIN scoped_config cfg
-  ON cfg.appl_name = jss.jobsla_appl_nm
- AND cfg.jobname = jss.jobsla_job_nm
-WHERE UPPER(TRIM(jss.jobsla_sla_status)) IN ('MISSED', 'LATE', 'BREACH')${intervalClause}
+  ON cfg.pltf_name = s.jslmis_pltf_nm
+ AND cfg.appl_name = s.jslmis_appl_lib
+ AND cfg.jobname = s.jslmis_job_nm
+WHERE UPPER(TRIM(s.jslmis_sla_status)) IN ('MISSED', 'LATE', 'BREACH')${intervalClause}
 GROUP BY 1
 ORDER BY 1 ASC`,
     values,
@@ -218,7 +220,7 @@ WHERE c.agent IS NOT NULL
 export function buildEspActiveAgentsTrendOverviewQuery(options: EspOverviewQueryOptions): EspOverviewQuerySpec {
   const scope = buildScopedConfigCte(options.platformName, options.applName)
   const values = [...scope.values]
-  const trendColumn = `NULLIF(s.start_date::text, '')::timestamp`
+  const trendColumn = `NULLIF(s.end_date::text, '')::timestamp`
   const intervalClause = buildTimestampIntervalClause(values, trendColumn, options.intervalDays)
 
   return {
@@ -250,7 +252,7 @@ export function buildEspJobRunRunsTrendOverviewQuery(options: EspOverviewQueryOp
   return {
     text: `${scope.text}
 SELECT DATE_TRUNC('day', ${trendColumn}) AS trend_date,
-       SUM(CAST(c.runs AS INTEGER)) AS total_runs
+       COUNT(DISTINCT s.job_longname) AS total_runs
 FROM edoops.esp_job_cmnd c
 JOIN edoops.esp_job_stats_recent s
   ON s.appl_name = c.appl_name
