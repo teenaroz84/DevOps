@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react'
 import { Box, Chip, CircularProgress, Paper, Typography } from '@mui/material'
+import { TrendLineChart, DonutChart, type DonutSlice } from '../widgets'
 
 export type EspOverviewIntervalOption = 30 | 60 | 90 | 'all'
 
@@ -16,6 +17,7 @@ export interface EspOverviewCard {
 export interface EspJobRunTrendPoint {
   day: string
   runs: number
+  avgRun: number
   fails: number
 }
 
@@ -59,6 +61,15 @@ function formatIntervalContext(value: EspOverviewIntervalOption) {
   return value === 'all' ? 'all time' : `last ${value} days`
 }
 
+function formatTrendDayLabel(day: string) {
+  const normalized = day.length >= 10 ? day.slice(0, 10) : day
+  const match = normalized.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!match) return normalized
+  const [, , month, date] = match
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  return `${monthNames[Number(month) - 1]} ${Number(date)}`
+}
+
 function getSparkPoints(values: number[], width = 116, height = 24, padding = 2) {
   if (!values.length) return ''
   const min = Math.min(...values)
@@ -97,6 +108,24 @@ export const ESPExecutiveOverview: React.FC<ESPExecutiveOverviewProps> = ({
 }) => {
   const renderedCards = useMemo(() => cards, [cards])
   const renderedKpis = useMemo(() => kpis, [kpis])
+  const jobRunTrendChartData = useMemo(
+    () => (widgets?.jobRunTrend ?? []).map((point) => ({
+      day: formatTrendDayLabel(point.day),
+      runs: Number(point.runs ?? 0),
+      avgRun: Number(point.avgRun ?? 0),
+      fails: Number(point.fails ?? 0),
+    })),
+    [widgets?.jobRunTrend],
+  )
+
+  const jobTypeDonutData = useMemo<DonutSlice[]>(
+    () => (widgets?.jobTypeDistribution ?? []).map((row, idx) => ({
+      name: row.jobType,
+      value: Number(row.jobCount ?? 0),
+      color: ['#1e5bb8', '#2f9e44', '#f08c00', '#d9480f', '#5f3dc4', '#0c8599'][idx % 6],
+    })),
+    [widgets?.jobTypeDistribution],
+  )
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -218,23 +247,23 @@ export const ESPExecutiveOverview: React.FC<ESPExecutiveOverviewProps> = ({
     {!loading && !error && widgets && (
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: 'repeat(3, 1fr)' }, gap: 2 }}>
         {/* Job Run Trend Chart */}
-        {widgets.jobRunTrend && widgets.jobRunTrend.length > 0 && (
+        {jobRunTrendChartData.length > 0 && (
           <Paper elevation={0} sx={{ borderRadius: 2.5, border: '1px solid #e8ecf1', p: 1.5, boxShadow: '0 10px 24px rgba(15, 23, 42, 0.05)' }}>
             <Typography sx={{ fontSize: '12px', fontWeight: 800, color: '#102a43', textTransform: 'uppercase', letterSpacing: '0.45px', mb: 1 }}>
               Job Run Trend
             </Typography>
-            <Box sx={{ fontSize: '10px', color: '#607080' }}>
-              {widgets.jobRunTrend.slice(-7).map((point) => (
-                <Box key={point.day} sx={{ display: 'flex', justifyContent: 'space-between', py: 0.4 }}>
-                  <span>{point.day}</span>
-                  <Box>
-                    <span style={{ color: '#2563eb', fontWeight: 700 }}>{point.runs}</span>
-                    <span style={{ margin: '0 8px' }}>•</span>
-                    <span style={{ color: '#dc2626', fontWeight: 700 }}>{point.fails}</span>
-                  </Box>
-                </Box>
-              ))}
-            </Box>
+            <TrendLineChart
+              data={jobRunTrendChartData}
+              xKey="day"
+              height={220}
+              lines={[
+                { key: 'runs', label: 'Runs', color: '#1e5bb8', strokeWidth: 2.4 },
+                { key: 'avgRun', label: 'Avg run', color: '#2f9e44', strokeWidth: 2.4, dashed: true },
+                { key: 'fails', label: 'Fails', color: '#d9480f', strokeWidth: 2.2, dashed: true },
+              ]}
+              xAxisInterval="preserveStartEnd"
+              yDomain={['auto', 'auto']}
+            />
           </Paper>
         )}
 
@@ -267,22 +296,20 @@ export const ESPExecutiveOverview: React.FC<ESPExecutiveOverviewProps> = ({
         )}
 
         {/* Job Type Distribution */}
-        {widgets.jobTypeDistribution && widgets.jobTypeDistribution.length > 0 && (
+        {jobTypeDonutData.length > 0 && (
           <Paper elevation={0} sx={{ borderRadius: 2.5, border: '1px solid #e8ecf1', p: 1.5, boxShadow: '0 10px 24px rgba(15, 23, 42, 0.05)' }}>
             <Typography sx={{ fontSize: '12px', fontWeight: 800, color: '#102a43', textTransform: 'uppercase', letterSpacing: '0.45px', mb: 1 }}>
               Job Type Distribution
             </Typography>
-            <Box>
-              {widgets.jobTypeDistribution.map((jobType) => (
-                <Box key={jobType.jobType} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 0.5, borderBottom: '1px solid #f0f4f8' }}>
-                  <Typography sx={{ fontSize: '9px', color: '#3d4b5a', fontWeight: 600 }}>{jobType.jobType}</Typography>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                    <Typography sx={{ fontSize: '9px', color: '#607080' }}>{jobType.jobCount}</Typography>
-                    <Typography sx={{ fontSize: '9px', fontWeight: 700, color: '#059669' }}>{jobType.pct}%</Typography>
-                  </Box>
-                </Box>
-              ))}
-            </Box>
+            <DonutChart
+              data={jobTypeDonutData}
+              size={180}
+              innerRadius={46}
+              outerRadius={70}
+              showLegend
+              centerLabel={jobTypeDonutData.reduce((sum, row) => sum + row.value, 0)}
+              valueFormatter={(value) => value.toLocaleString('en-US')}
+            />
           </Paper>
         )}
       </Box>

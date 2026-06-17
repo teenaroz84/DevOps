@@ -218,6 +218,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
     const jobRunTrend = Array.from({ length: 7 }, (_, i) => ({
       day: `Day ${i + 1}`,
       runs: Math.floor(Math.random() * 100) + 50,
+      avgRun: Math.floor(Math.random() * 45) + 15,
       fails: Math.floor(Math.random() * 20),
     }))
 

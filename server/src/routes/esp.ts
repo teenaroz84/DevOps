@@ -23,7 +23,9 @@ import {
   buildEspSlaBreachesTrendOverviewQuery,
   buildEspActiveAgentsOverviewQuery,
   buildEspActiveAgentsTrendOverviewQuery,
-  buildEspJobRunTrendOverviewQuery,
+  buildEspJobRunRunsTrendOverviewQuery,
+  buildEspJobRunFailsTrendOverviewQuery,
+  buildEspJobRunAvgTrendOverviewQuery,
   buildEspJobRunAgentsOverviewQuery,
   buildEspJobTypeDistributionOverviewQuery,
   type EspOverviewIntervalDays,
@@ -127,7 +129,9 @@ router.get('/overview-kpis', async (req: Request, res: Response) => {
       slaBreachesTrend,
       activeAgents,
       activeAgentsTrend,
-      jobRunTrend,
+      jobRunRunsTrend,
+      jobRunFailsTrend,
+      jobRunAvgTrend,
       jobRunAgents,
       jobTypeDistribution,
     ] = await Promise.all([
@@ -141,10 +145,35 @@ router.get('/overview-kpis', async (req: Request, res: Response) => {
       pool.query(buildEspSlaBreachesTrendOverviewQuery(queryOptions)),
       pool.query(buildEspActiveAgentsOverviewQuery(queryOptions)),
       pool.query(buildEspActiveAgentsTrendOverviewQuery(queryOptions)),
-      pool.query(buildEspJobRunTrendOverviewQuery(queryOptions)),
+      pool.query(buildEspJobRunRunsTrendOverviewQuery(queryOptions)),
+      pool.query(buildEspJobRunFailsTrendOverviewQuery(queryOptions)),
+      pool.query(buildEspJobRunAvgTrendOverviewQuery(queryOptions)),
       pool.query(buildEspJobRunAgentsOverviewQuery(queryOptions)),
       pool.query(buildEspJobTypeDistributionOverviewQuery(queryOptions)),
     ]);
+
+    const mergedJobRunTrend = new Map<string, { day: string; runs: number; fails: number; avgRun: number }>();
+
+    for (const row of jobRunRunsTrend.rows) {
+      const day = String(row.trend_date).split('T')[0];
+      const current = mergedJobRunTrend.get(day) ?? { day, runs: 0, fails: 0, avgRun: 0 };
+      current.runs = parseInt(row.total_runs ?? '0', 10);
+      mergedJobRunTrend.set(day, current);
+    }
+
+    for (const row of jobRunFailsTrend.rows) {
+      const day = String(row.trend_date).split('T')[0];
+      const current = mergedJobRunTrend.get(day) ?? { day, runs: 0, fails: 0, avgRun: 0 };
+      current.fails = parseInt(row.total_fails ?? '0', 10);
+      mergedJobRunTrend.set(day, current);
+    }
+
+    for (const row of jobRunAvgTrend.rows) {
+      const day = String(row.trend_date).split('T')[0];
+      const current = mergedJobRunTrend.get(day) ?? { day, runs: 0, fails: 0, avgRun: 0 };
+      current.avgRun = parseFloat(row.avg_exec_mins ?? '0');
+      mergedJobRunTrend.set(day, current);
+    }
 
     const mapTrend = (rows: any[], valueKey: string) => rows
       .filter((row) => row.trend_date != null)
@@ -207,11 +236,7 @@ router.get('/overview-kpis', async (req: Request, res: Response) => {
         },
       ],
       widgets: {
-        jobRunTrend: jobRunTrend.rows.map((r: any) => ({
-          day: String(r.trend_date).split('T')[0],
-          runs: parseInt(r.total_runs ?? '0', 10),
-          fails: parseInt(r.total_fails ?? '0', 10),
-        })),
+        jobRunTrend: Array.from(mergedJobRunTrend.values()).sort((a, b) => a.day.localeCompare(b.day)),
         jobRunAgents: jobRunAgents.rows.map((r: any) => ({
           agent: r.agent ?? 'Unknown',
           runCount: parseInt(r.run_count ?? '0', 10),

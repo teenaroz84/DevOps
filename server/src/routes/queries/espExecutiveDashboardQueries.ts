@@ -241,7 +241,7 @@ ORDER BY 1 ASC`,
   }
 }
 
-export function buildEspJobRunTrendOverviewQuery(options: EspOverviewQueryOptions): EspOverviewQuerySpec {
+export function buildEspJobRunRunsTrendOverviewQuery(options: EspOverviewQueryOptions): EspOverviewQuerySpec {
   const scope = buildScopedConfigCte(options.platformName, options.applName)
   const values = [...scope.values]
   const trendColumn = `NULLIF(s.end_date::text, '')::timestamp`
@@ -250,13 +250,54 @@ export function buildEspJobRunTrendOverviewQuery(options: EspOverviewQueryOption
   return {
     text: `${scope.text}
 SELECT DATE_TRUNC('day', ${trendColumn}) AS trend_date,
-       COUNT(DISTINCT s.job_longname) AS total_runs,
-       SUM(CASE WHEN s.ccfail = 'YES' THEN 1 ELSE 0 END) AS total_fails
+       SUM(CAST(c.runs AS INTEGER)) AS total_runs
+FROM edoops.esp_job_cmnd c
+JOIN edoops.esp_job_stats_recent s
+  ON s.appl_name = c.appl_name
+ AND s.job_longname = c.jobname
+JOIN scoped_config cfg
+  ON cfg.appl_name = c.appl_name
+ AND cfg.jobname = c.jobname
+WHERE ${trendColumn} IS NOT NULL${intervalClause}
+GROUP BY 1
+ORDER BY 1 ASC`,
+    values,
+  }
+}
+
+export function buildEspJobRunFailsTrendOverviewQuery(options: EspOverviewQueryOptions): EspOverviewQuerySpec {
+  const scope = buildScopedConfigCte(options.platformName, options.applName)
+  const values = [...scope.values]
+  const trendColumn = `NULLIF(s.end_date::text, '')::timestamp`
+  const intervalClause = buildTimestampIntervalClause(values, trendColumn, options.intervalDays)
+
+  return {
+    text: `${scope.text}
+SELECT DATE_TRUNC('day', ${trendColumn}) AS trend_date,
+       COUNT(*) AS total_fails
 FROM edoops.esp_job_stats_recent s
 JOIN scoped_config cfg
   ON cfg.appl_name = s.appl_name
  AND cfg.jobname = s.job_longname
 WHERE ${trendColumn} IS NOT NULL${intervalClause}
+  AND (
+    (s.ccfail IS NOT NULL AND TRIM(s.ccfail) <> '')
+    OR (s.comp_code IS NOT NULL AND TRIM(s.comp_code) NOT IN ('0', ''))
+  )
+GROUP BY 1
+ORDER BY 1 ASC`,
+    values,
+  }
+}
+
+export function buildEspJobRunAvgTrendOverviewQuery(options: EspOverviewQueryOptions): EspOverviewQuerySpec {
+  const values: Array<string | number> = []
+  const intervalClause = buildTimestampIntervalClause(values, 'f.submission_tmst', options.intervalDays, 'WHERE')
+
+  return {
+    text: `SELECT DATE_TRUNC('day', f.submission_tmst) AS trend_date,
+       AVG(CAST(f.exec_time_mins AS NUMERIC)) AS avg_exec_mins
+FROM edoops.esp_forecast f${intervalClause}
 GROUP BY 1
 ORDER BY 1 ASC`,
     values,
