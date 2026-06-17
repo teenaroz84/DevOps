@@ -237,19 +237,30 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
     return { cards, kpis, jobRunTrend, jobRunAgents, jobTypeDistribution }
   }, [data, platformSummary, selected, selectedPlatform])
 
+  // ── Mock overview state effect (no network) ──────────────────────
+  React.useEffect(() => {
+    if (dashboardView !== 'operations' || !useMock) return
+
+    const mockData = buildMockOverviewData()
+    setOverviewCards(mockData.cards)
+    setOverviewKpis(mockData.kpis)
+    setOverviewWidgets({
+      jobRunTrend: mockData.jobRunTrend,
+      jobRunAgents: mockData.jobRunAgents,
+      jobTypeDistribution: mockData.jobTypeDistribution,
+    })
+    setOverviewScopeLabel(selected ? `${selected}${selectedPlatform ? ` · ${selectedPlatform}` : ''}` : selectedPlatform ?? 'All platforms')
+    setOverviewError(null)
+    setWidgetsError(null)
+    setOverviewLoading(false)
+    setWidgetsLoading(false)
+  }, [buildMockOverviewData, dashboardView, selected, selectedPlatform, useMock])
+
   // ── KPI cards effect (overview-kpis) ──────────────────────
   React.useEffect(() => {
     if (dashboardView !== 'operations') return
-
-    if (useMock) {
-      const mockData = buildMockOverviewData()
-      setOverviewCards(mockData.cards)
-      setOverviewKpis(mockData.kpis)
-      setOverviewScopeLabel(selected ? `${selected}${selectedPlatform ? ` · ${selectedPlatform}` : ''}` : selectedPlatform ?? 'All platforms')
-      setOverviewError(null)
-      setOverviewLoading(false)
-      return
-    }
+    if (useMock) return
+    if (platformLoading) return
 
     let cancelled = false
     setOverviewLoading(true)
@@ -277,23 +288,13 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       })
 
     return () => { cancelled = true }
-  }, [buildMockOverviewData, dashboardView, overviewInterval, selected, selectedPlatform, useMock])
+  }, [dashboardView, overviewInterval, platformLoading, selected, selectedPlatform, useMock])
 
   // ── Widget charts effect (job-run-trend, job-run-agents, job-type-distribution) ──
   React.useEffect(() => {
     if (dashboardView !== 'operations') return
-
-    if (useMock) {
-      const mockData = buildMockOverviewData()
-      setOverviewWidgets({
-        jobRunTrend: mockData.jobRunTrend,
-        jobRunAgents: mockData.jobRunAgents,
-        jobTypeDistribution: mockData.jobTypeDistribution,
-      })
-      setWidgetsError(null)
-      setWidgetsLoading(false)
-      return
-    }
+    if (useMock) return
+    if (platformLoading) return
 
     let cancelled = false
     setWidgetsLoading(true)
@@ -322,7 +323,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       })
 
     return () => { cancelled = true }
-  }, [buildMockOverviewData, dashboardView, overviewInterval, selected, selectedPlatform, useMock])
+  }, [dashboardView, overviewInterval, platformLoading, selected, selectedPlatform, useMock])
 
   // Load platform summary once on mount (and when mock changes).
   // Only auto-select the first platform on initial load so applib picks are not overridden.
