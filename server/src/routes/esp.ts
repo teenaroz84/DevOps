@@ -447,7 +447,7 @@ router.get('/platform-detail/:platformId', async (req: Request, res: Response) =
 
           (SELECT COALESCE(json_agg(s), '[]'::json)
            FROM (SELECT DISTINCT d.jobname, d.appl_name, d.release AS successor_job
-               FROM edoops.esp_job_dpndt d
+               FROM edoops.esp_job_dpndnt d
                INNER JOIN configured_jobs cfgSrc ON cfgSrc.appl_name = d.appl_name AND cfgSrc.jobname = d.jobname
                INNER JOIN configured_jobs cfgDest ON cfgDest.appl_name = d.appl_name AND cfgDest.jobname = d.release
                WHERE d.appl_name IN (SELECT appl_name FROM appl_names)
@@ -455,7 +455,7 @@ router.get('/platform-detail/:platformId', async (req: Request, res: Response) =
 
         (SELECT COALESCE(json_agg(p), '[]'::json)
            FROM (SELECT DISTINCT d.jobname, d.appl_name, d.release AS predecessor_job
-               FROM edoops.esp_job_dpndt d
+               FROM edoops.esp_job_dpndnt d
                INNER JOIN configured_jobs cfgSrc ON cfgSrc.appl_name = d.appl_name AND cfgSrc.jobname = d.jobname
                INNER JOIN configured_jobs cfgDest ON cfgDest.appl_name = d.appl_name AND cfgDest.jobname = d.release
                WHERE d.appl_name IN (SELECT appl_name FROM appl_names)
@@ -1831,14 +1831,14 @@ router.get('/summary/:appl_name', async (req: Request, res: Response) => {
         bp).then(r => r.rows.map((x: any) => ({ day: String(x.day), hour: parseInt(x.hour), count: parseInt(x.count) }))), []),
 
       safe(() => pool.query(
-        `SELECT DISTINCT d.jobname, d.appl_name, d.release AS successor_job FROM edoops.esp_job_dpndt d
+        `SELECT DISTINCT d.jobname, d.appl_name, d.release AS successor_job FROM edoops.esp_job_dpndnt d
          JOIN edoops.esp_job_config cfgSrc ON cfgSrc.appl_name = d.appl_name AND cfgSrc.jobname = d.jobname
          JOIN edoops.esp_job_config cfgDest ON cfgDest.appl_name = d.appl_name AND cfgDest.jobname = d.release
          WHERE d.appl_name = $1 ORDER BY d.jobname`,
         [appl_name]).then(r => r.rows.map((x: any) => ({ jobname: x.jobname, appl_name: x.appl_name, successor_job: x.successor_job }))), []),
 
       safe(() => pool.query(
-        `SELECT DISTINCT d.jobname, d.appl_name, d.release AS predecessor_job FROM edoops.esp_job_dpndt d
+        `SELECT DISTINCT d.jobname, d.appl_name, d.release AS predecessor_job FROM edoops.esp_job_dpndnt d
          JOIN edoops.esp_job_config cfgSrc ON cfgSrc.appl_name = d.appl_name AND cfgSrc.jobname = d.jobname
          JOIN edoops.esp_job_config cfgDest ON cfgDest.appl_name = d.appl_name AND cfgDest.jobname = d.release
          WHERE d.release = $1 ORDER BY d.jobname`,
