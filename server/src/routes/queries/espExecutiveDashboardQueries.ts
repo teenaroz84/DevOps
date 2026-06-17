@@ -29,7 +29,7 @@ function buildScopedConfigCte(platformName?: string | null, applName?: string | 
 
   return {
     values,
-    text: `WITH scoped_config AS MATERIALIZED (
+    text: `WITH edoops.esp_job_config AS MATERIALIZED (
   SELECT DISTINCT cfg.appl_name, cfg.jobname, cfg.pltf_name, cfg.last_updt_dttm
   FROM edoops.esp_job_config cfg
   WHERE cfg.appl_name IS NOT NULL
@@ -53,7 +53,7 @@ export function buildEspTotalJobsOverviewQuery(options: EspOverviewQueryOptions)
   return {
     text: `${scope.text}
 SELECT COUNT(DISTINCT jobname) AS total_jobs
-FROM scoped_config`,
+FROM edoops.esp_job_config`,
     values: scope.values,
   }
 }
@@ -67,7 +67,7 @@ export function buildEspTotalJobsTrendOverviewQuery(options: EspOverviewQueryOpt
     text: `${scope.text}
 SELECT DATE_TRUNC('day', last_updt_dttm) AS trend_date,
        COUNT(DISTINCT jobname) AS total_jobs
-FROM scoped_config${intervalClause}
+FROM edoops.esp_job_config${intervalClause}
 GROUP BY 1
 ORDER BY 1 ASC`,
     values,
@@ -81,7 +81,7 @@ export function buildEspIdleJobsOverviewQuery(options: EspOverviewQueryOptions):
     text: `${scope.text}
 SELECT COUNT(DISTINCT c.jobname) AS idle_jobs
 FROM edoops.esp_job_cmnd c
-JOIN scoped_config cfg
+JOIN edoops.esp_job_config cfg
   ON cfg.appl_name = c.appl_name
  AND cfg.jobname = c.jobname
 WHERE c.noruns IS NOT NULL
@@ -101,7 +101,7 @@ export function buildEspIdleJobsTrendOverviewQuery(options: EspOverviewQueryOpti
 SELECT DATE_TRUNC('day', ${trendColumn}) AS trend_date,
        COUNT(DISTINCT c.jobname) AS idle_jobs
 FROM edoops.esp_job_cmnd c
-JOIN scoped_config cfg
+JOIN edoops.esp_job_config cfg
   ON cfg.appl_name = c.appl_name
  AND cfg.jobname = c.jobname
 LEFT JOIN edoops.esp_job_stats_recent s
@@ -125,7 +125,7 @@ export function buildEspFailedJobsOverviewQuery(options: EspOverviewQueryOptions
     text: `${scope.text}
 SELECT COUNT(DISTINCT s.job_longname) AS failed_jobs
 FROM edoops.esp_job_stats_recent s
-JOIN scoped_config cfg
+JOIN edoops.esp_job_config cfg
   ON cfg.appl_name = s.appl_name
  AND cfg.jobname = s.job_longname
 WHERE (
@@ -147,7 +147,7 @@ export function buildEspFailedJobsTrendOverviewQuery(options: EspOverviewQueryOp
 SELECT DATE_TRUNC('day', ${trendColumn}) AS trend_date,
        COUNT(DISTINCT s.job_longname) AS failed_jobs
 FROM edoops.esp_job_stats_recent s
-JOIN scoped_config cfg
+JOIN edoops.esp_job_config cfg
   ON cfg.appl_name = s.appl_name
  AND cfg.jobname = s.job_longname
 WHERE ${trendColumn} IS NOT NULL
@@ -169,8 +169,7 @@ export function buildEspSlaBreachesOverviewQuery(options: EspOverviewQueryOption
     text: `${scope.text}
 SELECT COUNT(*) AS sla_breaches
 FROM edoops.job_sla_status jss
-JOIN scoped_config cfg
-  ON cfg.appl_name = jss.jobsla_appl_nm
+JOIN edoops.esp_job_config cfg
  AND cfg.jobname = jss.jobsla_job_nm
 WHERE jss.jobsla_batch_dt = CURRENT_DATE
   AND UPPER(TRIM(jss.jobsla_sla_status)) IN ('MISSED', 'LATE', 'BREACH')`,
@@ -188,8 +187,7 @@ export function buildEspSlaBreachesTrendOverviewQuery(options: EspOverviewQueryO
 SELECT DATE_TRUNC('day', jss.jobsla_batch_dt) AS trend_date,
        COUNT(*) AS sla_breaches
 FROM edoops.job_sla_status jss
-JOIN scoped_config cfg
-  ON cfg.appl_name = jss.jobsla_appl_nm
+JOIN edoops.esp_job_config cfg
  AND cfg.jobname = jss.jobsla_job_nm
 WHERE UPPER(TRIM(jss.jobsla_sla_status)) IN ('MISSED', 'LATE', 'BREACH')${intervalClause}
 GROUP BY 1
@@ -206,7 +204,7 @@ export function buildEspActiveAgentsOverviewQuery(options: EspOverviewQueryOptio
     text: `${scope.text}
 SELECT COUNT(DISTINCT c.agent) AS active_agents
 FROM edoops.esp_job_cmnd c
-JOIN scoped_config cfg
+JOIN edoops.esp_job_config cfg
   ON cfg.appl_name = c.appl_name
  AND cfg.jobname = c.jobname
 WHERE c.agent IS NOT NULL
@@ -226,7 +224,7 @@ export function buildEspActiveAgentsTrendOverviewQuery(options: EspOverviewQuery
 SELECT DATE_TRUNC('day', ${trendColumn}) AS trend_date,
        COUNT(DISTINCT c.agent) AS active_agents
 FROM edoops.esp_job_cmnd c
-JOIN scoped_config cfg
+JOIN edoops.esp_job_config cfg
   ON cfg.appl_name = c.appl_name
  AND cfg.jobname = c.jobname
 LEFT JOIN edoops.esp_job_stats_recent s
@@ -255,7 +253,7 @@ FROM edoops.esp_job_cmnd c
 JOIN edoops.esp_job_stats_recent s
   ON s.appl_name = c.appl_name
  AND s.job_longname = c.jobname
-JOIN scoped_config cfg
+JOIN edoops.esp_job_config cfg
   ON cfg.appl_name = c.appl_name
  AND cfg.jobname = c.jobname
 WHERE ${trendColumn} IS NOT NULL${intervalClause}
@@ -276,7 +274,7 @@ export function buildEspJobRunFailsTrendOverviewQuery(options: EspOverviewQueryO
 SELECT DATE_TRUNC('day', ${trendColumn}) AS trend_date,
        COUNT(*) AS total_fails
 FROM edoops.esp_job_stats_recent s
-JOIN scoped_config cfg
+JOIN edoops.esp_job_config cfg
   ON cfg.appl_name = s.appl_name
  AND cfg.jobname = s.job_longname
 WHERE ${trendColumn} IS NOT NULL${intervalClause}
@@ -315,7 +313,7 @@ export function buildEspJobRunAgentsOverviewQuery(options: EspOverviewQueryOptio
 SELECT c.agent,
        COUNT(DISTINCT s.job_longname) AS run_count
 FROM edoops.esp_job_cmnd c
-JOIN scoped_config cfg
+JOIN edoops.esp_job_config cfg
   ON cfg.appl_name = c.appl_name
  AND cfg.jobname = c.jobname
 LEFT JOIN edoops.esp_job_stats_recent s
@@ -337,11 +335,11 @@ export function buildEspJobTypeDistributionOverviewQuery(options: EspOverviewQue
 
   return {
     text: `${scope.text}
-SELECT UPPER(TRIM(COALESCE(cfg.jobtype, 'UNKNOWN'))) AS job_type,
-       COUNT(DISTINCT cfg.jobname) AS job_count,
-       ROUND(COUNT(DISTINCT cfg.jobname) * 100.0 / SUM(COUNT(DISTINCT cfg.jobname)) OVER (), 1) AS pct
-FROM scoped_config cfg
-WHERE cfg.jobtype IS NOT NULL
+SELECT UPPER(TRIM(jobtype)) AS job_type,
+       COUNT(DISTINCT jobname) AS job_count,
+       ROUND(COUNT(DISTINCT jobname) * 100.0 / SUM(COUNT(DISTINCT jobname)) OVER (), 1) AS pct
+FROM edoops.esp_job_config 
+WHERE jobtype IS NOT NULL
 GROUP BY 1
 ORDER BY job_count DESC`,
     values,

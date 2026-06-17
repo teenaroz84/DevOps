@@ -46,17 +46,12 @@ interface AppData {
   job_run_table: Array<{ job_longname: string; command: string | null; argument: string | null; runs: number | null; start_date: string | null; start_time: string | null; end_date: string | null; end_time: string | null; exec_qtime: string | null; ccfail: string | null; comp_code: string | null }>
 }
 
-interface EspOverviewResponse {
+interface EspKpiResponse {
   platform: string | null
   applName: string | null
   interval: number | 'all'
   cards: EspOverviewCard[]
   kpis?: EspOverviewCard[]
-  widgets?: {
-    jobRunTrend?: EspJobRunTrendPoint[]
-    jobRunAgents?: EspJobRunAgent[]
-    jobTypeDistribution?: EspJobType[]
-  }
 }
 
 const TREND_RUN_COLORS  = ['#1565c0', '#2e7d32', '#6a1b9a', '#00838f']
@@ -139,6 +134,8 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   const [overviewScopeLabel, setOverviewScopeLabel] = React.useState('All platforms')
   const [overviewLoading, setOverviewLoading] = React.useState(false)
   const [overviewError, setOverviewError] = React.useState<string | null>(null)
+  const [widgetsLoading, setWidgetsLoading] = React.useState(false)
+  const [widgetsError, setWidgetsError] = React.useState<string | null>(null)
 
   // Reset job filter + drill-down when application or platform changes
   React.useEffect(() => { setSelectedJobs([]); setDrillJob(null); setWidgetFilter(null); setStatusFilter('All') }, [selected, selectedPlatform])
@@ -240,6 +237,7 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
     return { cards, kpis, jobRunTrend, jobRunAgents, jobTypeDistribution }
   }, [data, platformSummary, selected, selectedPlatform])
 
+  // ── KPI cards effect (overview-kpis) ──────────────────────
   React.useEffect(() => {
     if (dashboardView !== 'operations') return
 
@@ -247,11 +245,6 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
       const mockData = buildMockOverviewData()
       setOverviewCards(mockData.cards)
       setOverviewKpis(mockData.kpis)
-      setOverviewWidgets({
-        jobRunTrend: mockData.jobRunTrend,
-        jobRunAgents: mockData.jobRunAgents,
-        jobTypeDistribution: mockData.jobTypeDistribution,
-      })
       setOverviewScopeLabel(selected ? `${selected}${selectedPlatform ? ` · ${selectedPlatform}` : ''}` : selectedPlatform ?? 'All platforms')
       setOverviewError(null)
       setOverviewLoading(false)
@@ -263,11 +256,10 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
     setOverviewError(null)
 
     espService.getOverviewKpis(selectedPlatform ?? '', selected, overviewInterval)
-      .then((response: EspOverviewResponse) => {
+      .then((response: EspKpiResponse) => {
         if (cancelled) return
         setOverviewCards(Array.isArray(response?.cards) ? response.cards : [])
         setOverviewKpis(Array.isArray(response?.kpis) ? response.kpis : [])
-        setOverviewWidgets(response?.widgets ?? {})
         setOverviewScopeLabel(
           response?.applName
             ? `${response.applName}${response.platform ? ` · ${response.platform}` : ''}`
@@ -278,16 +270,58 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
         if (cancelled) return
         setOverviewCards([])
         setOverviewKpis([])
-        setOverviewWidgets({})
         setOverviewError(error.message || 'Failed to load ESP overview KPIs')
       })
       .finally(() => {
         if (!cancelled) setOverviewLoading(false)
       })
 
-    return () => {
-      cancelled = true
+    return () => { cancelled = true }
+  }, [buildMockOverviewData, dashboardView, overviewInterval, selected, selectedPlatform, useMock])
+
+  // ── Widget charts effect (job-run-trend, job-run-agents, job-type-distribution) ──
+  React.useEffect(() => {
+    if (dashboardView !== 'operations') return
+
+    if (useMock) {
+      const mockData = buildMockOverviewData()
+      setOverviewWidgets({
+        jobRunTrend: mockData.jobRunTrend,
+        jobRunAgents: mockData.jobRunAgents,
+        jobTypeDistribution: mockData.jobTypeDistribution,
+      })
+      setWidgetsError(null)
+      setWidgetsLoading(false)
+      return
     }
+
+    let cancelled = false
+    setWidgetsLoading(true)
+    setWidgetsError(null)
+
+    Promise.all([
+      espService.getOverviewJobRunTrend(selectedPlatform ?? '', selected, overviewInterval),
+      espService.getOverviewJobRunAgents(selectedPlatform ?? '', selected, overviewInterval),
+      espService.getOverviewJobTypeDistribution(selectedPlatform ?? '', selected, overviewInterval),
+    ])
+      .then(([jobRunTrend, jobRunAgents, jobTypeDistribution]) => {
+        if (cancelled) return
+        setOverviewWidgets({
+          jobRunTrend: Array.isArray(jobRunTrend) ? jobRunTrend : [],
+          jobRunAgents: Array.isArray(jobRunAgents) ? jobRunAgents : [],
+          jobTypeDistribution: Array.isArray(jobTypeDistribution) ? jobTypeDistribution : [],
+        })
+      })
+      .catch((error: Error) => {
+        if (cancelled) return
+        setOverviewWidgets({})
+        setWidgetsError(error.message || 'Failed to load ESP widgets')
+      })
+      .finally(() => {
+        if (!cancelled) setWidgetsLoading(false)
+      })
+
+    return () => { cancelled = true }
   }, [buildMockOverviewData, dashboardView, overviewInterval, selected, selectedPlatform, useMock])
 
   // Load platform summary once on mount (and when mock changes).
@@ -1133,6 +1167,8 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
           widgets={overviewWidgets}
           loading={overviewLoading}
           error={overviewError}
+          widgetsLoading={widgetsLoading}
+          widgetsError={widgetsError}
           interval={overviewInterval}
           onIntervalChange={setOverviewInterval}
           scopeLabel={overviewScopeLabel}

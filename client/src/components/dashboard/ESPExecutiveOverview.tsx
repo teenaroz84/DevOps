@@ -42,6 +42,8 @@ interface ESPExecutiveOverviewProps {
   }
   loading?: boolean
   error?: string | null
+  widgetsLoading?: boolean
+  widgetsError?: string | null
   interval: EspOverviewIntervalOption
   onIntervalChange: (interval: EspOverviewIntervalOption) => void
   scopeLabel: string
@@ -102,6 +104,8 @@ export const ESPExecutiveOverview: React.FC<ESPExecutiveOverviewProps> = ({
   widgets,
   loading = false,
   error,
+  widgetsLoading = false,
+  widgetsError,
   interval,
   onIntervalChange,
   scopeLabel,
@@ -244,43 +248,53 @@ export const ESPExecutiveOverview: React.FC<ESPExecutiveOverviewProps> = ({
     </Paper>
 
     {/* Widget Sections Below KPI Cards */}
-    {!loading && !error && widgets && (
+    {!loading && !error && (
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: 'repeat(3, 1fr)' }, gap: 2 }}>
         {/* Job Run Trend Chart */}
-        {jobRunTrendChartData.length > 0 && (
-          <Paper elevation={0} sx={{ borderRadius: 2.5, border: '1px solid #e8ecf1', p: 1.5, boxShadow: '0 10px 24px rgba(15, 23, 42, 0.05)' }}>
-            <Typography sx={{ fontSize: '12px', fontWeight: 800, color: '#102a43', textTransform: 'uppercase', letterSpacing: '0.45px', mb: 1 }}>
-              Job Run Trend
-            </Typography>
+        <Paper elevation={0} sx={{ borderRadius: 2.5, border: '1px solid #e8ecf1', p: 1.5, boxShadow: '0 10px 24px rgba(15, 23, 42, 0.05)' }}>
+          <Typography sx={{ fontSize: '12px', fontWeight: 800, color: '#102a43', textTransform: 'uppercase', letterSpacing: '0.45px', mb: 1 }}>
+            Job Run Trend
+          </Typography>
+          {widgetsLoading ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 220 }}><CircularProgress size={20} sx={{ color: '#1565c0' }} /></Box>
+          ) : widgetsError ? (
+            <Typography sx={{ fontSize: '11px', color: '#c62828', py: 2 }}>{widgetsError}</Typography>
+          ) : jobRunTrendChartData.length > 0 ? (
             <TrendLineChart
               data={jobRunTrendChartData}
               xKey="day"
               height={220}
               lines={[
-                { key: 'runs', label: 'Runs', color: '#1e5bb8', strokeWidth: 2.4 },
+                { key: 'runs',   label: 'Runs',    color: '#1e5bb8', strokeWidth: 2.4 },
                 { key: 'avgRun', label: 'Avg run', color: '#2f9e44', strokeWidth: 2.4, dashed: true },
-                { key: 'fails', label: 'Fails', color: '#d9480f', strokeWidth: 2.2, dashed: true },
+                { key: 'fails',  label: 'Fails',   color: '#d9480f', strokeWidth: 2.2, dashed: true },
               ]}
               xAxisInterval="preserveStartEnd"
               yDomain={['auto', 'auto']}
             />
-          </Paper>
-        )}
+          ) : (
+            <Typography sx={{ fontSize: '11px', color: '#94a3b8', py: 2 }}>No trend data</Typography>
+          )}
+        </Paper>
 
         {/* Job Run Agents Bar Chart */}
-        {widgets.jobRunAgents && widgets.jobRunAgents.length > 0 && (
-          <Paper elevation={0} sx={{ borderRadius: 2.5, border: '1px solid #e8ecf1', p: 1.5, boxShadow: '0 10px 24px rgba(15, 23, 42, 0.05)' }}>
-            <Typography sx={{ fontSize: '12px', fontWeight: 800, color: '#102a43', textTransform: 'uppercase', letterSpacing: '0.45px', mb: 1 }}>
-              Top Agents
-            </Typography>
+        <Paper elevation={0} sx={{ borderRadius: 2.5, border: '1px solid #e8ecf1', p: 1.5, boxShadow: '0 10px 24px rgba(15, 23, 42, 0.05)' }}>
+          <Typography sx={{ fontSize: '12px', fontWeight: 800, color: '#102a43', textTransform: 'uppercase', letterSpacing: '0.45px', mb: 1 }}>
+            Job Run Agents
+          </Typography>
+          {widgetsLoading ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 120 }}><CircularProgress size={20} sx={{ color: '#1565c0' }} /></Box>
+          ) : widgetsError ? (
+            <Typography sx={{ fontSize: '11px', color: '#c62828', py: 2 }}>{widgetsError}</Typography>
+          ) : widgets?.jobRunAgents && widgets.jobRunAgents.length > 0 ? (
             <Box>
-              {widgets.jobRunAgents.slice(0, 5).map((agent) => {
+              {widgets.jobRunAgents.slice(0, 7).map((agent) => {
                 const maxRuns = Math.max(...(widgets.jobRunAgents?.map((a) => a.runCount) ?? []), 1)
                 const barWidth = (agent.runCount / maxRuns) * 100
                 return (
                   <Box key={agent.agent} sx={{ mb: 0.75 }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.3 }}>
-                      <Typography sx={{ fontSize: '9px', color: '#3d4b5a', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      <Typography sx={{ fontSize: '9px', color: '#3d4b5a', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '70%' }}>
                         {agent.agent}
                       </Typography>
                       <Typography sx={{ fontSize: '9px', color: '#607080', fontWeight: 700 }}>{agent.runCount}</Typography>
@@ -292,15 +306,21 @@ export const ESPExecutiveOverview: React.FC<ESPExecutiveOverviewProps> = ({
                 )
               })}
             </Box>
-          </Paper>
-        )}
+          ) : (
+            <Typography sx={{ fontSize: '11px', color: '#94a3b8', py: 2 }}>No agent data</Typography>
+          )}
+        </Paper>
 
-        {/* Job Type Distribution */}
-        {jobTypeDonutData.length > 0 && (
-          <Paper elevation={0} sx={{ borderRadius: 2.5, border: '1px solid #e8ecf1', p: 1.5, boxShadow: '0 10px 24px rgba(15, 23, 42, 0.05)' }}>
-            <Typography sx={{ fontSize: '12px', fontWeight: 800, color: '#102a43', textTransform: 'uppercase', letterSpacing: '0.45px', mb: 1 }}>
-              Job Type Distribution
-            </Typography>
+        {/* Job Type Distribution Donut */}
+        <Paper elevation={0} sx={{ borderRadius: 2.5, border: '1px solid #e8ecf1', p: 1.5, boxShadow: '0 10px 24px rgba(15, 23, 42, 0.05)' }}>
+          <Typography sx={{ fontSize: '12px', fontWeight: 800, color: '#102a43', textTransform: 'uppercase', letterSpacing: '0.45px', mb: 1 }}>
+            Job Type Distribution
+          </Typography>
+          {widgetsLoading ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 180 }}><CircularProgress size={20} sx={{ color: '#1565c0' }} /></Box>
+          ) : widgetsError ? (
+            <Typography sx={{ fontSize: '11px', color: '#c62828', py: 2 }}>{widgetsError}</Typography>
+          ) : jobTypeDonutData.length > 0 ? (
             <DonutChart
               data={jobTypeDonutData}
               size={180}
@@ -310,8 +330,10 @@ export const ESPExecutiveOverview: React.FC<ESPExecutiveOverviewProps> = ({
               centerLabel={jobTypeDonutData.reduce((sum, row) => sum + row.value, 0)}
               valueFormatter={(value) => value.toLocaleString('en-US')}
             />
-          </Paper>
-        )}
+          ) : (
+            <Typography sx={{ fontSize: '11px', color: '#94a3b8', py: 2 }}>No distribution data</Typography>
+          )}
+        </Paper>
       </Box>
     )}
     </Box>

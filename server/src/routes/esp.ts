@@ -98,158 +98,154 @@ async function getPlatformRow(platformId: string): Promise<{ platform_id: string
 // SLA routes still filter by the platform name carried in job_sla_missed.
 const pltKeysSubquery = `(SELECT DISTINCT pltf_name FROM edoops.esp_job_config WHERE pltf_name = $1)`;
 
+// Shared helper — resolves platform name and parses interval from the request query params.
+// Sends 404 and returns null when an unknown platformId is given.
+async function buildOverviewQueryOptions(
+  req: Request,
+  res: Response,
+): Promise<{ platformName: string | null; applName: string | null; intervalDays: EspOverviewIntervalDays } | null> {
+  const platformId = typeof req.query.platformId === 'string' ? decodeURIComponent(req.query.platformId) : '';
+  const applName   = typeof req.query.applName   === 'string' ? req.query.applName.trim() : '';
+  const intervalDays = parseOverviewInterval(req.query);
+
+  let platformName: string | null = null;
+  if (platformId) {
+    const plt = await getPlatformRow(platformId);
+    if (!plt) { res.status(404).json({ error: 'Unknown platform' }); return null; }
+    platformName = plt.platform_name;
+  }
+
+  return { platformName, applName: applName || null, intervalDays };
+}
+
+// GET /api/esp/overview-kpis — 5 KPI cards (Total Jobs, Idle Jobs, Failed Jobs, SLA Breaches, Active Agents).
+// Each card carries the current scalar value plus a daily sparkline trend array.
 router.get('/overview-kpis', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
-    const platformId = typeof req.query.platformId === 'string' ? decodeURIComponent(req.query.platformId) : '';
-    const applName = typeof req.query.applName === 'string' ? req.query.applName.trim() : '';
-    const intervalDays = parseOverviewInterval(req.query);
-
-    let platformName: string | null = null;
-    if (platformId) {
-      const plt = await getPlatformRow(platformId);
-      if (!plt) return res.status(404).json({ error: 'Unknown platform' });
-      platformName = plt.platform_name;
-    }
-
-    const queryOptions = {
-      platformName,
-      applName: applName || null,
-      intervalDays,
-    };
+    const opts = await buildOverviewQueryOptions(req, res);
+    if (!opts) return;
 
     const [
-      totalJobs,
-      totalJobsTrend,
-      idleJobs,
-      idleJobsTrend,
-      failedJobs,
-      failedJobsTrend,
-      slaBreaches,
-      slaBreachesTrend,
-      activeAgents,
-      activeAgentsTrend,
-      jobRunRunsTrend,
-      jobRunFailsTrend,
-      jobRunAvgTrend,
-      jobRunAgents,
-      jobTypeDistribution,
+      totalJobs,      totalJobsTrend,
+      idleJobs,       idleJobsTrend,
+      failedJobs,     failedJobsTrend,
+      slaBreaches,    slaBreachesTrend,
+      activeAgents,   activeAgentsTrend,
     ] = await Promise.all([
-      pool.query(buildEspTotalJobsOverviewQuery(queryOptions)),
-      pool.query(buildEspTotalJobsTrendOverviewQuery(queryOptions)),
-      pool.query(buildEspIdleJobsOverviewQuery(queryOptions)),
-      pool.query(buildEspIdleJobsTrendOverviewQuery(queryOptions)),
-      pool.query(buildEspFailedJobsOverviewQuery(queryOptions)),
-      pool.query(buildEspFailedJobsTrendOverviewQuery(queryOptions)),
-      pool.query(buildEspSlaBreachesOverviewQuery(queryOptions)),
-      pool.query(buildEspSlaBreachesTrendOverviewQuery(queryOptions)),
-      pool.query(buildEspActiveAgentsOverviewQuery(queryOptions)),
-      pool.query(buildEspActiveAgentsTrendOverviewQuery(queryOptions)),
-      pool.query(buildEspJobRunRunsTrendOverviewQuery(queryOptions)),
-      pool.query(buildEspJobRunFailsTrendOverviewQuery(queryOptions)),
-      pool.query(buildEspJobRunAvgTrendOverviewQuery(queryOptions)),
-      pool.query(buildEspJobRunAgentsOverviewQuery(queryOptions)),
-      pool.query(buildEspJobTypeDistributionOverviewQuery(queryOptions)),
+      pool.query(buildEspTotalJobsOverviewQuery(opts)),
+      pool.query(buildEspTotalJobsTrendOverviewQuery(opts)),
+      pool.query(buildEspIdleJobsOverviewQuery(opts)),
+      pool.query(buildEspIdleJobsTrendOverviewQuery(opts)),
+      pool.query(buildEspFailedJobsOverviewQuery(opts)),
+      pool.query(buildEspFailedJobsTrendOverviewQuery(opts)),
+      pool.query(buildEspSlaBreachesOverviewQuery(opts)),
+      pool.query(buildEspSlaBreachesTrendOverviewQuery(opts)),
+      pool.query(buildEspActiveAgentsOverviewQuery(opts)),
+      pool.query(buildEspActiveAgentsTrendOverviewQuery(opts)),
     ]);
 
-    const mergedJobRunTrend = new Map<string, { day: string; runs: number; fails: number; avgRun: number }>();
-
-    for (const row of jobRunRunsTrend.rows) {
-      const day = String(row.trend_date).split('T')[0];
-      const current = mergedJobRunTrend.get(day) ?? { day, runs: 0, fails: 0, avgRun: 0 };
-      current.runs = parseInt(row.total_runs ?? '0', 10);
-      mergedJobRunTrend.set(day, current);
-    }
-
-    for (const row of jobRunFailsTrend.rows) {
-      const day = String(row.trend_date).split('T')[0];
-      const current = mergedJobRunTrend.get(day) ?? { day, runs: 0, fails: 0, avgRun: 0 };
-      current.fails = parseInt(row.total_fails ?? '0', 10);
-      mergedJobRunTrend.set(day, current);
-    }
-
-    for (const row of jobRunAvgTrend.rows) {
-      const day = String(row.trend_date).split('T')[0];
-      const current = mergedJobRunTrend.get(day) ?? { day, runs: 0, fails: 0, avgRun: 0 };
-      current.avgRun = parseFloat(row.avg_exec_mins ?? '0');
-      mergedJobRunTrend.set(day, current);
-    }
-
     const mapTrend = (rows: any[], valueKey: string) => rows
-      .filter((row) => row.trend_date != null)
-      .map((row) => ({
-        day: String(row.trend_date).split('T')[0],
-        value: parseInt(row[valueKey] ?? '0', 10),
-      }));
+      .filter((r) => r.trend_date != null)
+      .map((r) => ({ day: String(r.trend_date).split('T')[0], value: parseInt(r[valueKey] ?? '0', 10) }));
 
     res.json({
-      platform: platformName,
-      applName: applName || null,
-      interval: intervalDays === null ? 'all' : intervalDays,
+      platform: opts.platformName,
+      applName: opts.applName,
+      interval: opts.intervalDays === null ? 'all' : opts.intervalDays,
       cards: [
-        {
-          key: 'totalJobs',
-          title: 'Total Jobs',
-          description: '',
-          value: parseInt(totalJobs.rows[0]?.total_jobs ?? '0', 10),
-          accent: '#2563eb',
-          background: '#f7fbff',
-          trend: mapTrend(totalJobsTrend.rows, 'total_jobs'),
-        },
-        {
-          key: 'idleJobs',
-          title: 'Idle Jobs',
-          description: '',
-          value: parseInt(idleJobs.rows[0]?.idle_jobs ?? '0', 10),
-          accent: '#d97706',
-          background: '#fff8f1',
-          trend: mapTrend(idleJobsTrend.rows, 'idle_jobs'),
-        },
-        {
-          key: 'failedJobs',
-          title: 'Failed Jobs',
-          description: '',
-          value: parseInt(failedJobs.rows[0]?.failed_jobs ?? '0', 10),
-          accent: '#dc2626',
-          background: '#fff7f7',
-          trend: mapTrend(failedJobsTrend.rows, 'failed_jobs'),
-        },
+        { key: 'totalJobs',  title: 'Total Jobs',  description: '', value: parseInt(totalJobs.rows[0]?.total_jobs   ?? '0', 10), accent: '#2563eb', background: '#f7fbff', trend: mapTrend(totalJobsTrend.rows,   'total_jobs')  },
+        { key: 'idleJobs',   title: 'Idle Jobs',   description: '', value: parseInt(idleJobs.rows[0]?.idle_jobs    ?? '0', 10), accent: '#d97706', background: '#fff8f1', trend: mapTrend(idleJobsTrend.rows,    'idle_jobs')   },
+        { key: 'failedJobs', title: 'Failed Jobs', description: '', value: parseInt(failedJobs.rows[0]?.failed_jobs ?? '0', 10), accent: '#dc2626', background: '#fff7f7', trend: mapTrend(failedJobsTrend.rows,  'failed_jobs') },
       ],
       kpis: [
-        {
-          key: 'slaBreaches',
-          title: 'SLA Breaches',
-          description: '',
-          value: parseInt(slaBreaches.rows[0]?.sla_breaches ?? '0', 10),
-          accent: '#d97706',
-          background: '#fffbf0',
-          trend: mapTrend(slaBreachesTrend.rows, 'sla_breaches'),
-        },
-        {
-          key: 'activeAgents',
-          title: 'Active Agents',
-          description: '',
-          value: parseInt(activeAgents.rows[0]?.active_agents ?? '0', 10),
-          accent: '#059669',
-          background: '#f0fdf4',
-          trend: mapTrend(activeAgentsTrend.rows, 'active_agents'),
-        },
+        { key: 'slaBreaches',  title: 'SLA Breaches',  description: '', value: parseInt(slaBreaches.rows[0]?.sla_breaches   ?? '0', 10), accent: '#d97706', background: '#fffbf0', trend: mapTrend(slaBreachesTrend.rows,   'sla_breaches')  },
+        { key: 'activeAgents', title: 'Active Agents', description: '', value: parseInt(activeAgents.rows[0]?.active_agents ?? '0', 10), accent: '#059669', background: '#f0fdf4', trend: mapTrend(activeAgentsTrend.rows, 'active_agents') },
       ],
-      widgets: {
-        jobRunTrend: Array.from(mergedJobRunTrend.values()).sort((a, b) => a.day.localeCompare(b.day)),
-        jobRunAgents: jobRunAgents.rows.map((r: any) => ({
-          agent: r.agent ?? 'Unknown',
-          runCount: parseInt(r.run_count ?? '0', 10),
-        })),
-        jobTypeDistribution: jobTypeDistribution.rows.map((r: any) => ({
-          jobType: r.job_type ?? 'Unknown',
-          jobCount: parseInt(r.job_count ?? '0', 10),
-          pct: parseFloat(r.pct ?? '0'),
-        })),
-      },
     });
   } catch (err: any) {
     console.error('ESP overview-kpis error:', err.message);
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
+// GET /api/esp/job-run-trend — Daily Runs, Fails and Avg execution time (minutes) merged by date.
+// Drives the 3-line Job Run Trend chart.
+router.get('/job-run-trend', async (req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const opts = await buildOverviewQueryOptions(req, res);
+    if (!opts) return;
+
+    const [runsTrend, failsTrend, avgTrend] = await Promise.all([
+      pool.query(buildEspJobRunRunsTrendOverviewQuery(opts)),
+      pool.query(buildEspJobRunFailsTrendOverviewQuery(opts)),
+      pool.query(buildEspJobRunAvgTrendOverviewQuery(opts)),
+    ]);
+
+    const merged = new Map<string, { day: string; runs: number; fails: number; avgRun: number }>();
+
+    for (const r of runsTrend.rows) {
+      const day = String(r.trend_date).split('T')[0];
+      const cur = merged.get(day) ?? { day, runs: 0, fails: 0, avgRun: 0 };
+      cur.runs = parseInt(r.total_runs ?? '0', 10);
+      merged.set(day, cur);
+    }
+    for (const r of failsTrend.rows) {
+      const day = String(r.trend_date).split('T')[0];
+      const cur = merged.get(day) ?? { day, runs: 0, fails: 0, avgRun: 0 };
+      cur.fails = parseInt(r.total_fails ?? '0', 10);
+      merged.set(day, cur);
+    }
+    for (const r of avgTrend.rows) {
+      const day = String(r.trend_date).split('T')[0];
+      const cur = merged.get(day) ?? { day, runs: 0, fails: 0, avgRun: 0 };
+      cur.avgRun = parseFloat(r.avg_exec_mins ?? '0');
+      merged.set(day, cur);
+    }
+
+    res.json(Array.from(merged.values()).sort((a, b) => a.day.localeCompare(b.day)));
+  } catch (err: any) {
+    console.error('ESP job-run-trend error:', err.message);
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
+// GET /api/esp/job-run-agents — Per-agent run count ordered by volume descending.
+// Drives the horizontal bar chart.
+router.get('/job-run-agents', async (req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const opts = await buildOverviewQueryOptions(req, res);
+    if (!opts) return;
+
+    const result = await pool.query(buildEspJobRunAgentsOverviewQuery(opts));
+    res.json(result.rows.map((r: any) => ({
+      agent: r.agent ?? 'Unknown',
+      runCount: parseInt(r.run_count ?? '0', 10),
+    })));
+  } catch (err: any) {
+    console.error('ESP job-run-agents error:', err.message);
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
+// GET /api/esp/job-type-distribution — Job count and percentage breakdown by job_type.
+// Drives the donut chart.
+router.get('/job-type-distribution', async (req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const opts = await buildOverviewQueryOptions(req, res);
+    if (!opts) return;
+
+    const result = await pool.query(buildEspJobTypeDistributionOverviewQuery(opts));
+    res.json(result.rows.map((r: any) => ({
+      jobType: r.job_type ?? 'Unknown',
+      jobCount: parseInt(r.job_count ?? '0', 10),
+      pct: parseFloat(r.pct ?? '0'),
+    })));
+  } catch (err: any) {
+    console.error('ESP job-type-distribution error:', err.message);
     res.status(500).json({ error: 'Query failed', details: err.message });
   }
 });

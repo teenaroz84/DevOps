@@ -94,12 +94,36 @@ export const espService = {
     return apiClient.get(`/api/esp/sla-missed-dashboard?${params}`)
   },
 
-  /** Returns the executive overview KPI cards and sparklines for ESP */
+  /** Returns the 5 executive KPI cards (value + sparkline trend) for ESP */
   getOverviewKpis: (platformId = '', applName = '', interval: number | 'all' = 30) => {
     const params = new URLSearchParams({ interval: String(interval) })
     if (platformId) params.set('platformId', platformId)
     if (applName) params.set('applName', applName)
     return apiClient.get(`/api/esp/overview-kpis?${params}`)
+  },
+
+  /** Returns daily Runs / Fails / Avg-run merged by date for the Job Run Trend line chart */
+  getOverviewJobRunTrend: (platformId = '', applName = '', interval: number | 'all' = 30) => {
+    const params = new URLSearchParams({ interval: String(interval) })
+    if (platformId) params.set('platformId', platformId)
+    if (applName) params.set('applName', applName)
+    return apiClient.get(`/api/esp/job-run-trend?${params}`)
+  },
+
+  /** Returns per-agent run counts for the Job Run Agents bar chart */
+  getOverviewJobRunAgents: (platformId = '', applName = '', interval: number | 'all' = 30) => {
+    const params = new URLSearchParams({ interval: String(interval) })
+    if (platformId) params.set('platformId', platformId)
+    if (applName) params.set('applName', applName)
+    return apiClient.get(`/api/esp/job-run-agents?${params}`)
+  },
+
+  /** Returns job-type breakdown (count + pct) for the Job Type Distribution donut chart */
+  getOverviewJobTypeDistribution: (platformId = '', applName = '', interval: number | 'all' = 30) => {
+    const params = new URLSearchParams({ interval: String(interval) })
+    if (platformId) params.set('platformId', platformId)
+    if (applName) params.set('applName', applName)
+    return apiClient.get(`/api/esp/job-type-distribution?${params}`)
   },
 
   /** Returns drilldown rows for one SLA-missed ESP job */
