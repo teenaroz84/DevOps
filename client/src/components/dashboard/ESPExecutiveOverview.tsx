@@ -113,6 +113,20 @@ interface ESPExecutiveOverviewProps {
   widgetsError?: string | null
   slaLoading?: boolean
   slaError?: string | null
+  slaSectionLoading?: {
+    jobExecution?: boolean
+    slaStatus?: boolean
+    jobDependencies?: boolean
+    executionForecast?: boolean
+    jobConfigHealth?: boolean
+  }
+  slaSectionErrors?: {
+    jobExecution?: string | null
+    slaStatus?: string | null
+    jobDependencies?: string | null
+    executionForecast?: string | null
+    jobConfigHealth?: string | null
+  }
   interval: EspOverviewIntervalOption
   onIntervalChange: (interval: EspOverviewIntervalOption) => void
   scopeLabel: string
@@ -190,10 +204,28 @@ export const ESPExecutiveOverview: React.FC<ESPExecutiveOverviewProps> = ({
   widgetsError,
   slaLoading = false,
   slaError,
+  slaSectionLoading,
+  slaSectionErrors,
   interval,
   onIntervalChange,
   scopeLabel,
 }) => {
+  const sectionLoading = {
+    jobExecution: slaSectionLoading?.jobExecution ?? slaLoading,
+    slaStatus: slaSectionLoading?.slaStatus ?? slaLoading,
+    jobDependencies: slaSectionLoading?.jobDependencies ?? slaLoading,
+    executionForecast: slaSectionLoading?.executionForecast ?? slaLoading,
+    jobConfigHealth: slaSectionLoading?.jobConfigHealth ?? slaLoading,
+  }
+
+  const sectionError = {
+    jobExecution: slaSectionErrors?.jobExecution ?? slaError ?? null,
+    slaStatus: slaSectionErrors?.slaStatus ?? slaError ?? null,
+    jobDependencies: slaSectionErrors?.jobDependencies ?? slaError ?? null,
+    executionForecast: slaSectionErrors?.executionForecast ?? slaError ?? null,
+    jobConfigHealth: slaSectionErrors?.jobConfigHealth ?? slaError ?? null,
+  }
+
   const renderedCards = useMemo(() => cards, [cards])
   const renderedKpis = useMemo(() => kpis, [kpis])
   const jobRunTrendChartData = useMemo(
@@ -616,10 +648,10 @@ export const ESPExecutiveOverview: React.FC<ESPExecutiveOverviewProps> = ({
               })}
             </Box>
           </Box>
-          {slaLoading ? (
+          {sectionLoading.jobExecution ? (
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 260 }}><CircularProgress size={20} sx={{ color: '#1565c0' }} /></Box>
-          ) : slaError ? (
-            <Typography sx={{ fontSize: '11px', color: '#c62828', p: 1.5 }}>{slaError}</Typography>
+          ) : sectionError.jobExecution ? (
+            <Typography sx={{ fontSize: '11px', color: '#c62828', p: 1.5 }}>{sectionError.jobExecution}</Typography>
           ) : (
             <Box sx={{ p: 1.25 }}>
               <DataTable
@@ -645,10 +677,10 @@ export const ESPExecutiveOverview: React.FC<ESPExecutiveOverviewProps> = ({
               SLA Status
             </Typography>
           </Box>
-          {slaLoading ? (
+          {sectionLoading.slaStatus ? (
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 260 }}><CircularProgress size={20} sx={{ color: '#1565c0' }} /></Box>
-          ) : slaError ? (
-            <Typography sx={{ fontSize: '11px', color: '#c62828', p: 1.5 }}>{slaError}</Typography>
+          ) : sectionError.slaStatus ? (
+            <Typography sx={{ fontSize: '11px', color: '#c62828', p: 1.5 }}>{sectionError.slaStatus}</Typography>
           ) : (
             <Box sx={{ p: 1.25 }}>
               <Typography sx={{ fontSize: '10px', fontWeight: 700, color: '#486581', textTransform: 'uppercase', mb: 0.6 }}>
@@ -698,10 +730,10 @@ export const ESPExecutiveOverview: React.FC<ESPExecutiveOverviewProps> = ({
               Job Dependencies
             </Typography>
           </Box>
-          {slaLoading ? (
+          {sectionLoading.jobDependencies ? (
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 170 }}><CircularProgress size={20} sx={{ color: '#1565c0' }} /></Box>
-          ) : slaError ? (
-            <Typography sx={{ fontSize: '11px', color: '#c62828', p: 1.5 }}>{slaError}</Typography>
+          ) : sectionError.jobDependencies ? (
+            <Typography sx={{ fontSize: '11px', color: '#c62828', p: 1.5 }}>{sectionError.jobDependencies}</Typography>
           ) : (
             <Box sx={{ p: 1.25 }}>
               <DataTable
@@ -727,10 +759,10 @@ export const ESPExecutiveOverview: React.FC<ESPExecutiveOverviewProps> = ({
               Execution Forecast
             </Typography>
           </Box>
-          {slaLoading ? (
+          {sectionLoading.executionForecast ? (
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 220 }}><CircularProgress size={20} sx={{ color: '#1565c0' }} /></Box>
-          ) : slaError ? (
-            <Typography sx={{ fontSize: '11px', color: '#c62828', p: 1.5 }}>{slaError}</Typography>
+          ) : sectionError.executionForecast ? (
+            <Typography sx={{ fontSize: '11px', color: '#c62828', p: 1.5 }}>{sectionError.executionForecast}</Typography>
           ) : (
             <Box sx={{ p: 1.25 }}>
               <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0.75, mb: 1.2 }}>
@@ -785,10 +817,10 @@ export const ESPExecutiveOverview: React.FC<ESPExecutiveOverviewProps> = ({
               Job Config Health
             </Typography>
           </Box>
-          {slaLoading ? (
+          {sectionLoading.jobConfigHealth ? (
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 220 }}><CircularProgress size={20} sx={{ color: '#1565c0' }} /></Box>
-          ) : slaError ? (
-            <Typography sx={{ fontSize: '11px', color: '#c62828', p: 1.5 }}>{slaError}</Typography>
+          ) : sectionError.jobConfigHealth ? (
+            <Typography sx={{ fontSize: '11px', color: '#c62828', p: 1.5 }}>{sectionError.jobConfigHealth}</Typography>
           ) : (
             <Box sx={{ p: 1.25 }}>
               <Typography sx={{ fontSize: '10px', fontWeight: 700, color: '#486581', textTransform: 'uppercase', mb: 0.5 }}>

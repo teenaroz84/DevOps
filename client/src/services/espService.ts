@@ -142,6 +142,46 @@ export const espService = {
     return apiClient.get(`/api/esp/overview-sla-grouped?${params}`)
   },
 
+  /** Returns only Job Execution Status widget data for progressive loading */
+  getOverviewJobExecutionStatus: (platformId = '', applName = '', interval: number | 'all' = 30) => {
+    const params = new URLSearchParams({ interval: String(interval) })
+    if (platformId) params.set('platformId', platformId)
+    if (applName) params.set('applName', applName)
+    return apiClient.get(`/api/esp/overview-job-execution-status?${params}`)
+  },
+
+  /** Returns only SLA Status widget data for progressive loading */
+  getOverviewSlaStatus: (platformId = '', applName = '', interval: number | 'all' = 30) => {
+    const params = new URLSearchParams({ interval: String(interval) })
+    if (platformId) params.set('platformId', platformId)
+    if (applName) params.set('applName', applName)
+    return apiClient.get(`/api/esp/overview-sla-status?${params}`)
+  },
+
+  /** Returns only Job Dependencies widget data for progressive loading */
+  getOverviewJobDependencies: (platformId = '', applName = '', interval: number | 'all' = 30) => {
+    const params = new URLSearchParams({ interval: String(interval) })
+    if (platformId) params.set('platformId', platformId)
+    if (applName) params.set('applName', applName)
+    return apiClient.get(`/api/esp/overview-job-dependencies?${params}`)
+  },
+
+  /** Returns only Execution Forecast widget data for progressive loading */
+  getOverviewExecutionForecast: (platformId = '', applName = '', interval: number | 'all' = 30) => {
+    const params = new URLSearchParams({ interval: String(interval) })
+    if (platformId) params.set('platformId', platformId)
+    if (applName) params.set('applName', applName)
+    return apiClient.get(`/api/esp/overview-execution-forecast?${params}`)
+  },
+
+  /** Returns only Job Config Health widget data for progressive loading */
+  getOverviewJobConfigHealth: (platformId = '', applName = '', interval: number | 'all' = 30) => {
+    const params = new URLSearchParams({ interval: String(interval) })
+    if (platformId) params.set('platformId', platformId)
+    if (applName) params.set('applName', applName)
+    return apiClient.get(`/api/esp/overview-job-config-health?${params}`)
+  },
+
   /** Returns { applications: [{appl_name}] } — used to populate the dropdown */
   getApplications: () => apiClient.get('/api/esp/applications'),
 

@@ -119,6 +119,27 @@ interface EspGroupedWidgetsResponse {
   }>
 }
 
+type EspGroupedSectionKey = 'jobExecution' | 'slaStatus' | 'jobDependencies' | 'executionForecast' | 'jobConfigHealth'
+
+type EspGroupedSectionLoading = Record<EspGroupedSectionKey, boolean>
+type EspGroupedSectionErrors = Record<EspGroupedSectionKey, string | null>
+
+const INITIAL_GROUPED_SECTION_LOADING: EspGroupedSectionLoading = {
+  jobExecution: false,
+  slaStatus: false,
+  jobDependencies: false,
+  executionForecast: false,
+  jobConfigHealth: false,
+}
+
+const INITIAL_GROUPED_SECTION_ERRORS: EspGroupedSectionErrors = {
+  jobExecution: null,
+  slaStatus: null,
+  jobDependencies: null,
+  executionForecast: null,
+  jobConfigHealth: null,
+}
+
 const TREND_RUN_COLORS  = ['#1565c0', '#2e7d32', '#6a1b9a', '#00838f']
 const TREND_FAIL_COLORS = ['#e53935', '#f57c00', '#d81b60', '#ff6f00']
 
@@ -202,8 +223,16 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
   const [widgetsLoading, setWidgetsLoading] = React.useState(false)
   const [widgetsError, setWidgetsError] = React.useState<string | null>(null)
   const [groupedWidgets, setGroupedWidgets] = React.useState<EspOverviewGroupedWidgets>({})
-  const [slaLoading, setSlaLoading] = React.useState(false)
-  const [slaError, setSlaError] = React.useState<string | null>(null)
+  const [slaSectionLoading, setSlaSectionLoading] = React.useState<EspGroupedSectionLoading>(INITIAL_GROUPED_SECTION_LOADING)
+  const [slaSectionErrors, setSlaSectionErrors] = React.useState<EspGroupedSectionErrors>(INITIAL_GROUPED_SECTION_ERRORS)
+  const slaLoading = React.useMemo(
+    () => Object.values(slaSectionLoading).some(Boolean),
+    [slaSectionLoading],
+  )
+  const slaError = React.useMemo(
+    () => Object.values(slaSectionErrors).find((value) => Boolean(value)) ?? null,
+    [slaSectionErrors],
+  )
 
   // Reset job filter + drill-down when application or platform changes
   React.useEffect(() => { setSelectedJobs([]); setDrillJob(null); setWidgetFilter(null); setStatusFilter('All') }, [selected, selectedPlatform])
@@ -369,10 +398,10 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
     setOverviewScopeLabel(selected ? `${selected}${selectedPlatform ? ` · ${selectedPlatform}` : ''}` : selectedPlatform ?? 'All platforms')
     setOverviewError(null)
     setWidgetsError(null)
-    setSlaError(null)
+    setSlaSectionErrors(INITIAL_GROUPED_SECTION_ERRORS)
     setOverviewLoading(false)
     setWidgetsLoading(false)
-    setSlaLoading(false)
+    setSlaSectionLoading(INITIAL_GROUPED_SECTION_LOADING)
   }, [buildMockOverviewData, dashboardView, selected, selectedPlatform, useMock])
 
   // ── KPI cards effect (overview-kpis) ──────────────────────
@@ -409,24 +438,73 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
     return () => { cancelled = true }
   }, [dashboardView, overviewInterval, platformLoading, selected, selectedPlatform, useMock])
 
-  // ── SLA second-part widgets effect (sla-missed-dashboard) ──
+  // ── Grouped widgets progressive effect (independent section fetches) ──
   React.useEffect(() => {
     if (dashboardView !== 'operations') return
     if (useMock) return
     if (platformLoading) return
 
     let cancelled = false
-    setSlaLoading(true)
-    setSlaError(null)
 
-    espService.getOverviewSlaGrouped(selectedPlatform ?? '', selected, overviewInterval)
+    setGroupedWidgets({})
+    setSlaSectionLoading({
+      jobExecution: true,
+      slaStatus: true,
+      jobDependencies: true,
+      executionForecast: true,
+      jobConfigHealth: true,
+    })
+    setSlaSectionErrors(INITIAL_GROUPED_SECTION_ERRORS)
+
+    const finishSection = (section: EspGroupedSectionKey) => {
+      if (cancelled) return
+      setSlaSectionLoading((prev) => ({ ...prev, [section]: false }))
+    }
+
+    const failSection = (section: EspGroupedSectionKey, message: string) => {
+      if (cancelled) return
+      setSlaSectionErrors((prev) => ({ ...prev, [section]: message }))
+    }
+
+    espService.getOverviewJobExecutionStatus(selectedPlatform ?? '', selected, overviewInterval)
       .then((response: EspGroupedWidgetsResponse) => {
         if (cancelled) return
-        setGroupedWidgets({
+        setGroupedWidgets((prev) => ({
+          ...prev,
           job_execution_status: Array.isArray(response?.job_execution_status) ? response.job_execution_status : [],
+        }))
+      })
+      .catch((error: Error) => failSection('jobExecution', error.message || 'Failed to load Job Execution Status'))
+      .finally(() => finishSection('jobExecution'))
+
+    espService.getOverviewSlaStatus(selectedPlatform ?? '', selected, overviewInterval)
+      .then((response: EspGroupedWidgetsResponse) => {
+        if (cancelled) return
+        setGroupedWidgets((prev) => ({
+          ...prev,
           sla_status_bars: Array.isArray(response?.sla_status_bars) ? response.sla_status_bars : [],
           sla_recent_events: Array.isArray(response?.sla_recent_events) ? response.sla_recent_events : [],
+        }))
+      })
+      .catch((error: Error) => failSection('slaStatus', error.message || 'Failed to load SLA Status'))
+      .finally(() => finishSection('slaStatus'))
+
+    espService.getOverviewJobDependencies(selectedPlatform ?? '', selected, overviewInterval)
+      .then((response: EspGroupedWidgetsResponse) => {
+        if (cancelled) return
+        setGroupedWidgets((prev) => ({
+          ...prev,
           job_dependencies: Array.isArray(response?.job_dependencies) ? response.job_dependencies : [],
+        }))
+      })
+      .catch((error: Error) => failSection('jobDependencies', error.message || 'Failed to load Job Dependencies'))
+      .finally(() => finishSection('jobDependencies'))
+
+    espService.getOverviewExecutionForecast(selectedPlatform ?? '', selected, overviewInterval)
+      .then((response: EspGroupedWidgetsResponse) => {
+        if (cancelled) return
+        setGroupedWidgets((prev) => ({
+          ...prev,
           execution_forecast_metrics: response?.execution_forecast_metrics ?? {
             avg_exec_mins: 0,
             avg_cpu_mins: 0,
@@ -434,19 +512,23 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
             total_print_lines: 0,
           },
           forecast_exec_by_applib: Array.isArray(response?.forecast_exec_by_applib) ? response.forecast_exec_by_applib : [],
+        }))
+      })
+      .catch((error: Error) => failSection('executionForecast', error.message || 'Failed to load Execution Forecast'))
+      .finally(() => finishSection('executionForecast'))
+
+    espService.getOverviewJobConfigHealth(selectedPlatform ?? '', selected, overviewInterval)
+      .then((response: EspGroupedWidgetsResponse) => {
+        if (cancelled) return
+        setGroupedWidgets((prev) => ({
+          ...prev,
           critical_jobs_pills: Array.isArray(response?.critical_jobs_pills) ? response.critical_jobs_pills : [],
           run_frequency_bars: Array.isArray(response?.run_frequency_bars) ? response.run_frequency_bars : [],
           sla_config_by_lob: Array.isArray(response?.sla_config_by_lob) ? response.sla_config_by_lob : [],
-        })
+        }))
       })
-      .catch((error: Error) => {
-        if (cancelled) return
-        setGroupedWidgets({})
-        setSlaError(error.message || 'Failed to load grouped overview widgets')
-      })
-      .finally(() => {
-        if (!cancelled) setSlaLoading(false)
-      })
+      .catch((error: Error) => failSection('jobConfigHealth', error.message || 'Failed to load Job Config Health'))
+      .finally(() => finishSection('jobConfigHealth'))
 
     return () => { cancelled = true }
   }, [dashboardView, overviewInterval, platformLoading, selected, selectedPlatform, useMock])
@@ -1379,6 +1461,8 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
           widgetsError={widgetsError}
           slaLoading={slaLoading}
           slaError={slaError}
+          slaSectionLoading={slaSectionLoading}
+          slaSectionErrors={slaSectionErrors}
           interval={overviewInterval}
           onIntervalChange={setOverviewInterval}
           scopeLabel={overviewScopeLabel}

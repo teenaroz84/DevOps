@@ -180,6 +180,19 @@ function mapGroupedSlaConfigByLobRow(row: any) {
   };
 }
 
+async function runOverviewSafe<T>(
+  label: string,
+  fn: () => Promise<T>,
+  fallback: T,
+): Promise<T> {
+  try {
+    return await fn();
+  } catch (error: any) {
+    console.warn(`[ESP] ${label} query skipped:`, error.message);
+    return fallback;
+  }
+}
+
 // Returns { platform_id, platform_name } or null if the platform value is unknown.
 async function getPlatformRow(platformId: string): Promise<{ platform_id: string; platform_name: string } | null> {
   const pool = getPgPool();
@@ -355,15 +368,6 @@ router.get('/overview-sla-grouped', async (req: Request, res: Response) => {
     const opts = await buildOverviewQueryOptions(req, res);
     if (!opts) return;
 
-    const safe = async <T>(fn: () => Promise<T>, fallback: T): Promise<T> => {
-      try {
-        return await fn();
-      } catch (error: any) {
-        console.warn('[ESP] overview-sla-grouped query skipped:', error.message);
-        return fallback;
-      }
-    };
-
     const [
       jobExecutionStatus,
       slaStatusBars,
@@ -375,23 +379,23 @@ router.get('/overview-sla-grouped', async (req: Request, res: Response) => {
       runFrequencyBars,
       slaConfigByLob,
     ] = await Promise.all([
-      safe(async () => {
+      runOverviewSafe('overview-sla-grouped/job_execution_status', async () => {
         const result = await pool.query(buildEspGroupedJobExecutionStatusQuery(opts));
         return result.rows.map(mapGroupedJobExecutionStatusRow);
       }, [] as any[]),
-      safe(async () => {
+      runOverviewSafe('overview-sla-grouped/sla_status_bars', async () => {
         const result = await pool.query(buildEspGroupedSlaStatusBarsQuery(opts));
         return result.rows.map(mapGroupedSlaStatusBarRow);
       }, [] as any[]),
-      safe(async () => {
+      runOverviewSafe('overview-sla-grouped/sla_recent_events', async () => {
         const result = await pool.query(buildEspGroupedSlaRecentEventsQuery(opts));
         return result.rows.map(mapGroupedSlaRecentEventRow);
       }, [] as any[]),
-      safe(async () => {
+      runOverviewSafe('overview-sla-grouped/job_dependencies', async () => {
         const result = await pool.query(buildEspGroupedJobDependenciesQuery(opts));
         return result.rows.map(mapGroupedJobDependencyRow);
       }, [] as any[]),
-      safe(async () => {
+      runOverviewSafe('overview-sla-grouped/execution_forecast_metrics', async () => {
         const result = await pool.query(buildEspGroupedExecutionForecastMetricsQuery(opts));
         return mapGroupedExecutionForecastMetricRow(result.rows[0] ?? {});
       }, {
@@ -400,19 +404,19 @@ router.get('/overview-sla-grouped', async (req: Request, res: Response) => {
         total_samples: 0,
         total_print_lines: 0,
       }),
-      safe(async () => {
+      runOverviewSafe('overview-sla-grouped/forecast_exec_by_applib', async () => {
         const result = await pool.query(buildEspGroupedForecastExecByApplibQuery(opts));
         return result.rows.map(mapGroupedForecastExecByApplibRow);
       }, [] as any[]),
-      safe(async () => {
+      runOverviewSafe('overview-sla-grouped/critical_jobs_pills', async () => {
         const result = await pool.query(buildEspGroupedCriticalJobsPillsQuery(opts));
         return result.rows.map(mapGroupedCriticalJobsPillRow);
       }, [] as any[]),
-      safe(async () => {
+      runOverviewSafe('overview-sla-grouped/run_frequency_bars', async () => {
         const result = await pool.query(buildEspGroupedRunFrequencyBarsQuery(opts));
         return result.rows.map(mapGroupedRunFrequencyRow);
       }, [] as any[]),
-      safe(async () => {
+      runOverviewSafe('overview-sla-grouped/sla_config_by_lob', async () => {
         const result = await pool.query(buildEspGroupedSlaConfigByLobQuery(opts));
         return result.rows.map(mapGroupedSlaConfigByLobRow);
       }, [] as any[]),
@@ -434,6 +438,157 @@ router.get('/overview-sla-grouped', async (req: Request, res: Response) => {
     });
   } catch (err: any) {
     console.error('ESP overview-sla-grouped error:', err.message);
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
+// GET /api/esp/overview-job-execution-status — data for Job Execution Status widget only.
+router.get('/overview-job-execution-status', async (req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const opts = await buildOverviewQueryOptions(req, res);
+    if (!opts) return;
+
+    const jobExecutionStatus = await runOverviewSafe('overview-job-execution-status', async () => {
+      const result = await pool.query(buildEspGroupedJobExecutionStatusQuery(opts));
+      return result.rows.map(mapGroupedJobExecutionStatusRow);
+    }, [] as any[]);
+
+    res.json({
+      platform: opts.platformName,
+      applName: opts.applName,
+      interval: opts.intervalDays === null ? 'all' : opts.intervalDays,
+      job_execution_status: jobExecutionStatus,
+    });
+  } catch (err: any) {
+    console.error('ESP overview-job-execution-status error:', err.message);
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
+// GET /api/esp/overview-sla-status — SLA bars + recent events widget data.
+router.get('/overview-sla-status', async (req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const opts = await buildOverviewQueryOptions(req, res);
+    if (!opts) return;
+
+    const [slaStatusBars, slaRecentEvents] = await Promise.all([
+      runOverviewSafe('overview-sla-status/sla_status_bars', async () => {
+        const result = await pool.query(buildEspGroupedSlaStatusBarsQuery(opts));
+        return result.rows.map(mapGroupedSlaStatusBarRow);
+      }, [] as any[]),
+      runOverviewSafe('overview-sla-status/sla_recent_events', async () => {
+        const result = await pool.query(buildEspGroupedSlaRecentEventsQuery(opts));
+        return result.rows.map(mapGroupedSlaRecentEventRow);
+      }, [] as any[]),
+    ]);
+
+    res.json({
+      platform: opts.platformName,
+      applName: opts.applName,
+      interval: opts.intervalDays === null ? 'all' : opts.intervalDays,
+      sla_status_bars: slaStatusBars,
+      sla_recent_events: slaRecentEvents,
+    });
+  } catch (err: any) {
+    console.error('ESP overview-sla-status error:', err.message);
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
+// GET /api/esp/overview-job-dependencies — Job Dependencies widget data.
+router.get('/overview-job-dependencies', async (req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const opts = await buildOverviewQueryOptions(req, res);
+    if (!opts) return;
+
+    const jobDependencies = await runOverviewSafe('overview-job-dependencies', async () => {
+      const result = await pool.query(buildEspGroupedJobDependenciesQuery(opts));
+      return result.rows.map(mapGroupedJobDependencyRow);
+    }, [] as any[]);
+
+    res.json({
+      platform: opts.platformName,
+      applName: opts.applName,
+      interval: opts.intervalDays === null ? 'all' : opts.intervalDays,
+      job_dependencies: jobDependencies,
+    });
+  } catch (err: any) {
+    console.error('ESP overview-job-dependencies error:', err.message);
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
+// GET /api/esp/overview-execution-forecast — Execution Forecast widget data.
+router.get('/overview-execution-forecast', async (req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const opts = await buildOverviewQueryOptions(req, res);
+    if (!opts) return;
+
+    const [executionForecastMetrics, forecastExecByApplib] = await Promise.all([
+      runOverviewSafe('overview-execution-forecast/execution_forecast_metrics', async () => {
+        const result = await pool.query(buildEspGroupedExecutionForecastMetricsQuery(opts));
+        return mapGroupedExecutionForecastMetricRow(result.rows[0] ?? {});
+      }, {
+        avg_exec_mins: 0,
+        avg_cpu_mins: 0,
+        total_samples: 0,
+        total_print_lines: 0,
+      }),
+      runOverviewSafe('overview-execution-forecast/forecast_exec_by_applib', async () => {
+        const result = await pool.query(buildEspGroupedForecastExecByApplibQuery(opts));
+        return result.rows.map(mapGroupedForecastExecByApplibRow);
+      }, [] as any[]),
+    ]);
+
+    res.json({
+      platform: opts.platformName,
+      applName: opts.applName,
+      interval: opts.intervalDays === null ? 'all' : opts.intervalDays,
+      execution_forecast_metrics: executionForecastMetrics,
+      forecast_exec_by_applib: forecastExecByApplib,
+    });
+  } catch (err: any) {
+    console.error('ESP overview-execution-forecast error:', err.message);
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
+// GET /api/esp/overview-job-config-health — Job Config Health widget data.
+router.get('/overview-job-config-health', async (req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const opts = await buildOverviewQueryOptions(req, res);
+    if (!opts) return;
+
+    const [criticalJobsPills, runFrequencyBars, slaConfigByLob] = await Promise.all([
+      runOverviewSafe('overview-job-config-health/critical_jobs_pills', async () => {
+        const result = await pool.query(buildEspGroupedCriticalJobsPillsQuery(opts));
+        return result.rows.map(mapGroupedCriticalJobsPillRow);
+      }, [] as any[]),
+      runOverviewSafe('overview-job-config-health/run_frequency_bars', async () => {
+        const result = await pool.query(buildEspGroupedRunFrequencyBarsQuery(opts));
+        return result.rows.map(mapGroupedRunFrequencyRow);
+      }, [] as any[]),
+      runOverviewSafe('overview-job-config-health/sla_config_by_lob', async () => {
+        const result = await pool.query(buildEspGroupedSlaConfigByLobQuery(opts));
+        return result.rows.map(mapGroupedSlaConfigByLobRow);
+      }, [] as any[]),
+    ]);
+
+    res.json({
+      platform: opts.platformName,
+      applName: opts.applName,
+      interval: opts.intervalDays === null ? 'all' : opts.intervalDays,
+      critical_jobs_pills: criticalJobsPills,
+      run_frequency_bars: runFrequencyBars,
+      sla_config_by_lob: slaConfigByLob,
+    });
+  } catch (err: any) {
+    console.error('ESP overview-job-config-health error:', err.message);
     res.status(500).json({ error: 'Query failed', details: err.message });
   }
 });
