@@ -68,6 +68,8 @@ interface DataTableProps<T = any> {
   compact?: boolean
   /** Background color for the header row (overrides default) */
   headerBg?: string
+  /** Optional text/icon color for header labels and sort icons */
+  headerTextColor?: string
   /** Tooltip shown on row hover */
   rowTooltip?: string
   /** Accent color for header left border strip */
@@ -102,6 +104,7 @@ export function DataTable<T = any>({
   rowKey,
   compact = false,
   headerBg,
+  headerTextColor,
   rowTooltip,
   accentColor = APP_COLORS.primary,
   tableMinWidth,
@@ -367,6 +370,11 @@ export function DataTable<T = any>({
               {safeColumns.map((col, colIdx) => {
                 const w = colWidths[col.key]
                 const isSorted = sortKey === col.key
+                const resolvedHeaderTextColor = headerTextColor ?? (isSorted ? accentColor : '#4a5568')
+                const resolvedUnsortedIconColor = headerTextColor ? `${headerTextColor}B3` : '#cfd8dc'
+                const resolvedHeaderHoverBg = headerBg
+                  ? `${accentColor}E6 !important`
+                  : `${accentColor}1F !important`
                 return (
                   <TableCell
                     key={col.key}
@@ -375,7 +383,7 @@ export function DataTable<T = any>({
                     sx={{
                       fontSize: '10px',
                       fontWeight: 700,
-                      color: isSorted ? accentColor : '#4a5568',
+                      color: resolvedHeaderTextColor,
                       py: cellPy,
                       px: 1.5,
                       textTransform: 'uppercase',
@@ -396,13 +404,13 @@ export function DataTable<T = any>({
                         borderLeft: `3px solid ${accentColor}`,
                         pl: '10px',
                       } : {}),
-                      '&:hover': col.disableSort ? {} : { backgroundColor: `${accentColor}10 !important` },
+                      '&:hover': col.disableSort ? {} : { backgroundColor: resolvedHeaderHoverBg },
                     }}
                   >
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4, overflow: 'hidden' }}>
                       <Typography sx={{
                         fontSize: '10px', fontWeight: 700,
-                        color: isSorted ? accentColor : '#4a5568',
+                        color: resolvedHeaderTextColor,
                         textTransform: 'uppercase', letterSpacing: '0.5px',
                         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                       }}>
@@ -412,9 +420,9 @@ export function DataTable<T = any>({
                         <Box sx={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
                           {isSorted
                             ? sortDir === 'asc'
-                              ? <ArrowUpwardIcon sx={{ fontSize: 10, color: accentColor }} />
-                              : <ArrowDownwardIcon sx={{ fontSize: 10, color: accentColor }} />
-                            : <UnfoldMoreIcon sx={{ fontSize: 10, color: '#cfd8dc' }} />
+                              ? <ArrowUpwardIcon sx={{ fontSize: 10, color: resolvedHeaderTextColor }} />
+                              : <ArrowDownwardIcon sx={{ fontSize: 10, color: resolvedHeaderTextColor }} />
+                            : <UnfoldMoreIcon sx={{ fontSize: 10, color: resolvedUnsortedIconColor }} />
                           }
                         </Box>
                       )}

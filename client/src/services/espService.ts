@@ -87,8 +87,8 @@ export const espService = {
   },
 
   /** Returns the ESP SLA missed jobs dashboard aggregates from PostgreSQL only */
-  getSlaMissedDashboard: (platformId = '', applName = '') => {
-    const params = new URLSearchParams()
+  getSlaMissedDashboard: (platformId = '', applName = '', interval: number | 'all' = 30) => {
+    const params = new URLSearchParams({ interval: String(interval) })
     if (platformId) params.set('platformId', platformId)
     if (applName) params.set('applName', applName)
     return apiClient.get(`/api/esp/sla-missed-dashboard?${params}`)
@@ -132,6 +132,14 @@ export const espService = {
     if (platformId) params.set('platformId', platformId)
     if (applName) params.set('applName', applName)
     return apiClient.get(`/api/esp/sla-missed-job-detail?${params}`)
+  },
+
+  /** Returns grouped widgets for Job Execution Status, SLA Status and Job Dependencies */
+  getOverviewSlaGrouped: (platformId = '', applName = '', interval: number | 'all' = 30) => {
+    const params = new URLSearchParams({ interval: String(interval) })
+    if (platformId) params.set('platformId', platformId)
+    if (applName) params.set('applName', applName)
+    return apiClient.get(`/api/esp/overview-sla-grouped?${params}`)
   },
 
   /** Returns { applications: [{appl_name}] } — used to populate the dropdown */

@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react'
 import { Box, Chip, CircularProgress, Paper, Typography } from '@mui/material'
-import { TrendLineChart, DonutChart, type DonutSlice } from '../widgets'
+import { TrendLineChart, DonutChart, DataTable, type DonutSlice, type ColumnDef } from '../widgets'
 
 export type EspOverviewIntervalOption = 30 | 60 | 90 | 'all'
 
@@ -32,6 +32,41 @@ export interface EspJobType {
   pct: number
 }
 
+export interface EspSlaWidgets {
+  job_execution_status?: Array<{
+    appl_name: string | null
+    jobname: string | null
+    last_run: string | null
+    avg_run_mins: number | null
+    status: string | null
+    job_type: string | null
+  }>
+  sla_status_bars?: Array<{
+    platform: string | null
+    total: number
+    met_count: number
+    pct_met: number
+  }>
+  sla_recent_events?: Array<{
+    job_name: string | null
+    applib: string | null
+    sla_time: string | null
+    end_time: string | null
+    time_diff: string | null
+    status: string | null
+  }>
+  job_dependencies?: Array<{
+    appl_name: string | null
+    jobname: string | null
+    release: string | null
+    external_ind: string | null
+    predecessor_job: string | null
+    predecessor_applib: string | null
+  }>
+}
+
+export type EspOverviewGroupedWidgets = EspSlaWidgets
+
 interface ESPExecutiveOverviewProps {
   cards: EspOverviewCard[]
   kpis?: EspOverviewCard[]
@@ -40,10 +75,13 @@ interface ESPExecutiveOverviewProps {
     jobRunAgents?: EspJobRunAgent[]
     jobTypeDistribution?: EspJobType[]
   }
+  groupedWidgets?: EspOverviewGroupedWidgets
   loading?: boolean
   error?: string | null
   widgetsLoading?: boolean
   widgetsError?: string | null
+  slaLoading?: boolean
+  slaError?: string | null
   interval: EspOverviewIntervalOption
   onIntervalChange: (interval: EspOverviewIntervalOption) => void
   scopeLabel: string
@@ -70,6 +108,18 @@ function formatTrendDayLabel(day: string) {
   const [, , month, date] = match
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
   return `${monthNames[Number(month) - 1]} ${Number(date)}`
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) return '—'
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return String(value)
+  return parsed.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
 function getSparkPoints(values: number[], width = 116, height = 24, padding = 2) {
@@ -102,10 +152,13 @@ export const ESPExecutiveOverview: React.FC<ESPExecutiveOverviewProps> = ({
   cards,
   kpis = [],
   widgets,
+  groupedWidgets,
   loading = false,
   error,
   widgetsLoading = false,
   widgetsError,
+  slaLoading = false,
+  slaError,
   interval,
   onIntervalChange,
   scopeLabel,
@@ -130,6 +183,147 @@ export const ESPExecutiveOverview: React.FC<ESPExecutiveOverviewProps> = ({
     })),
     [widgets?.jobTypeDistribution],
   )
+
+  const jobExecutionRows = useMemo(() => groupedWidgets?.job_execution_status ?? [], [groupedWidgets?.job_execution_status])
+  const slaBars = useMemo(() => groupedWidgets?.sla_status_bars ?? [], [groupedWidgets?.sla_status_bars])
+  const slaRecentEvents = useMemo(() => groupedWidgets?.sla_recent_events ?? [], [groupedWidgets?.sla_recent_events])
+  const jobDependencies = useMemo(() => groupedWidgets?.job_dependencies ?? [], [groupedWidgets?.job_dependencies])
+  const [executionStatusFilter, setExecutionStatusFilter] = React.useState<string>('All')
+
+  const executionStatusCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    jobExecutionRows.forEach((row) => {
+      const key = String(row.status ?? 'UNKNOWN').toUpperCase()
+      counts.set(key, (counts.get(key) ?? 0) + 1)
+    })
+    return counts
+  }, [jobExecutionRows])
+
+  const filteredExecutionRows = useMemo(() => {
+    if (executionStatusFilter === 'All') return jobExecutionRows
+    return jobExecutionRows.filter((row) => String(row.status ?? 'UNKNOWN').toUpperCase() === executionStatusFilter)
+  }, [executionStatusFilter, jobExecutionRows])
+
+  const jobExecutionColumns = useMemo<ColumnDef[]>(() => [
+    {
+      key: 'jobname_application',
+      header: 'Applib | Job Name',
+      width: 270,
+      noWrap: true,
+      render: (row: any) => `${row.appl_name ?? '—'} | ${row.jobname ?? '—'}`,
+    },
+    {
+      key: 'last_run',
+      header: 'Last Run',
+      width: 180,
+      noWrap: true,
+      render: (row: any) => formatDateTime(row.last_run),
+    },
+    {
+      key: 'avg_run_mins',
+      header: 'Avg',
+      width: 80,
+      noWrap: true,
+      render: (row: any) => (row.avg_run_mins != null ? `${row.avg_run_mins}m` : '—'),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      width: 110,
+      noWrap: true,
+      render: (row: any) => row.status ?? 'UNKNOWN',
+    },
+    {
+      key: 'job_type',
+      header: 'Type',
+      width: 90,
+      noWrap: true,
+      render: (row: any) => row.job_type ?? '—',
+    },
+  ], [])
+
+  const slaRecentEventColumns = useMemo<ColumnDef[]>(() => [
+    {
+      key: 'job_name',
+      header: 'Job',
+      width: 220,
+      noWrap: true,
+      render: (row: any) => row.job_name ?? '—',
+    },
+    {
+      key: 'sla_time',
+      header: 'SLA Time',
+      width: 95,
+      noWrap: true,
+      render: (row: any) => row.sla_time ?? '—',
+    },
+    {
+      key: 'end_time',
+      header: 'End Time',
+      width: 110,
+      noWrap: true,
+      render: (row: any) => row.end_time ?? '—',
+    },
+    {
+      key: 'time_diff',
+      header: 'Diff',
+      width: 80,
+      noWrap: true,
+      render: (row: any) => row.time_diff ?? '—',
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      width: 95,
+      noWrap: true,
+      render: (row: any) => row.status ?? '—',
+    },
+  ], [])
+
+  const jobDependencyColumns = useMemo<ColumnDef[]>(() => [
+    {
+      key: 'appl_name',
+      header: 'Applib',
+      width: 120,
+      noWrap: true,
+      render: (row: any) => row.appl_name ?? '—',
+    },
+    {
+      key: 'jobname',
+      header: 'Job Name',
+      width: 170,
+      noWrap: true,
+      render: (row: any) => row.jobname ?? '—',
+    },
+    {
+      key: 'release',
+      header: 'Release',
+      width: 120,
+      noWrap: true,
+      render: (row: any) => row.release ?? '—',
+    },
+    {
+      key: 'external_ind',
+      header: 'Ext',
+      width: 70,
+      noWrap: true,
+      render: (row: any) => row.external_ind ?? '—',
+    },
+    {
+      key: 'predecessor_job',
+      header: 'Predecessor Job',
+      width: 170,
+      noWrap: true,
+      render: (row: any) => row.predecessor_job ?? '—',
+    },
+    {
+      key: 'predecessor_applib',
+      header: 'Predecessor Applib',
+      width: 170,
+      noWrap: true,
+      render: (row: any) => row.predecessor_applib ?? '—',
+    },
+  ], [])
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -332,6 +526,148 @@ export const ESPExecutiveOverview: React.FC<ESPExecutiveOverviewProps> = ({
             />
           ) : (
             <Typography sx={{ fontSize: '11px', color: '#94a3b8', py: 2 }}>No distribution data</Typography>
+          )}
+        </Paper>
+      </Box>
+    )}
+
+    {/* Grouped SLA section (as screenshot layout) */}
+    {!loading && !error && (
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' }, gap: 2 }}>
+        <Paper elevation={0} sx={{ borderRadius: 2.5, border: '1px solid #e8ecf1', boxShadow: '0 10px 24px rgba(15, 23, 42, 0.05)' }}>
+          <Box sx={{ px: 1.5, pt: 1.35, pb: 1, borderBottom: '1px solid #eef2f6' }}>
+            <Typography sx={{ fontSize: '12px', fontWeight: 800, color: '#102a43', textTransform: 'uppercase', letterSpacing: '0.45px' }}>
+              Job Execution Status
+            </Typography>
+            <Box sx={{ mt: 0.9, display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
+              {['All', 'SUCCESS', 'FAILED', 'NEVER RUN', 'UNKNOWN'].map((status) => {
+                const count = status === 'All'
+                  ? jobExecutionRows.length
+                  : (executionStatusCounts.get(status) ?? 0)
+                const active = executionStatusFilter === status
+                return (
+                  <Chip
+                    key={status}
+                    size="small"
+                    label={`${status} (${count})`}
+                    onClick={() => setExecutionStatusFilter(status)}
+                    sx={{
+                      height: 22,
+                      fontSize: '10px',
+                      cursor: 'pointer',
+                      fontWeight: active ? 700 : 500,
+                      color: active ? '#0f6cbd' : '#64748b',
+                      backgroundColor: active ? '#e3f2fd' : '#f8fafc',
+                      border: `1px solid ${active ? '#90caf9' : '#d9e2ec'}`,
+                      '& .MuiChip-label': { px: 1 },
+                    }}
+                  />
+                )
+              })}
+            </Box>
+          </Box>
+          {slaLoading ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 260 }}><CircularProgress size={20} sx={{ color: '#1565c0' }} /></Box>
+          ) : slaError ? (
+            <Typography sx={{ fontSize: '11px', color: '#c62828', p: 1.5 }}>{slaError}</Typography>
+          ) : (
+            <Box sx={{ p: 1.25 }}>
+              <DataTable
+                columns={jobExecutionColumns}
+                rows={filteredExecutionRows}
+                rowKey={(row: any) => `${row.appl_name ?? ''}|${row.jobname ?? ''}|${row.last_run ?? ''}`}
+                compact
+                maxHeight={260}
+                tableMinWidth={740}
+                pageSize={200}
+                accentColor="#1f5cb8"
+                headerBg="#1f5cb8"
+                headerTextColor="#ffffff"
+                emptyMessage="No job execution status rows"
+              />
+            </Box>
+          )}
+        </Paper>
+
+        <Paper elevation={0} sx={{ borderRadius: 2.5, border: '1px solid #e8ecf1', boxShadow: '0 10px 24px rgba(15, 23, 42, 0.05)' }}>
+          <Box sx={{ px: 1.5, pt: 1.35, pb: 1, borderBottom: '1px solid #eef2f6' }}>
+            <Typography sx={{ fontSize: '12px', fontWeight: 800, color: '#102a43', textTransform: 'uppercase', letterSpacing: '0.45px' }}>
+              SLA Status
+            </Typography>
+          </Box>
+          {slaLoading ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 260 }}><CircularProgress size={20} sx={{ color: '#1565c0' }} /></Box>
+          ) : slaError ? (
+            <Typography sx={{ fontSize: '11px', color: '#c62828', p: 1.5 }}>{slaError}</Typography>
+          ) : (
+            <Box sx={{ p: 1.25 }}>
+              <Typography sx={{ fontSize: '10px', fontWeight: 700, color: '#486581', textTransform: 'uppercase', mb: 0.6 }}>
+                SLA Performance by Platform
+              </Typography>
+              <Box sx={{ mb: 1.2 }}>
+                {slaBars.slice(0, 4).map((row) => {
+                  const pct = Math.max(0, Math.min(100, Number(row.pct_met ?? 0)))
+                  return (
+                    <Box key={String(row.platform ?? 'Unknown')} sx={{ mb: 0.6 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.2 }}>
+                        <Typography sx={{ fontSize: '10px', color: '#334e68', fontWeight: 700 }}>{row.platform ?? 'Unknown'}</Typography>
+                        <Typography sx={{ fontSize: '10px', color: '#334e68', fontWeight: 700 }}>{pct.toFixed(1)}%</Typography>
+                      </Box>
+                      <Box sx={{ height: 7, backgroundColor: '#edf2f7', borderRadius: 1, overflow: 'hidden' }}>
+                        <Box sx={{ height: '100%', width: `${pct}%`, backgroundColor: pct >= 90 ? '#2f9e44' : pct >= 80 ? '#82c91e' : '#d9480f' }} />
+                      </Box>
+                    </Box>
+                  )
+                })}
+                {!slaBars.length && <Typography sx={{ fontSize: '11px', color: '#94a3b8' }}>No SLA status bars</Typography>}
+              </Box>
+
+              <Typography sx={{ fontSize: '10px', fontWeight: 700, color: '#486581', textTransform: 'uppercase', mb: 0.6 }}>
+                Recent SLA Events
+              </Typography>
+              <DataTable
+                columns={slaRecentEventColumns}
+                rows={slaRecentEvents}
+                rowKey={(row: any) => `${row.job_name ?? ''}|${row.end_time ?? ''}|${row.sla_time ?? ''}`}
+                compact
+                maxHeight={190}
+                tableMinWidth={560}
+                pageSize={200}
+                accentColor="#1f5cb8"
+                headerBg="#1f5cb8"
+                headerTextColor="#ffffff"
+                emptyMessage="No SLA events"
+              />
+            </Box>
+          )}
+        </Paper>
+
+        <Paper elevation={0} sx={{ borderRadius: 2.5, border: '1px solid #e8ecf1', boxShadow: '0 10px 24px rgba(15, 23, 42, 0.05)', gridColumn: { xs: 'auto', lg: '1 / span 2' } }}>
+          <Box sx={{ px: 1.5, pt: 1.35, pb: 1, borderBottom: '1px solid #eef2f6' }}>
+            <Typography sx={{ fontSize: '12px', fontWeight: 800, color: '#102a43', textTransform: 'uppercase', letterSpacing: '0.45px' }}>
+              Job Dependencies
+            </Typography>
+          </Box>
+          {slaLoading ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 170 }}><CircularProgress size={20} sx={{ color: '#1565c0' }} /></Box>
+          ) : slaError ? (
+            <Typography sx={{ fontSize: '11px', color: '#c62828', p: 1.5 }}>{slaError}</Typography>
+          ) : (
+            <Box sx={{ p: 1.25 }}>
+              <DataTable
+                columns={jobDependencyColumns}
+                rows={jobDependencies}
+                rowKey={(row: any) => `${row.appl_name ?? ''}|${row.jobname ?? ''}|${row.release ?? ''}|${row.predecessor_job ?? ''}`}
+                compact
+                maxHeight={220}
+                tableMinWidth={860}
+                pageSize={200}
+                accentColor="#1f5cb8"
+                headerBg="#1f5cb8"
+                headerTextColor="#ffffff"
+                emptyMessage="No dependency rows"
+              />
+            </Box>
           )}
         </Paper>
       </Box>

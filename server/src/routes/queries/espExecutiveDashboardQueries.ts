@@ -349,3 +349,164 @@ ORDER BY job_count DESC`,
     values,
   }
 }
+
+function buildSlaStatusScopeClause(options: EspOverviewQueryOptions): { values: Array<string | number>; clause: string } {
+  const values: Array<string | number> = []
+  const filters: string[] = []
+
+  if (options.platformName) {
+    values.push(options.platformName)
+    filters.push(`js.jobsla_pltf_nm = $${values.length}`)
+  }
+
+  if (options.applName) {
+    values.push(options.applName)
+    filters.push(`js.jobsla_appl_lib = $${values.length}`)
+  }
+
+  if (options.intervalDays !== null) {
+    values.push(options.intervalDays)
+    filters.push(`js.jobsla_batch_dt >= CURRENT_DATE - ($${values.length}::text || ' days')::interval`)
+  }
+
+  return {
+    values,
+    clause: filters.length ? `WHERE ${filters.join('\n  AND ')}` : '',
+  }
+}
+
+export function buildEspGroupedJobExecutionStatusQuery(options: EspOverviewQueryOptions): EspOverviewQuerySpec {
+  const scope = buildScopedConfigCte(options.platformName, options.applName)
+  const values: Array<string | number> = [...scope.values]
+
+  const intervalClause = options.intervalDays === null
+    ? ''
+    : (() => {
+        values.push(options.intervalDays as number)
+        return `\nWHERE (ls.last_run IS NULL OR ls.last_run >= NOW() - ($${values.length}::text || ' days')::interval)`
+      })()
+
+  return {
+    text: `${scope.text}
+, latest_stats AS (
+  SELECT DISTINCT ON (s.appl_name, s.job_longname)
+    s.appl_name,
+    s.job_longname,
+    COALESCE(NULLIF(s.end_date::text, '')::timestamp, NULLIF(s.start_date::text, '')::timestamp) AS last_run,
+    s.ccfail,
+    s.comp_code
+  FROM edoops.esp_job_stats_recent s
+  JOIN scoped_config cfg
+    ON cfg.appl_name = s.appl_name
+   AND cfg.jobname = s.job_longname
+  ORDER BY s.appl_name, s.job_longname,
+           s.end_date DESC NULLS LAST,
+           s.end_time DESC NULLS LAST,
+           s.start_date DESC NULLS LAST,
+           s.start_time DESC NULLS LAST
+),
+forecast_avg AS (
+  SELECT
+    f.appl_name,
+    f.jobname,
+    AVG(CAST(f.exec_time_mins AS NUMERIC)) AS avg_run_mins
+  FROM edoops.esp_forecast f
+  GROUP BY f.appl_name, f.jobname
+)
+SELECT
+  cfg.appl_name,
+  cfg.jobname,
+  ls.last_run,
+  ROUND(COALESCE(fa.avg_run_mins, 0)::numeric, 1) AS avg_run_mins,
+  CASE
+    WHEN ls.ccfail IS NOT NULL AND TRIM(ls.ccfail) <> '' THEN 'FAILED'
+    WHEN ls.comp_code IS NOT NULL AND TRIM(ls.comp_code) NOT IN ('0', '') THEN 'FAILED'
+    WHEN ls.last_run IS NULL THEN 'NEVER RUN'
+    WHEN ls.comp_code IS NULL THEN 'UNKNOWN'
+    ELSE 'SUCCESS'
+  END AS status,
+  COALESCE(cfg.jobtype, 'UNKNOWN') AS job_type
+FROM scoped_config cfg
+LEFT JOIN latest_stats ls
+  ON ls.appl_name = cfg.appl_name
+ AND ls.job_longname = cfg.jobname
+LEFT JOIN forecast_avg fa
+  ON fa.appl_name = cfg.appl_name
+ AND fa.jobname = cfg.jobname${intervalClause}
+ORDER BY ls.last_run DESC NULLS LAST, cfg.appl_name, cfg.jobname
+LIMIT 250`,
+    values,
+  }
+}
+
+export function buildEspGroupedSlaStatusBarsQuery(options: EspOverviewQueryOptions): EspOverviewQuerySpec {
+  const scope = buildSlaStatusScopeClause(options)
+
+  return {
+    text: `SELECT
+  COALESCE(js.jobsla_pltf_nm, 'Unknown') AS platform,
+  COUNT(*)::int AS total,
+  SUM(CASE WHEN UPPER(TRIM(COALESCE(js.jobsla_sla_status, 'UNKNOWN'))) NOT IN ('MISSED', 'LATE', 'BREACH') THEN 1 ELSE 0 END)::int AS met_count,
+  ROUND(
+    SUM(CASE WHEN UPPER(TRIM(COALESCE(js.jobsla_sla_status, 'UNKNOWN'))) NOT IN ('MISSED', 'LATE', 'BREACH') THEN 1 ELSE 0 END)
+    * 100.0 / NULLIF(COUNT(*), 0),
+    1
+  ) AS pct_met
+FROM edoops.job_sla_status js
+${scope.clause}
+GROUP BY COALESCE(js.jobsla_pltf_nm, 'Unknown')
+ORDER BY pct_met DESC NULLS LAST, platform`,
+    values: scope.values,
+  }
+}
+
+export function buildEspGroupedSlaRecentEventsQuery(options: EspOverviewQueryOptions): EspOverviewQuerySpec {
+  const scope = buildSlaStatusScopeClause(options)
+
+  return {
+    text: `SELECT
+  js.jobsla_job_nm AS job_name,
+  js.jobsla_appl_lib AS applib,
+  js.jobsla_sla_time AS sla_time,
+  js.jobsla_job_end_time AS end_time,
+  js.jobsla_time_diff AS time_diff,
+  js.jobsla_sla_status AS status
+FROM edoops.job_sla_status js
+${scope.clause}
+ORDER BY
+  CASE UPPER(TRIM(COALESCE(js.jobsla_sla_status, 'UNKNOWN')))
+    WHEN 'MISSED' THEN 1
+    WHEN 'BREACH' THEN 2
+    WHEN 'LATE' THEN 3
+    ELSE 4
+  END,
+  js.jobsla_job_end_time DESC NULLS LAST
+LIMIT 12`,
+    values: scope.values,
+  }
+}
+
+export function buildEspGroupedJobDependenciesQuery(options: EspOverviewQueryOptions): EspOverviewQuerySpec {
+  const scope = buildScopedConfigCte(options.platformName, options.applName)
+
+  return {
+    text: `${scope.text}
+SELECT
+  d.appl_name,
+  d.jobname,
+  d.release,
+  NULL::text AS external_ind,
+  p.jobname AS predecessor_job,
+  p.appl_name AS predecessor_applib
+FROM edoops.esp_job_dpndnt d
+JOIN scoped_config cfg
+  ON cfg.appl_name = d.appl_name
+ AND cfg.jobname = d.jobname
+LEFT JOIN edoops.esp_job_dpndnt p
+  ON p.appl_name = d.appl_name
+ AND p.release = d.jobname
+ORDER BY d.appl_name, d.jobname
+LIMIT 200`,
+    values: scope.values,
+  }
+}

@@ -28,6 +28,10 @@ import {
   buildEspJobRunAvgTrendOverviewQuery,
   buildEspJobRunAgentsOverviewQuery,
   buildEspJobTypeDistributionOverviewQuery,
+  buildEspGroupedJobExecutionStatusQuery,
+  buildEspGroupedSlaStatusBarsQuery,
+  buildEspGroupedSlaRecentEventsQuery,
+  buildEspGroupedJobDependenciesQuery,
   type EspOverviewIntervalDays,
 } from './queries/espExecutiveDashboardQueries';
 
@@ -80,6 +84,48 @@ function mapSlaMissedRow(row: any) {
     duration_minutes: row.duration_minutes != null ? parseFloat(row.duration_minutes) : null,
     running_minutes: row.running_minutes != null ? parseFloat(row.running_minutes) : null,
     sla_miss_count: row.sla_miss_count != null ? parseInt(row.sla_miss_count, 10) : null,
+  };
+}
+
+function mapGroupedJobExecutionStatusRow(row: any) {
+  return {
+    appl_name: row.appl_name ?? null,
+    jobname: row.jobname ?? null,
+    last_run: row.last_run ? String(row.last_run) : null,
+    avg_run_mins: row.avg_run_mins != null ? parseFloat(row.avg_run_mins) : null,
+    status: row.status ?? 'UNKNOWN',
+    job_type: row.job_type ?? 'UNKNOWN',
+  };
+}
+
+function mapGroupedSlaStatusBarRow(row: any) {
+  return {
+    platform: row.platform,
+    total: parseInt(row.total ?? '0', 10),
+    met_count: parseInt(row.met_count ?? '0', 10),
+    pct_met: parseFloat(row.pct_met ?? '0'),
+  };
+}
+
+function mapGroupedSlaRecentEventRow(row: any) {
+  return {
+    job_name: row.job_name ?? null,
+    applib: row.applib ?? null,
+    sla_time: row.sla_time ?? null,
+    end_time: row.end_time ?? null,
+    time_diff: row.time_diff ?? null,
+    status: row.status ?? null,
+  };
+}
+
+function mapGroupedJobDependencyRow(row: any) {
+  return {
+    appl_name: row.appl_name ?? null,
+    jobname: row.jobname ?? null,
+    release: row.release ?? null,
+    external_ind: row.external_ind ?? null,
+    predecessor_job: row.predecessor_job ?? null,
+    predecessor_applib: row.predecessor_applib ?? null,
   };
 }
 
@@ -246,6 +292,56 @@ router.get('/job-type-distribution', async (req: Request, res: Response) => {
     })));
   } catch (err: any) {
     console.error('ESP job-type-distribution error:', err.message);
+    res.status(500).json({ error: 'Query failed', details: err.message });
+  }
+});
+
+// GET /api/esp/overview-sla-grouped — grouped widgets for Job Execution Status, SLA Status and Job Dependencies.
+router.get('/overview-sla-grouped', async (req: Request, res: Response) => {
+  try {
+    const pool = getPgPool();
+    const opts = await buildOverviewQueryOptions(req, res);
+    if (!opts) return;
+
+    const safe = async <T>(fn: () => Promise<T>, fallback: T): Promise<T> => {
+      try {
+        return await fn();
+      } catch (error: any) {
+        console.warn('[ESP] overview-sla-grouped query skipped:', error.message);
+        return fallback;
+      }
+    };
+
+    const [jobExecutionStatus, slaStatusBars, slaRecentEvents, jobDependencies] = await Promise.all([
+      safe(async () => {
+        const result = await pool.query(buildEspGroupedJobExecutionStatusQuery(opts));
+        return result.rows.map(mapGroupedJobExecutionStatusRow);
+      }, [] as any[]),
+      safe(async () => {
+        const result = await pool.query(buildEspGroupedSlaStatusBarsQuery(opts));
+        return result.rows.map(mapGroupedSlaStatusBarRow);
+      }, [] as any[]),
+      safe(async () => {
+        const result = await pool.query(buildEspGroupedSlaRecentEventsQuery(opts));
+        return result.rows.map(mapGroupedSlaRecentEventRow);
+      }, [] as any[]),
+      safe(async () => {
+        const result = await pool.query(buildEspGroupedJobDependenciesQuery(opts));
+        return result.rows.map(mapGroupedJobDependencyRow);
+      }, [] as any[]),
+    ]);
+
+    res.json({
+      platform: opts.platformName,
+      applName: opts.applName,
+      interval: opts.intervalDays === null ? 'all' : opts.intervalDays,
+      job_execution_status: jobExecutionStatus,
+      sla_status_bars: slaStatusBars,
+      sla_recent_events: slaRecentEvents,
+      job_dependencies: jobDependencies,
+    });
+  } catch (err: any) {
+    console.error('ESP overview-sla-grouped error:', err.message);
     res.status(500).json({ error: 'Query failed', details: err.message });
   }
 });
@@ -807,8 +903,11 @@ router.get('/sla-missed-dashboard', async (req: Request, res: Response) => {
     const pool = getPgPool();
     const platformId = typeof req.query.platformId === 'string' ? decodeURIComponent(req.query.platformId) : '';
     const applName = typeof req.query.applName === 'string' ? req.query.applName.trim() : '';
+    const intervalDays = parseOverviewInterval(req.query);
     const params: any[] = [];
     let whereClause = '1=1';
+
+    const batchDateWindow = intervalDays === null ? '' : ` AND s.jslmis_batch_dt >= CURRENT_DATE - INTERVAL '${intervalDays} days'`;
 
     if (platformId) {
       const plt = await getPlatformRow(platformId);
@@ -918,7 +1017,7 @@ router.get('/sla-missed-dashboard', async (req: Request, res: Response) => {
              COUNT(*)::int AS sla_misses
            FROM edoops.job_sla_missed s
            WHERE ${whereClause}
-             AND s.jslmis_batch_dt >= CURRENT_DATE - INTERVAL '14 days'
+             ${batchDateWindow}
            GROUP BY s.jslmis_batch_dt
            ORDER BY s.jslmis_batch_dt`,
           params,
@@ -936,7 +1035,7 @@ router.get('/sla-missed-dashboard', async (req: Request, res: Response) => {
            FROM edoops.job_sla_missed s
            WHERE ${whereClause}
              AND s.jslmis_job_start_time IS NOT NULL
-             AND s.jslmis_batch_dt >= CURRENT_DATE - INTERVAL '7 days'
+             ${batchDateWindow}
            GROUP BY EXTRACT(HOUR FROM s.jslmis_job_start_time)
            ORDER BY job_start_hour`,
           params,
@@ -954,7 +1053,7 @@ router.get('/sla-missed-dashboard', async (req: Request, res: Response) => {
              COUNT(*)::int AS sla_misses
            FROM edoops.job_sla_missed s
            WHERE ${whereClause}
-             AND s.jslmis_batch_dt >= CURRENT_DATE - INTERVAL '7 days'
+             ${batchDateWindow}
            GROUP BY s.jslmis_batch_dt, s.jslmis_pltf_nm
            ORDER BY s.jslmis_batch_dt, s.jslmis_pltf_nm`,
           params,
@@ -973,7 +1072,7 @@ router.get('/sla-missed-dashboard', async (req: Request, res: Response) => {
              COUNT(*)::int AS sla_misses
            FROM edoops.job_sla_missed s
            WHERE ${whereClause}
-             AND s.jslmis_batch_dt >= CURRENT_DATE - INTERVAL '7 days'
+             ${batchDateWindow}
            GROUP BY s.jslmis_batch_dt, COALESCE(s.jslmis_sla_typ, 'Unknown')
            ORDER BY s.jslmis_batch_dt, sla_type`,
           params,
@@ -991,7 +1090,7 @@ router.get('/sla-missed-dashboard', async (req: Request, res: Response) => {
              COUNT(*)::int AS sla_misses
            FROM edoops.job_sla_missed s
            WHERE ${whereClause}
-             AND s.jslmis_batch_dt >= CURRENT_DATE - INTERVAL '7 days'
+             ${batchDateWindow}
            GROUP BY COALESCE(s.jslmis_application_desc, 'Unknown')
            ORDER BY sla_misses DESC, name
            LIMIT 10`,
@@ -1006,7 +1105,7 @@ router.get('/sla-missed-dashboard', async (req: Request, res: Response) => {
              COUNT(*)::int AS sla_misses
            FROM edoops.job_sla_missed s
            WHERE ${whereClause}
-             AND s.jslmis_batch_dt >= CURRENT_DATE - INTERVAL '7 days'
+             ${batchDateWindow}
            GROUP BY COALESCE(s.jslmis_bus_unit, 'Unknown')
            ORDER BY sla_misses DESC, name
            LIMIT 10`,
@@ -1021,7 +1120,7 @@ router.get('/sla-missed-dashboard', async (req: Request, res: Response) => {
              COUNT(*)::int AS sla_misses
            FROM edoops.job_sla_missed s
            WHERE ${whereClause}
-             AND s.jslmis_batch_dt >= CURRENT_DATE - INTERVAL '7 days'
+             ${batchDateWindow}
            GROUP BY COALESCE(s.jslmis_pltf_nm, 'Unknown')
            ORDER BY sla_misses DESC, name`,
           params,
@@ -1035,7 +1134,7 @@ router.get('/sla-missed-dashboard', async (req: Request, res: Response) => {
              COUNT(*)::int AS sla_misses
            FROM edoops.job_sla_missed s
            WHERE ${whereClause}
-             AND s.jslmis_batch_dt >= CURRENT_DATE - INTERVAL '7 days'
+             ${batchDateWindow}
            GROUP BY COALESCE(s.jslmis_sla_typ, 'Unknown')
            ORDER BY sla_misses DESC, name`,
           params,
@@ -1049,7 +1148,7 @@ router.get('/sla-missed-dashboard', async (req: Request, res: Response) => {
              COUNT(*)::int AS sla_misses
            FROM edoops.job_sla_missed s
            WHERE ${whereClause}
-             AND s.jslmis_batch_dt >= CURRENT_DATE - INTERVAL '7 days'
+             ${batchDateWindow}
            GROUP BY COALESCE(s.jslmis_run_criteria, 'Unknown')
            ORDER BY sla_misses DESC, name
            LIMIT 10`,
@@ -1064,7 +1163,7 @@ router.get('/sla-missed-dashboard', async (req: Request, res: Response) => {
              COUNT(*)::int AS sla_miss_count
            FROM edoops.job_sla_missed s
            WHERE ${whereClause}
-             AND s.jslmis_batch_dt >= CURRENT_DATE - INTERVAL '30 days'
+             ${batchDateWindow}
            GROUP BY s.jslmis_job_nm
            ORDER BY sla_miss_count DESC, s.jslmis_job_nm
            LIMIT 10`,
@@ -1134,7 +1233,7 @@ router.get('/sla-missed-dashboard', async (req: Request, res: Response) => {
              ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) AS pct_of_total
            FROM edoops.job_sla_missed s
            WHERE ${whereClause}
-             AND s.jslmis_batch_dt >= CURRENT_DATE - INTERVAL '7 days'
+             ${batchDateWindow}
            GROUP BY COALESCE(s.jslmis_pltf_nm, 'Unknown')
            ORDER BY sla_misses DESC, name`,
           params,
@@ -1153,7 +1252,7 @@ router.get('/sla-missed-dashboard', async (req: Request, res: Response) => {
              ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) AS pct_of_total
            FROM edoops.job_sla_missed s
            WHERE ${whereClause}
-             AND s.jslmis_batch_dt >= CURRENT_DATE - INTERVAL '7 days'
+             ${batchDateWindow}
            GROUP BY COALESCE(s.jslmis_bus_unit, 'Unknown')
            ORDER BY sla_misses DESC, name`,
           params,
@@ -1172,7 +1271,7 @@ router.get('/sla-missed-dashboard', async (req: Request, res: Response) => {
              SUM(CASE WHEN s.jslmis_job_end_time IS NOT NULL THEN 1 ELSE 0 END)::int AS closed_jobs
            FROM edoops.job_sla_missed s
            WHERE ${whereClause}
-             AND s.jslmis_batch_dt >= CURRENT_DATE - INTERVAL '14 days'
+             ${batchDateWindow}
            GROUP BY s.jslmis_batch_dt
            ORDER BY s.jslmis_batch_dt`,
           params,
@@ -1191,7 +1290,7 @@ router.get('/sla-missed-dashboard', async (req: Request, res: Response) => {
            FROM edoops.job_sla_missed s
            WHERE ${whereClause}
              AND s.jslmis_job_start_time IS NOT NULL
-             AND s.jslmis_batch_dt >= CURRENT_DATE - INTERVAL '7 days'
+             ${batchDateWindow}
            GROUP BY COALESCE(s.jslmis_application_desc, 'Unknown')
            ORDER BY avg_duration_minutes DESC NULLS LAST, name
            LIMIT 10`,
