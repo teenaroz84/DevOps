@@ -30,7 +30,7 @@ function buildScopedConfigCte(platformName?: string | null, applName?: string | 
   return {
     values,
     text: `WITH scoped_config AS MATERIALIZED (
-  SELECT DISTINCT cfg.appl_name, cfg.jobname, cfg.pltf_name, cfg.jobtype, cfg.last_updt_dttm
+  SELECT DISTINCT cfg.appl_name, cfg.jobname, cfg.pltf_name, cfg.job_type, cfg.last_updt_dttm
   FROM edoops.esp_job_config cfg
   WHERE cfg.appl_name IS NOT NULL
     AND cfg.jobname IS NOT NULL${filterSql}
@@ -339,11 +339,11 @@ export function buildEspJobTypeDistributionOverviewQuery(options: EspOverviewQue
 
   return {
     text: `${scope.text}
-SELECT UPPER(TRIM(COALESCE(cfg.jobtype, 'UNKNOWN'))) AS job_type,
+SELECT UPPER(TRIM(COALESCE(cfg.job_type, 'UNKNOWN'))) AS job_type,
        COUNT(DISTINCT cfg.jobname) AS job_count,
        ROUND(COUNT(DISTINCT cfg.jobname) * 100.0 / SUM(COUNT(DISTINCT cfg.jobname)) OVER (), 1) AS pct
-FROM scoped_config cfg
-WHERE cfg.jobtype IS NOT NULL
+FROM edoops.esp_job_config cfg
+WHERE cfg.job_type IS NOT NULL
 GROUP BY 1
 ORDER BY job_count DESC`,
     values,
@@ -425,7 +425,7 @@ SELECT
     WHEN ls.comp_code IS NULL THEN 'UNKNOWN'
     ELSE 'SUCCESS'
   END AS status,
-  COALESCE(cfg.jobtype, 'UNKNOWN') AS job_type
+  COALESCE(cfg.job_type, 'UNKNOWN') AS job_type
 FROM scoped_config cfg
 LEFT JOIN latest_stats ls
   ON ls.appl_name = cfg.appl_name
@@ -508,5 +508,121 @@ LEFT JOIN edoops.esp_job_dpndnt p
 ORDER BY d.appl_name, d.jobname
 LIMIT 200`,
     values: scope.values,
+  }
+}
+
+export function buildEspGroupedExecutionForecastMetricsQuery(options: EspOverviewQueryOptions): EspOverviewQuerySpec {
+  const scope = buildScopedConfigCte(options.platformName, options.applName)
+  const values: Array<string | number> = [...scope.values]
+  const intervalClause = buildTimestampIntervalClause(values, 'f.submission_tmst', options.intervalDays, 'WHERE')
+
+  return {
+    text: `${scope.text}
+SELECT
+  ROUND(AVG(CAST(f.exec_time_mins AS NUMERIC)), 1) AS avg_exec_mins,
+  ROUND(AVG(CAST(f.cpu_time_mins AS NUMERIC)), 1) AS avg_cpu_mins,
+  COALESCE(SUM(CAST(f.samples_used AS INTEGER)), 0) AS total_samples,
+  COALESCE(SUM(CAST(f.print_lines AS INTEGER)), 0) AS total_print_lines
+FROM edoops.esp_forecast f
+JOIN scoped_config cfg
+  ON cfg.appl_name = f.appl_name
+ AND cfg.jobname = f.jobname${intervalClause}`,
+    values,
+  }
+}
+
+export function buildEspGroupedForecastExecByApplibQuery(options: EspOverviewQueryOptions): EspOverviewQuerySpec {
+  const scope = buildScopedConfigCte(options.platformName, options.applName)
+  const values: Array<string | number> = [...scope.values]
+  const intervalClause = buildTimestampIntervalClause(values, 'f.submission_tmst', options.intervalDays)
+
+  return {
+    text: `${scope.text}
+SELECT
+  f.appl_name,
+  ROUND(AVG(CAST(f.exec_time_mins AS NUMERIC)), 1) AS avg_exec_mins,
+  ROUND(AVG(CAST(f.cpu_time_mins AS NUMERIC)), 1) AS avg_cpu_mins,
+  COUNT(*)::int AS job_count
+FROM edoops.esp_forecast f
+JOIN scoped_config cfg
+  ON cfg.appl_name = f.appl_name
+ AND cfg.jobname = f.jobname
+WHERE f.appl_name IS NOT NULL${intervalClause}
+GROUP BY f.appl_name
+ORDER BY avg_exec_mins DESC NULLS LAST, f.appl_name
+LIMIT 8`,
+    values,
+  }
+}
+
+export function buildEspGroupedCriticalJobsPillsQuery(options: EspOverviewQueryOptions): EspOverviewQuerySpec {
+  const scope = buildScopedConfigCte(options.platformName, options.applName)
+  const values: Array<string | number> = [...scope.values]
+  const intervalClause = buildTimestampIntervalClause(values, 'cfg2.last_updt_dttm', options.intervalDays)
+
+  return {
+    text: `${scope.text}
+SELECT
+  cfg2.appl_name,
+  cfg2.critical_ind,
+  COUNT(DISTINCT cfg2.jobname) AS critical_job_count
+FROM edoops.esp_job_config cfg2
+JOIN scoped_config cfg
+  ON cfg.appl_name = cfg2.appl_name
+ AND cfg.jobname = cfg2.jobname
+WHERE UPPER(TRIM(COALESCE(cfg2.critical_ind, ''))) = 'Y'${intervalClause}
+GROUP BY cfg2.appl_name, cfg2.critical_ind
+ORDER BY critical_job_count DESC, cfg2.appl_name
+LIMIT 12`,
+    values,
+  }
+}
+
+export function buildEspGroupedRunFrequencyBarsQuery(options: EspOverviewQueryOptions): EspOverviewQuerySpec {
+  const scope = buildScopedConfigCte(options.platformName, options.applName)
+  const values: Array<string | number> = [...scope.values]
+  const intervalClause = buildTimestampIntervalClause(values, 'cfg2.last_updt_dttm', options.intervalDays)
+
+  return {
+    text: `${scope.text}
+SELECT
+  COALESCE(UPPER(TRIM(cfg2.app_freq)), 'UNKNOWN') AS frequency,
+  COUNT(DISTINCT cfg2.jobname) AS job_count
+FROM edoops.esp_job_config cfg2
+JOIN scoped_config cfg
+  ON cfg.appl_name = cfg2.appl_name
+ AND cfg.jobname = cfg2.jobname
+WHERE 1=1${intervalClause}
+GROUP BY 1
+ORDER BY job_count DESC, frequency`,
+    values,
+  }
+}
+
+export function buildEspGroupedSlaConfigByLobQuery(options: EspOverviewQueryOptions): EspOverviewQuerySpec {
+  const scope = buildScopedConfigCte(options.platformName, options.applName)
+  const values: Array<string | number> = [...scope.values]
+  const intervalClause = buildTimestampIntervalClause(values, 'cfg2.last_updt_dttm', options.intervalDays)
+
+  return {
+    text: `${scope.text}
+SELECT
+  cfg2.appl_name,
+  MAX(cfg2.sla_time) AS sla_time,
+  MAX(cfg2.lob) AS lob,
+  MAX(cfg2.sub_lob) AS sub_lob,
+  MAX(cfg2.holiday_run_ind) AS holiday_run_ind,
+  MAX(cfg2.critical_ind) AS critical_ind,
+  COUNT(DISTINCT cfg2.jobname) AS job_count,
+  MAX(cfg2.last_updt_dttm) AS last_updated
+FROM edoops.esp_job_config cfg2
+JOIN scoped_config cfg
+  ON cfg.appl_name = cfg2.appl_name
+ AND cfg.jobname = cfg2.jobname
+WHERE 1=1${intervalClause}
+GROUP BY cfg2.appl_name
+ORDER BY cfg2.appl_name
+LIMIT 50`,
+    values,
   }
 }

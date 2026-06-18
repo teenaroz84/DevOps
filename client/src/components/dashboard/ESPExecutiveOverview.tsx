@@ -63,6 +63,37 @@ export interface EspSlaWidgets {
     predecessor_job: string | null
     predecessor_applib: string | null
   }>
+  execution_forecast_metrics?: {
+    avg_exec_mins: number
+    avg_cpu_mins: number
+    total_samples: number
+    total_print_lines: number
+  }
+  forecast_exec_by_applib?: Array<{
+    appl_name: string | null
+    avg_exec_mins: number
+    avg_cpu_mins: number
+    job_count: number
+  }>
+  critical_jobs_pills?: Array<{
+    appl_name: string | null
+    critical_ind: string | null
+    critical_job_count: number
+  }>
+  run_frequency_bars?: Array<{
+    frequency: string | null
+    job_count: number
+  }>
+  sla_config_by_lob?: Array<{
+    appl_name: string | null
+    sla_time: string | null
+    lob: string | null
+    sub_lob: string | null
+    holiday_run_ind: string | null
+    critical_ind: string | null
+    job_count: number
+    last_updated: string | null
+  }>
 }
 
 export type EspOverviewGroupedWidgets = EspSlaWidgets
@@ -188,6 +219,14 @@ export const ESPExecutiveOverview: React.FC<ESPExecutiveOverviewProps> = ({
   const slaBars = useMemo(() => groupedWidgets?.sla_status_bars ?? [], [groupedWidgets?.sla_status_bars])
   const slaRecentEvents = useMemo(() => groupedWidgets?.sla_recent_events ?? [], [groupedWidgets?.sla_recent_events])
   const jobDependencies = useMemo(() => groupedWidgets?.job_dependencies ?? [], [groupedWidgets?.job_dependencies])
+  const executionForecastMetrics = useMemo(
+    () => groupedWidgets?.execution_forecast_metrics ?? { avg_exec_mins: 0, avg_cpu_mins: 0, total_samples: 0, total_print_lines: 0 },
+    [groupedWidgets?.execution_forecast_metrics],
+  )
+  const forecastExecByApplib = useMemo(() => groupedWidgets?.forecast_exec_by_applib ?? [], [groupedWidgets?.forecast_exec_by_applib])
+  const criticalJobsPills = useMemo(() => groupedWidgets?.critical_jobs_pills ?? [], [groupedWidgets?.critical_jobs_pills])
+  const runFrequencyBars = useMemo(() => groupedWidgets?.run_frequency_bars ?? [], [groupedWidgets?.run_frequency_bars])
+  const slaConfigByLob = useMemo(() => groupedWidgets?.sla_config_by_lob ?? [], [groupedWidgets?.sla_config_by_lob])
   const [executionStatusFilter, setExecutionStatusFilter] = React.useState<string>('All')
 
   const executionStatusCounts = useMemo(() => {
@@ -323,6 +362,17 @@ export const ESPExecutiveOverview: React.FC<ESPExecutiveOverviewProps> = ({
       noWrap: true,
       render: (row: any) => row.predecessor_applib ?? '—',
     },
+  ], [])
+
+  const slaConfigByLobColumns = useMemo<ColumnDef[]>(() => [
+    { key: 'appl_name', header: 'Applib', width: 120, noWrap: true, render: (row: any) => row.appl_name ?? '—' },
+    { key: 'sla_time', header: 'SLA Time', width: 95, noWrap: true, render: (row: any) => row.sla_time ?? '—' },
+    { key: 'lob', header: 'LOB', width: 95, noWrap: true, render: (row: any) => row.lob ?? '—' },
+    { key: 'sub_lob', header: 'Sub LOB', width: 95, noWrap: true, render: (row: any) => row.sub_lob ?? '—' },
+    { key: 'holiday_run_ind', header: 'Holiday', width: 85, noWrap: true, render: (row: any) => row.holiday_run_ind ?? '—' },
+    { key: 'critical_ind', header: 'Critical', width: 90, noWrap: true, render: (row: any) => row.critical_ind ?? '—' },
+    { key: 'job_count', header: 'Jobs', width: 70, noWrap: true, render: (row: any) => row.job_count ?? 0 },
+    { key: 'last_updated', header: 'Last Updated', width: 150, noWrap: true, render: (row: any) => formatDateTime(row.last_updated) },
   ], [])
 
   return (
@@ -533,8 +583,8 @@ export const ESPExecutiveOverview: React.FC<ESPExecutiveOverviewProps> = ({
 
     {/* Grouped SLA section (as screenshot layout) */}
     {!loading && !error && (
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' }, gap: 2 }}>
-        <Paper elevation={0} sx={{ borderRadius: 2.5, border: '1px solid #e8ecf1', boxShadow: '0 10px 24px rgba(15, 23, 42, 0.05)' }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' }, gap: 2 }}>
+        <Paper elevation={0} sx={{ minWidth: 0, borderRadius: 2.5, border: '1px solid #e8ecf1', boxShadow: '0 10px 24px rgba(15, 23, 42, 0.05)' }}>
           <Box sx={{ px: 1.5, pt: 1.35, pb: 1, borderBottom: '1px solid #eef2f6' }}>
             <Typography sx={{ fontSize: '12px', fontWeight: 800, color: '#102a43', textTransform: 'uppercase', letterSpacing: '0.45px' }}>
               Job Execution Status
@@ -578,7 +628,7 @@ export const ESPExecutiveOverview: React.FC<ESPExecutiveOverviewProps> = ({
                 rowKey={(row: any) => `${row.appl_name ?? ''}|${row.jobname ?? ''}|${row.last_run ?? ''}`}
                 compact
                 maxHeight={260}
-                tableMinWidth={740}
+                tableMinWidth={640}
                 pageSize={200}
                 accentColor="#1f5cb8"
                 headerBg="#1f5cb8"
@@ -589,7 +639,7 @@ export const ESPExecutiveOverview: React.FC<ESPExecutiveOverviewProps> = ({
           )}
         </Paper>
 
-        <Paper elevation={0} sx={{ borderRadius: 2.5, border: '1px solid #e8ecf1', boxShadow: '0 10px 24px rgba(15, 23, 42, 0.05)' }}>
+        <Paper elevation={0} sx={{ minWidth: 0, borderRadius: 2.5, border: '1px solid #e8ecf1', boxShadow: '0 10px 24px rgba(15, 23, 42, 0.05)' }}>
           <Box sx={{ px: 1.5, pt: 1.35, pb: 1, borderBottom: '1px solid #eef2f6' }}>
             <Typography sx={{ fontSize: '12px', fontWeight: 800, color: '#102a43', textTransform: 'uppercase', letterSpacing: '0.45px' }}>
               SLA Status
@@ -642,7 +692,7 @@ export const ESPExecutiveOverview: React.FC<ESPExecutiveOverviewProps> = ({
           )}
         </Paper>
 
-        <Paper elevation={0} sx={{ borderRadius: 2.5, border: '1px solid #e8ecf1', boxShadow: '0 10px 24px rgba(15, 23, 42, 0.05)', gridColumn: { xs: 'auto', lg: '1 / span 2' } }}>
+        <Paper elevation={0} sx={{ minWidth: 0, borderRadius: 2.5, border: '1px solid #e8ecf1', boxShadow: '0 10px 24px rgba(15, 23, 42, 0.05)', gridColumn: { xs: 'auto', md: '1 / span 2' } }}>
           <Box sx={{ px: 1.5, pt: 1.35, pb: 1, borderBottom: '1px solid #eef2f6' }}>
             <Typography sx={{ fontSize: '12px', fontWeight: 800, color: '#102a43', textTransform: 'uppercase', letterSpacing: '0.45px' }}>
               Job Dependencies
@@ -666,6 +716,138 @@ export const ESPExecutiveOverview: React.FC<ESPExecutiveOverviewProps> = ({
                 headerBg="#1f5cb8"
                 headerTextColor="#ffffff"
                 emptyMessage="No dependency rows"
+              />
+            </Box>
+          )}
+        </Paper>
+
+        <Paper elevation={0} sx={{ minWidth: 0, borderRadius: 2.5, border: '1px solid #e8ecf1', boxShadow: '0 10px 24px rgba(15, 23, 42, 0.05)' }}>
+          <Box sx={{ px: 1.5, pt: 1.35, pb: 1, borderBottom: '1px solid #eef2f6' }}>
+            <Typography sx={{ fontSize: '12px', fontWeight: 800, color: '#102a43', textTransform: 'uppercase', letterSpacing: '0.45px' }}>
+              Execution Forecast
+            </Typography>
+          </Box>
+          {slaLoading ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 220 }}><CircularProgress size={20} sx={{ color: '#1565c0' }} /></Box>
+          ) : slaError ? (
+            <Typography sx={{ fontSize: '11px', color: '#c62828', p: 1.5 }}>{slaError}</Typography>
+          ) : (
+            <Box sx={{ p: 1.25 }}>
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0.75, mb: 1.2 }}>
+                {[
+                  { label: 'Avg Exec Mins', value: `${Number(executionForecastMetrics.avg_exec_mins ?? 0).toFixed(1)} min` },
+                  { label: 'Avg CPU Mins', value: `${Number(executionForecastMetrics.avg_cpu_mins ?? 0).toFixed(1)} min` },
+                  { label: 'Samples Used', value: Number(executionForecastMetrics.total_samples ?? 0).toLocaleString('en-US') },
+                  { label: 'Print Lines', value: Number(executionForecastMetrics.total_print_lines ?? 0).toLocaleString('en-US') },
+                ].map((item) => (
+                  <Paper key={item.label} elevation={0} sx={{ border: '1px solid #e7edf3', borderRadius: 1.5, p: 0.85, backgroundColor: '#f8fbff' }}>
+                    <Typography sx={{ fontSize: '9px', color: '#607080', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.3px' }}>{item.label}</Typography>
+                    <Typography sx={{ mt: 0.35, fontSize: '17px', fontWeight: 800, color: '#102a43' }}>{item.value}</Typography>
+                  </Paper>
+                ))}
+              </Box>
+
+              <Typography sx={{ fontSize: '10px', fontWeight: 700, color: '#486581', textTransform: 'uppercase', mb: 0.6 }}>
+                Exec vs CPU by Applib
+              </Typography>
+              <Box>
+                {forecastExecByApplib.slice(0, 5).map((row) => {
+                  const maxVal = Math.max(...forecastExecByApplib.flatMap((r) => [Number(r.avg_exec_mins ?? 0), Number(r.avg_cpu_mins ?? 0)]), 1)
+                  const execPct = (Number(row.avg_exec_mins ?? 0) / maxVal) * 100
+                  const cpuPct = (Number(row.avg_cpu_mins ?? 0) / maxVal) * 100
+                  return (
+                    <Box key={String(row.appl_name ?? 'Unknown')} sx={{ mb: 0.75 }}>
+                      <Typography sx={{ fontSize: '10px', fontWeight: 700, color: '#334e68', mb: 0.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {row.appl_name ?? 'Unknown'}
+                      </Typography>
+                      <Box sx={{ display: 'grid', gridTemplateColumns: '44px 1fr 42px', alignItems: 'center', gap: 0.5, mb: 0.25 }}>
+                        <Typography sx={{ fontSize: '9px', color: '#1e5bb8' }}>Exec</Typography>
+                        <Box sx={{ height: 6, backgroundColor: '#e6ebf2', borderRadius: 1, overflow: 'hidden' }}><Box sx={{ height: '100%', width: `${execPct}%`, backgroundColor: '#1e5bb8' }} /></Box>
+                        <Typography sx={{ fontSize: '9px', color: '#486581', textAlign: 'right' }}>{Number(row.avg_exec_mins ?? 0).toFixed(1)}</Typography>
+                      </Box>
+                      <Box sx={{ display: 'grid', gridTemplateColumns: '44px 1fr 42px', alignItems: 'center', gap: 0.5 }}>
+                        <Typography sx={{ fontSize: '9px', color: '#2f9e44' }}>CPU</Typography>
+                        <Box sx={{ height: 6, backgroundColor: '#e6ebf2', borderRadius: 1, overflow: 'hidden' }}><Box sx={{ height: '100%', width: `${cpuPct}%`, backgroundColor: '#2f9e44' }} /></Box>
+                        <Typography sx={{ fontSize: '9px', color: '#486581', textAlign: 'right' }}>{Number(row.avg_cpu_mins ?? 0).toFixed(1)}</Typography>
+                      </Box>
+                    </Box>
+                  )
+                })}
+                {!forecastExecByApplib.length && <Typography sx={{ fontSize: '11px', color: '#94a3b8' }}>No forecast rows</Typography>}
+              </Box>
+            </Box>
+          )}
+        </Paper>
+
+        <Paper elevation={0} sx={{ minWidth: 0, borderRadius: 2.5, border: '1px solid #e8ecf1', boxShadow: '0 10px 24px rgba(15, 23, 42, 0.05)' }}>
+          <Box sx={{ px: 1.5, pt: 1.35, pb: 1, borderBottom: '1px solid #eef2f6' }}>
+            <Typography sx={{ fontSize: '12px', fontWeight: 800, color: '#102a43', textTransform: 'uppercase', letterSpacing: '0.45px' }}>
+              Job Config Health
+            </Typography>
+          </Box>
+          {slaLoading ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 220 }}><CircularProgress size={20} sx={{ color: '#1565c0' }} /></Box>
+          ) : slaError ? (
+            <Typography sx={{ fontSize: '11px', color: '#c62828', p: 1.5 }}>{slaError}</Typography>
+          ) : (
+            <Box sx={{ p: 1.25 }}>
+              <Typography sx={{ fontSize: '10px', fontWeight: 700, color: '#486581', textTransform: 'uppercase', mb: 0.5 }}>
+                Critical Jobs
+              </Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.45, mb: 1.0 }}>
+                {criticalJobsPills.slice(0, 8).map((row) => (
+                  <Chip
+                    key={`${row.appl_name ?? 'Unknown'}-${row.critical_job_count}`}
+                    label={`${row.appl_name ?? 'Unknown'} (${row.critical_job_count})`}
+                    size="small"
+                    sx={{
+                      height: 20,
+                      fontSize: '9px',
+                      fontWeight: 700,
+                      color: '#8a2d3b',
+                      backgroundColor: '#fff1f3',
+                      border: '1px solid #ffc9d2',
+                    }}
+                  />
+                ))}
+                {!criticalJobsPills.length && <Typography sx={{ fontSize: '11px', color: '#94a3b8' }}>No critical jobs</Typography>}
+              </Box>
+
+              <Typography sx={{ fontSize: '10px', fontWeight: 700, color: '#486581', textTransform: 'uppercase', mb: 0.5 }}>
+                Run Frequency
+              </Typography>
+              <Box sx={{ mb: 1.0 }}>
+                {runFrequencyBars.map((row) => {
+                  const maxVal = Math.max(...runFrequencyBars.map((r) => Number(r.job_count ?? 0)), 1)
+                  const pct = (Number(row.job_count ?? 0) / maxVal) * 100
+                  return (
+                    <Box key={String(row.frequency ?? 'UNKNOWN')} sx={{ mb: 0.45 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.15 }}>
+                        <Typography sx={{ fontSize: '9px', color: '#334e68', fontWeight: 700 }}>{row.frequency ?? 'UNKNOWN'}</Typography>
+                        <Typography sx={{ fontSize: '9px', color: '#334e68' }}>{row.job_count ?? 0}</Typography>
+                      </Box>
+                      <Box sx={{ height: 6, backgroundColor: '#e6ebf2', borderRadius: 1, overflow: 'hidden' }}><Box sx={{ height: '100%', width: `${pct}%`, backgroundColor: '#2f9e44' }} /></Box>
+                    </Box>
+                  )
+                })}
+                {!runFrequencyBars.length && <Typography sx={{ fontSize: '11px', color: '#94a3b8' }}>No run frequencies</Typography>}
+              </Box>
+
+              <Typography sx={{ fontSize: '10px', fontWeight: 700, color: '#486581', textTransform: 'uppercase', mb: 0.55 }}>
+                SLA Config by LOB
+              </Typography>
+              <DataTable
+                columns={slaConfigByLobColumns}
+                rows={slaConfigByLob}
+                rowKey={(row: any) => `${row.appl_name ?? ''}|${row.sla_time ?? ''}|${row.last_updated ?? ''}`}
+                compact
+                maxHeight={180}
+                tableMinWidth={760}
+                pageSize={200}
+                accentColor="#1f5cb8"
+                headerBg="#1f5cb8"
+                headerTextColor="#ffffff"
+                emptyMessage="No SLA config rows"
               />
             </Box>
           )}

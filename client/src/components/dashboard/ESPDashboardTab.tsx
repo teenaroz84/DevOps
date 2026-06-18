@@ -86,6 +86,37 @@ interface EspGroupedWidgetsResponse {
     predecessor_job: string | null
     predecessor_applib: string | null
   }>
+  execution_forecast_metrics?: {
+    avg_exec_mins: number
+    avg_cpu_mins: number
+    total_samples: number
+    total_print_lines: number
+  }
+  forecast_exec_by_applib?: Array<{
+    appl_name: string | null
+    avg_exec_mins: number
+    avg_cpu_mins: number
+    job_count: number
+  }>
+  critical_jobs_pills?: Array<{
+    appl_name: string | null
+    critical_ind: string | null
+    critical_job_count: number
+  }>
+  run_frequency_bars?: Array<{
+    frequency: string | null
+    job_count: number
+  }>
+  sla_config_by_lob?: Array<{
+    appl_name: string | null
+    sla_time: string | null
+    lob: string | null
+    sub_lob: string | null
+    holiday_run_ind: string | null
+    critical_ind: string | null
+    job_count: number
+    last_updated: string | null
+  }>
 }
 
 const TREND_RUN_COLORS  = ['#1565c0', '#2e7d32', '#6a1b9a', '#00838f']
@@ -291,6 +322,32 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
         { appl_name: 'CCDSFD201FT', jobname: 'CCDSFD2012FT', release: 'PROC', external_ind: 'INT', predecessor_job: 'CCDSFD0202FT', predecessor_applib: 'SFDPD2' },
         { appl_name: 'SFDPACCT2REP_PROD', jobname: 'SFDPACCT2REP_PROD', release: 'PROC', external_ind: 'EXT', predecessor_job: 'SFDPACCTOURBAL_PROD', predecessor_applib: 'SFDPD2' },
       ],
+      execution_forecast_metrics: {
+        avg_exec_mins: 18.4,
+        avg_cpu_mins: 6.2,
+        total_samples: 145,
+        total_print_lines: 2100,
+      },
+      forecast_exec_by_applib: [
+        { appl_name: 'SFDPD2', avg_exec_mins: 22.1, avg_cpu_mins: 7.1, job_count: 64 },
+        { appl_name: 'SFDPEGEM', avg_exec_mins: 17.8, avg_cpu_mins: 5.2, job_count: 48 },
+        { appl_name: 'SFDPEVCJ', avg_exec_mins: 12.4, avg_cpu_mins: 4.1, job_count: 35 },
+      ],
+      critical_jobs_pills: [
+        { appl_name: 'SFDPEMCO', critical_ind: 'Y', critical_job_count: 8 },
+        { appl_name: 'SFDPEGEM', critical_ind: 'Y', critical_job_count: 7 },
+        { appl_name: 'SFDPD2', critical_ind: 'Y', critical_job_count: 6 },
+      ],
+      run_frequency_bars: [
+        { frequency: 'DAILY', job_count: 312 },
+        { frequency: 'WEEKLY', job_count: 148 },
+        { frequency: 'MONTHLY', job_count: 56 },
+        { frequency: 'ON DEMAND', job_count: 25 },
+      ],
+      sla_config_by_lob: [
+        { appl_name: 'SFDPMCD', sla_time: '08:00 PM', lob: 'Retail', sub_lob: 'Core', holiday_run_ind: 'N', critical_ind: 'CRIT', job_count: 12, last_updated: '2026-06-17T21:10:00' },
+        { appl_name: 'SFDPEGEM', sla_time: '10:00 PM', lob: 'Ops', sub_lob: 'Batch', holiday_run_ind: 'Y', critical_ind: 'CRIT', job_count: 9, last_updated: '2026-06-17T20:45:00' },
+      ],
     }
 
     return { cards, kpis, jobRunTrend, jobRunAgents, jobTypeDistribution, groupedWidgets }
@@ -370,6 +427,16 @@ export const ESPDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void
           sla_status_bars: Array.isArray(response?.sla_status_bars) ? response.sla_status_bars : [],
           sla_recent_events: Array.isArray(response?.sla_recent_events) ? response.sla_recent_events : [],
           job_dependencies: Array.isArray(response?.job_dependencies) ? response.job_dependencies : [],
+          execution_forecast_metrics: response?.execution_forecast_metrics ?? {
+            avg_exec_mins: 0,
+            avg_cpu_mins: 0,
+            total_samples: 0,
+            total_print_lines: 0,
+          },
+          forecast_exec_by_applib: Array.isArray(response?.forecast_exec_by_applib) ? response.forecast_exec_by_applib : [],
+          critical_jobs_pills: Array.isArray(response?.critical_jobs_pills) ? response.critical_jobs_pills : [],
+          run_frequency_bars: Array.isArray(response?.run_frequency_bars) ? response.run_frequency_bars : [],
+          sla_config_by_lob: Array.isArray(response?.sla_config_by_lob) ? response.sla_config_by_lob : [],
         })
       })
       .catch((error: Error) => {

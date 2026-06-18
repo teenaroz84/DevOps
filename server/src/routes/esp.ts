@@ -32,6 +32,11 @@ import {
   buildEspGroupedSlaStatusBarsQuery,
   buildEspGroupedSlaRecentEventsQuery,
   buildEspGroupedJobDependenciesQuery,
+  buildEspGroupedExecutionForecastMetricsQuery,
+  buildEspGroupedForecastExecByApplibQuery,
+  buildEspGroupedCriticalJobsPillsQuery,
+  buildEspGroupedRunFrequencyBarsQuery,
+  buildEspGroupedSlaConfigByLobQuery,
   type EspOverviewIntervalDays,
 } from './queries/espExecutiveDashboardQueries';
 
@@ -126,6 +131,52 @@ function mapGroupedJobDependencyRow(row: any) {
     external_ind: row.external_ind ?? null,
     predecessor_job: row.predecessor_job ?? null,
     predecessor_applib: row.predecessor_applib ?? null,
+  };
+}
+
+function mapGroupedExecutionForecastMetricRow(row: any) {
+  return {
+    avg_exec_mins: row.avg_exec_mins != null ? parseFloat(row.avg_exec_mins) : 0,
+    avg_cpu_mins: row.avg_cpu_mins != null ? parseFloat(row.avg_cpu_mins) : 0,
+    total_samples: parseInt(row.total_samples ?? '0', 10),
+    total_print_lines: parseInt(row.total_print_lines ?? '0', 10),
+  };
+}
+
+function mapGroupedForecastExecByApplibRow(row: any) {
+  return {
+    appl_name: row.appl_name ?? null,
+    avg_exec_mins: row.avg_exec_mins != null ? parseFloat(row.avg_exec_mins) : 0,
+    avg_cpu_mins: row.avg_cpu_mins != null ? parseFloat(row.avg_cpu_mins) : 0,
+    job_count: parseInt(row.job_count ?? '0', 10),
+  };
+}
+
+function mapGroupedCriticalJobsPillRow(row: any) {
+  return {
+    appl_name: row.appl_name ?? null,
+    critical_ind: row.critical_ind ?? null,
+    critical_job_count: parseInt(row.critical_job_count ?? '0', 10),
+  };
+}
+
+function mapGroupedRunFrequencyRow(row: any) {
+  return {
+    frequency: row.frequency ?? 'UNKNOWN',
+    job_count: parseInt(row.job_count ?? '0', 10),
+  };
+}
+
+function mapGroupedSlaConfigByLobRow(row: any) {
+  return {
+    appl_name: row.appl_name ?? null,
+    sla_time: row.sla_time ?? null,
+    lob: row.lob ?? null,
+    sub_lob: row.sub_lob ?? null,
+    holiday_run_ind: row.holiday_run_ind ?? null,
+    critical_ind: row.critical_ind ?? null,
+    job_count: parseInt(row.job_count ?? '0', 10),
+    last_updated: row.last_updated ? String(row.last_updated) : null,
   };
 }
 
@@ -296,7 +347,8 @@ router.get('/job-type-distribution', async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/esp/overview-sla-grouped — grouped widgets for Job Execution Status, SLA Status and Job Dependencies.
+// GET /api/esp/overview-sla-grouped — grouped widgets for Job Execution Status, SLA Status,
+// Job Dependencies, Execution Forecast, and Job Config Health.
 router.get('/overview-sla-grouped', async (req: Request, res: Response) => {
   try {
     const pool = getPgPool();
@@ -312,7 +364,17 @@ router.get('/overview-sla-grouped', async (req: Request, res: Response) => {
       }
     };
 
-    const [jobExecutionStatus, slaStatusBars, slaRecentEvents, jobDependencies] = await Promise.all([
+    const [
+      jobExecutionStatus,
+      slaStatusBars,
+      slaRecentEvents,
+      jobDependencies,
+      executionForecastMetrics,
+      forecastExecByApplib,
+      criticalJobsPills,
+      runFrequencyBars,
+      slaConfigByLob,
+    ] = await Promise.all([
       safe(async () => {
         const result = await pool.query(buildEspGroupedJobExecutionStatusQuery(opts));
         return result.rows.map(mapGroupedJobExecutionStatusRow);
@@ -329,6 +391,31 @@ router.get('/overview-sla-grouped', async (req: Request, res: Response) => {
         const result = await pool.query(buildEspGroupedJobDependenciesQuery(opts));
         return result.rows.map(mapGroupedJobDependencyRow);
       }, [] as any[]),
+      safe(async () => {
+        const result = await pool.query(buildEspGroupedExecutionForecastMetricsQuery(opts));
+        return mapGroupedExecutionForecastMetricRow(result.rows[0] ?? {});
+      }, {
+        avg_exec_mins: 0,
+        avg_cpu_mins: 0,
+        total_samples: 0,
+        total_print_lines: 0,
+      }),
+      safe(async () => {
+        const result = await pool.query(buildEspGroupedForecastExecByApplibQuery(opts));
+        return result.rows.map(mapGroupedForecastExecByApplibRow);
+      }, [] as any[]),
+      safe(async () => {
+        const result = await pool.query(buildEspGroupedCriticalJobsPillsQuery(opts));
+        return result.rows.map(mapGroupedCriticalJobsPillRow);
+      }, [] as any[]),
+      safe(async () => {
+        const result = await pool.query(buildEspGroupedRunFrequencyBarsQuery(opts));
+        return result.rows.map(mapGroupedRunFrequencyRow);
+      }, [] as any[]),
+      safe(async () => {
+        const result = await pool.query(buildEspGroupedSlaConfigByLobQuery(opts));
+        return result.rows.map(mapGroupedSlaConfigByLobRow);
+      }, [] as any[]),
     ]);
 
     res.json({
@@ -339,6 +426,11 @@ router.get('/overview-sla-grouped', async (req: Request, res: Response) => {
       sla_status_bars: slaStatusBars,
       sla_recent_events: slaRecentEvents,
       job_dependencies: jobDependencies,
+      execution_forecast_metrics: executionForecastMetrics,
+      forecast_exec_by_applib: forecastExecByApplib,
+      critical_jobs_pills: criticalJobsPills,
+      run_frequency_bars: runFrequencyBars,
+      sla_config_by_lob: slaConfigByLob,
     });
   } catch (err: any) {
     console.error('ESP overview-sla-grouped error:', err.message);
