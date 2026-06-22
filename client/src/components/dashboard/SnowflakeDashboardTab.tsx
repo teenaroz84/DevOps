@@ -56,19 +56,6 @@ const TRUIST = {
   mist: '#EEF7F8',
 } as const
 
-const toIsoDate = (date: Date) => {
-  const year = date.getUTCFullYear()
-  const month = String(date.getUTCMonth() + 1).padStart(2, '0')
-  const day = String(date.getUTCDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
-const shiftIsoDate = (isoDate: string, daysBack: number) => {
-  const shifted = new Date(`${isoDate}T00:00:00Z`)
-  shifted.setUTCDate(shifted.getUTCDate() - daysBack)
-  return toIsoDate(shifted)
-}
-
 const fmtK = (n: number) => {
   if (!Number.isFinite(n)) return '—'
   if (Math.abs(n) < 1000) return `$${Math.round(n).toLocaleString('en-US')}`
@@ -659,9 +646,7 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
   const [platformLoading, setPlatformLoading] = useState(true)
   const [platformAnalyticsLoading, setPlatformAnalyticsLoading] = useState(false)
   const [costLoading, setCostLoading] = useState(false)
-  const todayIsoDate = toIsoDate(new Date())
-  const selectedAsOfDate = lookback === 'all' ? null : shiftIsoDate(todayIsoDate, lookback)
-  const queryParams = selectedAsOfDate ? { asOf: selectedAsOfDate } : undefined
+  const queryParams = lookback === 'all' ? undefined : { days: lookback }
   const [costData, setCostData] = useState<CostData>({
     summary: EMPTY_COST_SUMMARY,
     byPipeline: [],
@@ -777,7 +762,7 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
       if (successCount > 0) setIsLive(true)
     })
     return () => { alive = false }
-  }, [useMock, selectedAsOfDate])
+  }, [useMock, lookback])
 
   useEffect(() => {
     if (useMock) return
@@ -822,7 +807,7 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
     return () => {
       alive = false
     }
-  }, [useMock, selectedAsOfDate])
+  }, [useMock, lookback])
 
   const SUB_TABS: { key: SubTab; label: string; icon: React.ReactElement; accent: string }[] = [
     { key: 'platform', label: 'Platform Intelligence', icon: <QueryStatsIcon />,  accent: TRUIST.purple },
