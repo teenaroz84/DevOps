@@ -87,22 +87,26 @@ function sqlEffectiveSinceTimestamp(req: Request, fallbackDays: number): string 
 
 // ─── GET /api/snowflake/cost-summary ──────────────────────
 router.get('/cost-summary', async (req: Request, res: Response) => {
-  const windowEndDate = sqlRefDate(req);
-  const rollingWindowStartDate = sqlEffectiveSinceDate(req, 30);
-  const opportunityWindowStartDate = sqlEffectiveSinceDate(req, 7);
-  const opportunityWindowStartTimestamp = sqlEffectiveSinceTimestamp(req, 7);
-  const costMtdStartDate = isTodayAsOfDate(req) ? windowEndDate : `DATE_TRUNC('month', ${windowEndDate})::date`;
+  const hasDaysFilter = Number.isFinite(Number(req.query.days));
+  const lookbackDays = hasDaysFilter ? getLookbackDays(req, 30) : null;
+  const windowEndDate = `(SELECT MAX(NULLIF(usage_date::text, '')::date) FROM edoops.sf_usage_in_currency_daily)`;
+  const rollingWindowStartDate = lookbackDays === null
+    ? `(SELECT MIN(NULLIF(usage_date::text, '')::date) FROM edoops.sf_usage_in_currency_daily)`
+    : `(${windowEndDate} - INTERVAL '${lookbackDays} day')`;
+  const opportunityWindowStartDate = `(${windowEndDate} - INTERVAL '7 day')`;
+  const opportunityWindowStartTimestamp = `(${windowEndDate}::timestamp - INTERVAL '7 day')`;
+  const costMtdStartDate = `DATE_TRUNC('month', ${windowEndDate})::date`;
   const rows = await safeQuery(`
     WITH cost_today_cte AS (
       SELECT ROUND(COALESCE(SUM(NULLIF(usage_in_currency::text, '')::numeric), 0)::numeric, 2) AS cost_today
       FROM edoops.sf_usage_in_currency_daily
-      WHERE usage_date = ${windowEndDate}
+      WHERE NULLIF(usage_date::text, '')::date = ${windowEndDate}
     ),
     cost_mtd_cte AS (
       SELECT ROUND(COALESCE(SUM(NULLIF(usage_in_currency::text, '')::numeric), 0)::numeric, 2) AS cost_mtd
       FROM edoops.sf_usage_in_currency_daily
-      WHERE usage_date >= ${costMtdStartDate}
-        AND usage_date <= ${windowEndDate}
+      WHERE NULLIF(usage_date::text, '')::date >= ${costMtdStartDate}
+        AND NULLIF(usage_date::text, '')::date <= ${windowEndDate}
     ),
     burn_cte AS (
       SELECT ROUND(COALESCE(AVG(daily_cost::numeric), 0)::numeric, 2) AS avg_daily_burn_30d
