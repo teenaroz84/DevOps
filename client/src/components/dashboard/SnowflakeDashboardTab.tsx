@@ -5,7 +5,7 @@
  *   2. Cost & Efficiency Overview
  */
 import React, { useState, useEffect } from 'react'
-import { Box, Typography, Paper, Chip, CircularProgress, Slider, Tooltip } from '@mui/material'
+import { Box, Typography, Paper, Chip, CircularProgress, Button, Tooltip } from '@mui/material'
 import AcUnitIcon from '@mui/icons-material/AcUnit'
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney'
 import QueryStatsIcon from '@mui/icons-material/QueryStats'
@@ -56,8 +56,6 @@ const TRUIST = {
   mist: '#EEF7F8',
 } as const
 
-const SAMPLE_AS_OF_DATE = '2026-03-12'
-
 const toIsoDate = (date: Date) => {
   const year = date.getUTCFullYear()
   const month = String(date.getUTCMonth() + 1).padStart(2, '0')
@@ -70,13 +68,6 @@ const shiftIsoDate = (isoDate: string, daysBack: number) => {
   shifted.setUTCDate(shifted.getUTCDate() - daysBack)
   return toIsoDate(shifted)
 }
-
-const formatDisplayDate = (isoDate: string) => new Intl.DateTimeFormat('en-US', {
-  month: 'short',
-  day: 'numeric',
-  year: 'numeric',
-  timeZone: 'UTC',
-}).format(new Date(`${isoDate}T00:00:00Z`))
 
 const fmtK = (n: number) => {
   if (!Number.isFinite(n)) return '—'
@@ -650,20 +641,27 @@ const PlatformIntelligenceScreen: React.FC<{ data: PlatformData; queriesDayLabel
 // ── Main exported component ───────────────────────────────
 
 type SubTab = 'cost' | 'platform'
+type LookbackOption = 30 | 60 | 90 | 'all'
+
+const LOOKBACK_OPTIONS: Array<{ value: LookbackOption; label: string }> = [
+  { value: 30, label: '30d' },
+  { value: 60, label: '60d' },
+  { value: 90, label: '90d' },
+  { value: 'all', label: 'All' },
+]
 
 export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void }> = ({ onOpenAgent }) => {
   const { useMock } = useMockData()
+  void onOpenAgent
   const [subTab, setSubTab] = useState<SubTab>('platform')
-  const [days, setDays] = useState(30)
-  const [sliderDays, setSliderDays] = useState(30)
-  const [asOfOption, setAsOfOption] = useState<'sample' | 'current'>('sample')
+  const [lookback, setLookback] = useState<LookbackOption>(30)
   const [isLive, setIsLive] = useState(false)
   const [platformLoading, setPlatformLoading] = useState(true)
   const [platformAnalyticsLoading, setPlatformAnalyticsLoading] = useState(false)
   const [costLoading, setCostLoading] = useState(false)
   const todayIsoDate = toIsoDate(new Date())
-  const selectedAsOfDate = asOfOption === 'sample' ? SAMPLE_AS_OF_DATE : shiftIsoDate(todayIsoDate, days)
-  const queryParams = { asOf: selectedAsOfDate }
+  const selectedAsOfDate = lookback === 'all' ? null : shiftIsoDate(todayIsoDate, lookback)
+  const queryParams = selectedAsOfDate ? { asOf: selectedAsOfDate } : undefined
   const [costData, setCostData] = useState<CostData>({
     summary: EMPTY_COST_SUMMARY,
     byPipeline: [],
@@ -684,10 +682,6 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
     storageGrowth: [],
     alert: 'Loading live Snowflake data...',
   })
-
-  useEffect(() => {
-    setSliderDays(days)
-  }, [days])
 
   useEffect(() => {
     let alive = true
@@ -836,36 +830,8 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
   ]
 
   const loading = subTab === 'platform' ? platformLoading : costLoading
-  const previewAsOfDate = asOfOption === 'sample' ? SAMPLE_AS_OF_DATE : shiftIsoDate(todayIsoDate, sliderDays)
-  const sliderValue = asOfOption === 'sample' ? 0 : sliderDays
-  const sliderLabel = asOfOption === 'sample' ? 'Sample Date' : formatDisplayDate(previewAsOfDate)
-  const isCurrentDateOnly = asOfOption === 'current' && days === 0
-  const costDayLabel = isCurrentDateOnly ? 'Cost' : 'Cost Today'
+  const costDayLabel = lookback === 'all' ? 'Cost' : 'Cost Today'
   const queriesDayLabel =  'Queries Today' 
-
-  const handleLookbackChange = (_: Event, value: number | number[]) => {
-    const nextDays = Number(Array.isArray(value) ? value[0] : value)
-    setSliderDays(nextDays)
-    setAsOfOption('current')
-  }
-
-  const handleLookbackCommit = (_: Event | React.SyntheticEvent, value: number | number[]) => {
-    const nextDays = Number(Array.isArray(value) ? value[0] : value)
-    setSliderDays(nextDays)
-    setDays(nextDays)
-    setAsOfOption('current')
-  }
-
-  const handleSelectSampleDate = () => {
-    setSliderDays(0)
-    setAsOfOption('sample')
-  }
-
-  const handleSelectCurrentDate = () => {
-    setSliderDays(0)
-    setDays(0)
-    setAsOfOption('current')
-  }
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
@@ -917,64 +883,39 @@ export const SnowflakeDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) =
           </Box>
 
           {!useMock && (
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1.5, flexWrap: 'nowrap', py: 0.5, flexShrink: 0, minWidth: { xs: '100%', md: 'auto' } }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0, minWidth: { xs: 0, md: 220 } }}>
-                <Typography sx={{ fontSize: '11px', color: asOfOption === 'sample' ? '#90a4ae' : '#777', whiteSpace: 'nowrap', flexShrink: 0 }}>{sliderLabel}</Typography>
-                <Slider
-                  min={0}
-                  max={30}
-                  step={1}
-                  value={sliderValue}
-                  onChange={handleLookbackChange}
-                  onChangeCommitted={handleLookbackCommit}
-                  valueLabelDisplay="auto"
-                  sx={{
-                    color: TRUIST.purple,
-                    width: { xs: 120, md: 140, lg: 170 },
-                    flexShrink: 0,
-                    '& .MuiSlider-thumb': { width: 12, height: 12 },
-                    '& .MuiSlider-rail': { opacity: 0.3 },
-                  }}
-                />
-                <Typography sx={{ fontSize: '10px', color: '#bbb', whiteSpace: 'nowrap', flexShrink: 0 }}>30d</Typography>
-              </Box>
+            <Box sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.6, flexWrap: 'wrap', py: 0.5, flexShrink: 0, minWidth: { xs: '100%', md: 'auto' } }}>
+              {LOOKBACK_OPTIONS.map((option) => {
+                const active = option.value === lookback
+                return (
+                  <Button
+                    key={option.label}
+                    size="small"
+                    onClick={() => setLookback(option.value)}
+                    sx={{
+                      minWidth: 46,
+                      px: 1.2,
+                      py: 0.3,
+                      fontSize: '10px',
+                      fontWeight: active ? 800 : 600,
+                      textTransform: 'none',
+                      lineHeight: 1.2,
+                      borderRadius: '999px',
+                      color: active ? '#0f6cbd' : '#64748b',
+                      backgroundColor: active ? '#e3f2fd' : '#f8fafc',
+                      border: `1px solid ${active ? '#90caf9' : '#d9e2ec'}`,
+                      '&:hover': {
+                        backgroundColor: active ? '#d7ecff' : '#eef2f7',
+                        borderColor: active ? '#64b5f6' : '#c9d4e1',
+                      },
+                    }}
+                  >
+                    {option.label}
+                  </Button>
+                )
+              })}
             </Box>
           )}
         </Box>
-
-        {!useMock && (
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1, flexWrap: 'wrap', py: 0.5 }}>
-            <Typography sx={{ fontSize: '10px', color: '#607d8b', fontWeight: 700, textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
-              Reference Date
-            </Typography>
-            <Chip
-              size="small"
-              label={formatDisplayDate(SAMPLE_AS_OF_DATE)}
-              onClick={handleSelectSampleDate}
-              sx={{
-                fontSize: '10px',
-                height: 22,
-                fontWeight: 700,
-                backgroundColor: asOfOption === 'sample' ? '#e3f2fd' : '#f4f7fb',
-                color: asOfOption === 'sample' ? TRUIST.purple : TRUIST.dusk,
-                border: asOfOption === 'sample' ? `1px solid ${TRUIST.dawn}` : `1px solid ${TRUIST.lightGray}`,
-              }}
-            />
-            <Chip
-              size="small"
-              label="Current Date"
-              onClick={handleSelectCurrentDate}
-              sx={{
-                fontSize: '10px',
-                height: 22,
-                fontWeight: 700,
-                backgroundColor: asOfOption === 'current' ? TRUIST.mist : '#f4f7fb',
-                color: asOfOption === 'current' ? TRUIST.charcoal : TRUIST.dusk,
-                border: asOfOption === 'current' ? `1px solid ${TRUIST.sky}` : `1px solid ${TRUIST.lightGray}`,
-              }}
-            />
-          </Box>
-        )}
 
       </Paper>
 
