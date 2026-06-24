@@ -13,7 +13,6 @@
  */
 
 import { AGENT_BRAND } from '../theme/truistPalette'
-import { config } from './index'
 
 const HEALTH_CHECK_ICON = `data:image/svg+xml;utf8,${encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#14323B"/><path d="M18 34h9l5-11 7 20 4-9h7" fill="none" stroke="#B0E0E2" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="49" cy="18" r="7" fill="#FFFFFF"/><path d="M49 14v8M45 18h8" stroke="#14323B" stroke-width="3" stroke-linecap="round"/></svg>',
@@ -164,7 +163,6 @@ export const AGENTS: Record<string, AgentConfig> = {
     streamEndpoint: '/api/talend/chat/stream',
     placeholder: 'Ask about Talend jobs, errors, pipelines…',
     welcomeMessage: `Hi - Welcome! I am your Talend Integration Agent.`,
-    chatApiBaseUrlOverride: config.talendChatApiBaseUrl,
     quickActions: [
       { label: '❌ Failed jobs today',  query: 'Which Talend jobs failed today?' },
       { label: '⏱  Long-running jobs', query: 'Which jobs are running longer than expected?' },
@@ -179,11 +177,10 @@ export const AGENTS: Record<string, AgentConfig> = {
     subtitle: 'Talend Integration · Browser Session Chat',
     color: AGENT_BRAND.talend,
     icon: '/agent-icons/TalendLogAgent.png',
-    endpoint: '/api/talend/chat',
-    streamEndpoint: '/api/talend/chat/stream',
+    endpoint: '/api/talend-integrated/chat',
+    streamEndpoint: '/api/talend-integrated/chat/stream',
     placeholder: 'Ask about Talend jobs, errors, pipelines…',
     welcomeMessage: 'Hi - Welcome! I am your Integrated Agent.',
-    chatApiBaseUrlOverride: config.talendIntegratedChatApiBaseUrl,
     quickActions: [
       
     ],
