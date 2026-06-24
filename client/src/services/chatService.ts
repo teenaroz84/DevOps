@@ -15,8 +15,9 @@ function buildQueryString(params: Record<string, string | undefined>): string {
   return serialized ? `?${serialized}` : ''
 }
 
-async function chatRequest<T>(path: string, body: unknown): Promise<T> {
-  const url = `${config.chatApiBaseUrl}${path}`
+async function chatRequest<T>(path: string, body: unknown, chatApiBaseUrlOverride?: string): Promise<T> {
+  const baseUrl = chatApiBaseUrlOverride ?? config.chatApiBaseUrl
+  const url = `${baseUrl}${path}`
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -113,8 +114,10 @@ async function streamRequest(
   body: unknown,
   onChunk: (chunk: string) => void,
   signal?: AbortSignal,
+  chatApiBaseUrlOverride?: string,
 ): Promise<void> {
-  const url = `${config.chatApiBaseUrl}${path}`
+  const baseUrl = chatApiBaseUrlOverride ?? config.chatApiBaseUrl
+  const url = `${baseUrl}${path}`
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -170,6 +173,7 @@ export const chatService = {
     conversationHistory?: ConversationHistoryEntry[],
     sendPromptField = false,
     healthCheckSelection?: HealthCheckSelectionPayload,
+    chatApiBaseUrlOverride?: string,
   ) => {
     const raw = await chatRequest<ChatApiResponse>(endpoint, {
       session_id: sessionId,
@@ -185,7 +189,7 @@ export const chatService = {
             selected_hc_type: healthCheckSelection.selectedHealthCheckType,
           }
         : {}),
-    })
+    }, chatApiBaseUrlOverride)
     return normaliseResponse(raw)
   },
 
@@ -265,6 +269,7 @@ export const chatService = {
     sessionId = SESSION_ID,
     userId?: string,
     browserSessionId = SESSION_ID,
+    chatApiBaseUrlOverride?: string,
   ): Promise<void> => {
     return streamRequest(
       streamEndpoint,
@@ -278,6 +283,7 @@ export const chatService = {
       },
       onChunk,
       signal,
+      chatApiBaseUrlOverride,
     )
   },
 

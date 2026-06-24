@@ -990,6 +990,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, popupMode = 'de
                 selectedHealthCheckType: resolvedHealthCheckSelection.checkType,
               }
             : undefined,
+          agent.chatApiBaseUrlOverride,
         )
         // sessionStore.setChat({ lastAgentId: agent.id })
         const agentResponse: Message = {
