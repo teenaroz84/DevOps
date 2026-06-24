@@ -38,6 +38,10 @@ export interface AgentConfig {
   welcomeMessage: string
   /** Chips shown when the conversation is empty */
   quickActions: Array<{ label: string; query: string }>
+  /** Reuse the browser session id as chat session_id instead of generating a popup/chat-specific id */
+  useBrowserSessionAsSessionId?: boolean
+  /** Include a prompt field alongside message when calling the chat API */
+  sendPromptField?: boolean
 }
 
 export type AgentPopupMode = 'default' | 'maximized'
@@ -163,6 +167,26 @@ export const AGENTS: Record<string, AgentConfig> = {
       { label: '📊 Success rate',       query: 'What is the overall job success rate this week?' },
       { label: '🔁 Retry patterns',     query: 'Which jobs have the most retries?' },
     ],
+  },
+
+  'talend-integrated': {
+    id: 'talend-integrated',
+    name: 'Integrated Agent',
+    subtitle: 'Talend Integration · Browser Session Chat',
+    color: AGENT_BRAND.talend,
+    icon: '/agent-icons/TalendLogAgent.png',
+    endpoint: '/talend/chat',
+    streamEndpoint: '/talend/chat/stream',
+    placeholder: 'Ask about Talend jobs, errors, pipelines…',
+    welcomeMessage: 'Hi - Welcome! I am your Integrated Agent.',
+    quickActions: [
+      { label: '❌ Failed jobs today',  query: 'Which Talend jobs failed today?' },
+      { label: '⏱  Long-running jobs', query: 'Which jobs are running longer than expected?' },
+      { label: '📊 Success rate',       query: 'What is the overall job success rate this week?' },
+      { label: '🔁 Retry patterns',     query: 'Which jobs have the most retries?' },
+    ],
+    useBrowserSessionAsSessionId: true,
+    sendPromptField: true,
   },
 
   snowflake: {

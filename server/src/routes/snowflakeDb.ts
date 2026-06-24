@@ -126,9 +126,9 @@ router.get('/cost-summary', async (req: Request, res: Response) => {
         + COALESCE(NULLIF(marketplace_capacity_drawdown_balance::text, '')::numeric, 0)
       )::numeric, 2) AS remaining_balance
       FROM edoops.sf_remaining_balance_daily
-      WHERE date = (
-        SELECT MAX(date) FROM edoops.sf_remaining_balance_daily
-        WHERE date <= ${windowEndDate}
+      WHERE NULLIF(date::text, '')::date = (
+        SELECT MAX(NULLIF(date::text, '')::date) FROM edoops.sf_remaining_balance_daily
+        WHERE NULLIF(date::text, '')::date <= ${windowEndDate}
       )
     ),
     opp_cte AS (

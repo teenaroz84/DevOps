@@ -286,7 +286,23 @@ const MetricCard: React.FC<{
   subtitle: string
   tone: keyof typeof KPI_CARD_STYLES
   isAllTime?: boolean
-}> = ({ title, value, valueSuffix, deltaPercent, deltaLabel, sparkline, subtitle, tone, isAllTime = false }) => {
+  displayValue?: string
+  footerText?: string
+  hideSparkline?: boolean
+}> = ({
+  title,
+  value,
+  valueSuffix,
+  deltaPercent,
+  deltaLabel,
+  sparkline,
+  subtitle,
+  tone,
+  isAllTime = false,
+  displayValue,
+  footerText,
+  hideSparkline = false,
+}) => {
   const style = KPI_CARD_STYLES[tone]
   const sparklineWidth = 116
   const sparklineHeight = 24
@@ -350,31 +366,37 @@ const MetricCard: React.FC<{
       </Box>
       <Box>
         <Typography sx={{ fontSize: '24px', fontWeight: 800, color: '#102a43', letterSpacing: '-0.4px', lineHeight: 1.05 }}>
-          {valueSuffix ? `${Number(value || 0).toFixed(1)}${valueSuffix}` : formatMetric(value)}
+          {displayValue ?? (valueSuffix ? `${Number(value || 0).toFixed(1)}${valueSuffix}` : formatMetric(value))}
         </Typography>
         <Typography sx={{ mt: 0.5, fontSize: '10px', color: '#607080', lineHeight: 1.4 }}>
           {subtitle}
         </Typography>
       </Box>
       <Typography sx={{ fontSize: '9px', fontWeight: 700, color: style.chipColor, textTransform: 'uppercase', letterSpacing: '0.3px' }}>
-        {isAllTime
+        {footerText ?? (isAllTime
           ? 'Full history view'
-          : `${deltaArrow} ${deltaPercent === null ? 'N/A' : `${Math.abs(deltaPercent).toFixed(1)}%`} ${deltaLabel}`}
+          : `${deltaArrow} ${deltaPercent === null ? 'N/A' : `${Math.abs(deltaPercent).toFixed(1)}%`} ${deltaLabel}`)}
       </Typography>
-      <Box sx={{ mt: 0.45 }}>
-        <svg width={sparklineWidth} height={sparklineHeight} viewBox={`0 0 ${sparklineWidth} ${sparklineHeight}`}>
-          <polyline
-            fill="none"
-            stroke={style.accent}
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            points={points}
-          />
-        </svg>
-      </Box>
+      {!hideSparkline && (
+        <Box sx={{ mt: 0.45 }}>
+          <svg width={sparklineWidth} height={sparklineHeight} viewBox={`0 0 ${sparklineWidth} ${sparklineHeight}`}>
+            <polyline
+              fill="none"
+              stroke={style.accent}
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              points={points}
+            />
+          </svg>
+        </Box>
+      )}
     </Paper>
   )
+}
+
+type MetricCardData = React.ComponentProps<typeof MetricCard> & {
+  key: string
 }
 
 export const ServiceNowIncidentsOverview: React.FC = () => {
@@ -508,7 +530,7 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
     [summary.closed_current, summary.new_current, summary.open_current],
   )
 
-  const metricCards = useMemo(
+  const metricCards = useMemo<MetricCardData[]>(
     () => {
       const aiCurrentRate = summary.ai_total_current > 0
         ? (100 * summary.ai_triaged_current) / summary.ai_total_current
@@ -581,11 +603,13 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
         key: 'ai',
         title: 'AI RAG Triage Rate',
         value: aiCurrentRate,
-        valueSuffix: '%',
+        displayValue: '--%',
         deltaPercent: getPercentChange(aiCurrentRate, aiPrevRate),
         deltaLabel: days === 'all' ? 'vs previous period' : `vs prev ${days}d`,
         sparkline: sparklineByKey.ai,
         subtitle: '',
+        footerText: 'For furture',
+        hideSparkline: true,
         tone: 'total' as const,
       },
     ]
@@ -952,6 +976,9 @@ export const ServiceNowIncidentsOverview: React.FC = () => {
                   subtitle={card.subtitle}
                   tone={card.tone}
                   isAllTime={isAllTime}
+                  displayValue={card.displayValue}
+                  footerText={card.footerText}
+                  hideSparkline={card.hideSparkline}
                 />
               ))}
             </Box>

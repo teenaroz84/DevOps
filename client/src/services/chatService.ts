@@ -168,6 +168,7 @@ export const chatService = {
     userId?: string,
     browserSessionId = SESSION_ID,
     conversationHistory?: ConversationHistoryEntry[],
+    sendPromptField = false,
     healthCheckSelection?: HealthCheckSelectionPayload,
   ) => {
     const raw = await chatRequest<ChatApiResponse>(endpoint, {
@@ -176,6 +177,7 @@ export const chatService = {
       browserSessionId,
       ...(userId ? { user_id: userId } : {}),
       message,
+      ...(sendPromptField ? { prompt: message } : {}),
       ...(conversationHistory ? { conversation_history: conversationHistory } : {}),
       ...(healthCheckSelection
         ? {
@@ -272,6 +274,7 @@ export const chatService = {
         browserSessionId,
         ...(userId ? { user_id: userId } : {}),
         message,
+        prompt: message,
       },
       onChunk,
       signal,

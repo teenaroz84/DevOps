@@ -429,8 +429,9 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, popupMode = 'de
   const headerActionHover = useDarkHeaderText ? 'rgba(52,52,59,0.08)' : 'rgba(255,255,255,0.15)'
   const authenticatedUserId = getAuthenticatedUserId() ?? undefined
   const browserSessionId = SESSION_ID
-  const [healthCheckSessionId, setHealthCheckSessionId] = useState<string | null>(agent.id === 'health-check' ? browserSessionId : null)
-  const fixedSessionId = agent.id === 'health-check' ? healthCheckSessionId : null
+  const usesBrowserSessionAsSessionId = agent.id === 'health-check' || agent.useBrowserSessionAsSessionId === true
+  const [browserScopedSessionId, setBrowserScopedSessionId] = useState<string | null>(usesBrowserSessionAsSessionId ? browserSessionId : null)
+  const fixedSessionId = usesBrowserSessionAsSessionId ? browserScopedSessionId : null
   const userBubbleColor = APP_COLORS.primary
   const userBubbleTextColor = TRUIST.white
   const renderAgentIcon = (size: number) => {
@@ -617,13 +618,13 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, popupMode = 'de
   const [selectedHealthCheckEnvironment, setSelectedHealthCheckEnvironment] = useState<string | null>(null)
 
   useEffect(() => {
-    if (agent.id === 'health-check') {
-      setHealthCheckSessionId((currentSessionId) => currentSessionId ?? browserSessionId)
+    if (usesBrowserSessionAsSessionId) {
+      setBrowserScopedSessionId((currentSessionId) => currentSessionId ?? browserSessionId)
       return
     }
 
-    setHealthCheckSessionId(null)
-  }, [agent.id, browserSessionId])
+    setBrowserScopedSessionId(null)
+  }, [browserSessionId, usesBrowserSessionAsSessionId])
 
   useEffect(() => {
     if (agent.id !== 'health-check') {
@@ -982,6 +983,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, popupMode = 'de
           authenticatedUserId,
           browserSessionId,
           conversationHistory,
+          agent.sendPromptField === true,
           resolvedHealthCheckSelection
             ? {
                 selectedEnvironment: resolvedHealthCheckSelection.environment,
@@ -1099,7 +1101,7 @@ export function ChatPanel({ isOpen, onClose, fullScreen = false, popupMode = 'de
     setChatSessions([nextSummary])
     setActiveSessionId(nextSessionId)
     setMessages(nextMessages)
-    setHealthCheckSessionId(nextSessionId)
+    setBrowserScopedSessionId(nextSessionId)
   }, [activeSessionId, agent.id, authenticatedUserId, buildStarterMessages, sessionIdScope])
 
   const handleSuggestedActionClick = useCallback((message: Message, action: NonNullable<Message['suggestedActions']>[number]) => {
