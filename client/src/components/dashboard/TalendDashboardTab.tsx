@@ -10,7 +10,6 @@ import WorkIcon from '@mui/icons-material/Work'
 import { IncidentListWidget } from './DataSourceWidgets'
 import { espService, servicenowService, talendService } from '../../services'
 import { useMockData } from '../../context/MockDataContext'
-import { APP_COLORS, TRUIST } from '../../theme/truistPalette'
 import { getMockPlatformData } from '../../services/espMockData'
 import {
   MOCK_TALEND_SUMMARY,
@@ -144,7 +143,7 @@ const ExpandableErrorText: React.FC<{ value?: string | null }> = ({ value }) => 
   )
 }
 
-export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void }> = ({ onOpenAgent }) => {
+export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => void }> = () => {
   const { useMock } = useMockData()
   const summaryRequestIdRef = useRef(0)
   const serviceNowKpisRequestIdRef = useRef(0)
@@ -360,10 +359,26 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
       .filter(e => !taskSearch || (e.task_name || '').toLowerCase().includes(taskSearch.toLowerCase())),
   [recentErrors, levelFilter, taskSearch])
 
-  const espStatusOptions = useMemo(() => {
-    const statuses = new Set(espJobs.map((job) => normalizeEspRunStatusLabel(job.run_status)))
-    return ['All', 'SUCCESS', 'FAILED', 'NEVER RUN', 'UNKNOWN'].filter((status, index, all) => status === 'All' || statuses.has(status) || all.indexOf(status) !== index)
+  const espStatusCounts = useMemo(() => {
+    const counts: Record<string, number> = {
+      All: espJobs.length,
+      SUCCESS: 0,
+      FAILED: 0,
+      'NEVER RUN': 0,
+      UNKNOWN: 0,
+    }
+
+    espJobs.forEach((job) => {
+      const status = normalizeEspRunStatusLabel(job.run_status)
+      counts[status] = (counts[status] ?? 0) + 1
+    })
+
+    return counts
   }, [espJobs])
+
+  const espStatusOptions = useMemo(() => {
+    return ['All', 'SUCCESS', 'FAILED', 'NEVER RUN', 'UNKNOWN'].filter((status) => status === 'All' || (espStatusCounts[status] ?? 0) > 0)
+  }, [espStatusCounts])
 
   const filteredEspJobs = useMemo(() =>
     espJobs
@@ -771,6 +786,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
                   accentColor="#e65100"
                   maxHeight={280}
                   tableMinWidth={1200}
+                  autoFitColumns={false}
                   defaultSortKey="start_timestamp"
                   defaultSortDir="desc"
                 />
@@ -815,6 +831,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
                   accentColor="#c62828"
                   maxHeight={420}
                   tableMinWidth={1600}
+                  autoFitColumns={false}
                   defaultSortKey="start_timestamp"
                   defaultSortDir="desc"
                 />
@@ -847,7 +864,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
                           : { color: '#1565c0', bg: '#e3f2fd', border: '#90caf9' }
                   const count = status === 'All'
                     ? espJobs.length
-                    : espJobs.filter((job) => normalizeEspRunStatusLabel(job.run_status) === status).length
+                    : (espStatusCounts[status] ?? 0)
                   return (
                     <Chip
                       key={status}
@@ -877,6 +894,7 @@ export const TalendDashboardTab: React.FC<{ onOpenAgent?: (agentId: string) => v
                   compact
                   maxHeight={320}
                   pageSize={200}
+                  autoFitColumns={false}
                   accentColor="#1976d2"
                   emptyMessage={espJobsLoading ? 'Loading jobs…' : 'No Talend ESP jobs found'}
                 />

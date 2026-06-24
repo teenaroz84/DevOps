@@ -884,7 +884,7 @@ interface ExecutiveDashboardProps {
   onSourceChange?: (source: SourceKey) => void
 }
 
-export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onChatClick, onOpenAgent, source: controlledSource, onSourceChange }) => {
+const ExecutiveDashboardComponent: React.FC<ExecutiveDashboardProps> = ({ onChatClick, onOpenAgent, source: controlledSource, onSourceChange }) => {
   const [internalSource, setInternalSource] = useState<SourceKey>('overview')
   const source = controlledSource ?? internalSource
   const setSource = onSourceChange ?? setInternalSource
@@ -1174,4 +1174,14 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onChatCl
         </Box>
 
     </Box>  )
-} 
+}
+
+export const ExecutiveDashboard = React.memo(
+  ExecutiveDashboardComponent,
+  (prevProps, nextProps) => (
+    prevProps.source === nextProps.source
+    && prevProps.onChatClick === nextProps.onChatClick
+    && prevProps.onOpenAgent === nextProps.onOpenAgent
+    && prevProps.onSourceChange === nextProps.onSourceChange
+  )
+)
