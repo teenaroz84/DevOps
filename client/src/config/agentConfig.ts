@@ -42,8 +42,6 @@ export interface AgentConfig {
   useBrowserSessionAsSessionId?: boolean
   /** Include a prompt field alongside message when calling the chat API */
   sendPromptField?: boolean
-  /** Optional per-agent chat API base URL (scheme + host + port), e.g. http://localhost:8004 */
-  chatApiBaseUrlOverride?: string
 }
 
 export type AgentPopupMode = 'default' | 'maximized'

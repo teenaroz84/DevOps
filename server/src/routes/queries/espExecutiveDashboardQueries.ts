@@ -376,65 +376,49 @@ function buildSlaStatusScopeClause(options: EspOverviewQueryOptions): { values: 
 }
 
 export function buildEspGroupedJobExecutionStatusQuery(options: EspOverviewQueryOptions): EspOverviewQuerySpec {
-  const scope = buildScopedConfigCte(options.platformName, options.applName)
-  const values: Array<string | number> = [...scope.values]
+  const values: Array<string | number> = []
+  const filters: string[] = []
 
-  const intervalClause = options.intervalDays === null
-    ? ''
-    : (() => {
-        values.push(options.intervalDays as number)
-        return `\nWHERE (ls.last_run IS NULL OR ls.last_run >= NOW() - ($${values.length}::text || ' days')::interval)`
-      })()
+  if (options.platformName) {
+    values.push(options.platformName)
+    filters.push(`c.pltf_name = $${values.length}`)
+  }
+
+  if (options.applName) {
+    values.push(options.applName)
+    filters.push(`c.appl_name = $${values.length}`)
+  }
+
+  if (options.intervalDays !== null) {
+    values.push(options.intervalDays)
+    filters.push(`s.end_date >= NOW() - ($${values.length}::text || ' days')::interval`)
+  }
+
+  const whereClause = filters.length ? `\nWHERE ${filters.join('\n  AND ')}` : ''
 
   return {
-    text: `${scope.text}
-, latest_stats AS (
-  SELECT DISTINCT ON (s.appl_name, s.job_longname)
-    s.appl_name,
-    s.job_longname,
-    COALESCE(NULLIF(s.end_date::text, '')::timestamp, NULLIF(s.start_date::text, '')::timestamp) AS last_run,
-    s.ccfail,
-    s.comp_code
-  FROM edoops.esp_job_stats_recent s
-  JOIN scoped_config cfg
-    ON cfg.appl_name = s.appl_name
-   AND cfg.jobname = s.job_longname
-  ORDER BY s.appl_name, s.job_longname,
-           s.end_date DESC NULLS LAST,
-           s.end_time DESC NULLS LAST,
-           s.start_date DESC NULLS LAST,
-           s.start_time DESC NULLS LAST
-),
-forecast_avg AS (
-  SELECT
-    f.appl_name,
-    f.jobname,
-    AVG(CAST(f.exec_time_mins AS NUMERIC)) AS avg_run_mins
-  FROM edoops.esp_forecast f
-  GROUP BY f.appl_name, f.jobname
-)
-SELECT
-  cfg.appl_name,
-  cfg.jobname,
-  ls.last_run,
-  ROUND(COALESCE(fa.avg_run_mins, 0)::numeric, 1) AS avg_run_mins,
+    text: `SELECT
+  s.appl_name AS appl_name,
+  s.job_longname AS jobname,
+  MAX(s.end_date) AS last_run,
+  AVG(CAST(f.exec_time_mins AS NUMERIC)) AS avg_run_mins,
   CASE
-    WHEN ls.ccfail IS NOT NULL AND TRIM(ls.ccfail) <> '' THEN 'FAILED'
-    WHEN ls.comp_code IS NOT NULL AND TRIM(ls.comp_code) NOT IN ('0', '') THEN 'FAILED'
-    WHEN ls.last_run IS NULL THEN 'NEVER RUN'
-    WHEN ls.comp_code IS NULL THEN 'UNKNOWN'
+    WHEN s.ccfail IS NOT NULL AND TRIM(s.ccfail) <> '' THEN 'FAILED'
+    WHEN s.comp_code IS NOT NULL AND TRIM(s.comp_code) NOT IN ('0', '') THEN 'FAILED'
+    WHEN s.end_date IS NULL THEN 'NEVER RUN'
+    WHEN s.comp_code IS NULL THEN 'UNKNOWN'
     ELSE 'SUCCESS'
   END AS status,
-  COALESCE(cfg.job_type, 'UNKNOWN') AS job_type
-FROM scoped_config cfg
-LEFT JOIN latest_stats ls
-  ON ls.appl_name = cfg.appl_name
- AND ls.job_longname = cfg.jobname
-LEFT JOIN forecast_avg fa
-  ON fa.appl_name = cfg.appl_name
- AND fa.jobname = cfg.jobname${intervalClause}
-ORDER BY ls.last_run DESC NULLS LAST, cfg.appl_name, cfg.jobname
-LIMIT 250`,
+  c.job_type
+FROM edoops.esp_job_stats_recent s
+JOIN edoops.esp_job_config c
+  ON s.appl_name = c.appl_name
+ AND s.job_longname = c.jobname
+LEFT JOIN edoops.esp_forecast f
+  ON s.job_longname = f.jobname${whereClause}
+GROUP BY s.appl_name, s.job_longname, s.ccfail, s.comp_code, s.end_date, c.job_type
+ORDER BY last_run DESC NULLS LAST
+LIMIT 1000`,
     values,
   }
 }

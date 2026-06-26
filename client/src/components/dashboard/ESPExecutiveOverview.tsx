@@ -621,6 +621,9 @@ export const ESPExecutiveOverview: React.FC<ESPExecutiveOverviewProps> = ({
             <Typography sx={{ fontSize: '12px', fontWeight: 800, color: '#102a43', textTransform: 'uppercase', letterSpacing: '0.45px' }}>
               Job Execution Status
             </Typography>
+            <Typography sx={{ mt: 0.35, fontSize: '10px', color: '#607080' }}>
+              First 1000 rows shown.
+            </Typography>
             <Box sx={{ mt: 0.9, display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
               {['All', 'SUCCESS', 'FAILED', 'NEVER RUN', 'UNKNOWN'].map((status) => {
                 const count = status === 'All'
